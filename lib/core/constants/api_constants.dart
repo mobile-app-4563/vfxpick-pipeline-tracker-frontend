@@ -108,4 +108,9 @@ class ApiConstants {
   static const String accessPermissions = '/access/permissions';
   static const String accessPermissionsReset = '/access/permissions/reset';
   static const String accessPermissionsAudit = '/access/permissions/audit';
+  // ───────────────────────────────────────────────────────────────────────────
+  // INVENTORY (/api/inventory)
+  // ───────────────────────────────────────────────────────────────────────────
+  static const String inventory = '/inventory';
+  static String inventoryItem(int id) => '/inventory/$id';
 }

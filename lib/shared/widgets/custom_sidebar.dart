@@ -62,6 +62,8 @@ class _CustomSidebarState extends State<CustomSidebar> {
         return Icons.badge_outlined;
       case '/access-provider':
         return Icons.admin_panel_settings_outlined;
+      case '/inventory':
+        return Icons.inventory_2_outlined;
       default:
         return Icons.circle_outlined;
     }

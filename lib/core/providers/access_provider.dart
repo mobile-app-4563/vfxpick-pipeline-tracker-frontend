@@ -20,6 +20,7 @@ class AccessProvider extends ChangeNotifier {
     '/notifications',
     '/access-provider',
     '/hrms',
+    '/inventory',
   ];
 
   static const Set<String> protectedRoutes = {
@@ -35,6 +36,7 @@ class AccessProvider extends ChangeNotifier {
     '/notifications',
     '/access-provider',
     '/hrms',
+    '/inventory',
   };
 
   static const Set<String> _artistDefaults = {
@@ -56,6 +58,7 @@ class AccessProvider extends ChangeNotifier {
     '/teams',
     '/notifications',
     '/hrms',
+    '/inventory',
   };
 
   final Map<String, Set<String>> _roleRoutes = {};
@@ -143,6 +146,8 @@ class AccessProvider extends ChangeNotifier {
         return 'Access Provider';
       case '/hrms':
         return 'HRMS';
+      case '/inventory':
+        return 'Inventory';
       default:
         return route;
     }

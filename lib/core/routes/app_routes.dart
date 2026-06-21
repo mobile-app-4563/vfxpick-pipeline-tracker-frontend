@@ -17,6 +17,7 @@ import '../../modules/reports/view/reports_screen.dart';
 import '../../modules/review/view/review_screen.dart';
 import '../../modules/tasks/view/tasks_screen.dart';
 import '../../modules/teams/view/teams_screen.dart';
+import '../../modules/inventory/view/inventory_screen.dart';
 import '../../shared/widgets/main_layout.dart';
 
 class AppRoutes {
@@ -101,6 +102,10 @@ class AppRoutes {
             GoRoute(
               path: '/access-provider',
               builder: (context, state) => const AccessProviderScreen(),
+            ),
+            GoRoute(
+              path: '/inventory',
+              builder: (context, state) => const InventoryScreen(),
             ),
           ],
         ),
