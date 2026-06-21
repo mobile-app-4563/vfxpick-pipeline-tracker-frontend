@@ -1,0 +1,253 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+
+import '../../../core/models/domain_models.dart';
+import '../../../shared/widgets/dynamic_data_table.dart';
+import '../../../shared/widgets/empty_state_widget.dart';
+import '../../../shared/widgets/glass_container.dart';
+import '../../../shared/widgets/loading_widget.dart';
+import '../controller/dashboard_controller.dart';
+
+class DashboardScreen extends StatefulWidget {
+  const DashboardScreen({super.key});
+
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  String _departmentFilter = '';
+  String _clientFilter = '';
+  String _showFilter = '';
+  String _shotsFilter = '';
+  String _mandaysFilter = '';
+  String _dueFilter = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<DashboardController>().loadSummary();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = context.watch<DashboardController>();
+
+    if (controller.isLoading && controller.departments.isEmpty) {
+      return const LoadingWidget(message: 'Loading dashboard...');
+    }
+    if (controller.error != null && controller.departments.isEmpty) {
+      return EmptyStateWidget(
+        icon: Icons.error_outline,
+        title: 'Could not load dashboard',
+        description: controller.error!,
+        actionLabel: 'Retry',
+        onActionPressed: controller.loadSummary,
+      );
+    }
+    if (controller.departments.isEmpty) {
+      return const EmptyStateWidget(
+        icon: Icons.dashboard_outlined,
+        title: 'No data yet',
+        description: 'There is nothing to show on the dashboard right now.',
+      );
+    }
+
+    final flatRows = <Map<String, dynamic>>[];
+    for (final dept in controller.departments) {
+      for (final row in dept.rows) {
+        flatRows.add({
+          'department': dept.department,
+          'client': row.clientName,
+          'show': row.showName,
+          'shots': row.shotCount,
+          'mandays': row.mandays.toStringAsFixed(1),
+          'due': row.dueDate != null ? _fmt(row.dueDate!) : '—',
+          'row': row,
+        });
+      }
+    }
+
+    final filteredRows = flatRows
+        .where((row) {
+          bool contains(String key, String query) {
+            if (query.trim().isEmpty) return true;
+            return (row[key] ?? '').toString().toLowerCase().contains(
+              query.trim().toLowerCase(),
+            );
+          }
+
+          return contains('department', _departmentFilter) &&
+              contains('client', _clientFilter) &&
+              contains('show', _showFilter) &&
+              contains('shots', _shotsFilter) &&
+              contains('mandays', _mandaysFilter) &&
+              contains('due', _dueFilter);
+        })
+        .toList(growable: false);
+
+    return RefreshIndicator(
+      onRefresh: controller.loadSummary,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          GlassContainer(
+            child: DynamicDataTable(
+              dataRowMinHeight: 46,
+              dataRowMaxHeight: 60,
+              fields: [
+                const DynamicTableField(
+                  key: 'department',
+                  label: 'Department',
+                  width: 140,
+                ),
+                const DynamicTableField(
+                  key: 'client',
+                  label: 'Client',
+                  width: 120,
+                ),
+                const DynamicTableField(key: 'show', label: 'Show', width: 170),
+                const DynamicTableField(
+                  key: 'shots',
+                  label: 'Shots',
+                  width: 110,
+                ),
+                const DynamicTableField(
+                  key: 'mandays',
+                  label: 'Mandays',
+                  width: 130,
+                ),
+                const DynamicTableField(
+                  key: 'due',
+                  label: 'Due Date',
+                  width: 130,
+                ),
+                DynamicTableField(
+                  key: 'actions',
+                  label: 'Actions',
+                  filterRequired: false,
+                  width: 220,
+                  builder: (context, value, row, rowIndex) {
+                    final info = row['row'] as DashboardRow;
+                    final department = (row['department'] ?? '').toString();
+                    return Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Open Projects',
+                          icon: const Icon(
+                            Icons.folder_open_outlined,
+                            size: 18,
+                          ),
+                          onPressed: () => _openConcernPage('/projects', {
+                            'department': department,
+                            'clientId': info.clientId,
+                            'showId': info.showId,
+                          }),
+                        ),
+                        IconButton(
+                          tooltip: 'Open Tasks',
+                          icon: const Icon(Icons.task_alt_outlined, size: 18),
+                          onPressed: () => _openConcernPage('/tasks', {
+                            'department': department,
+                            'showId': info.showId,
+                          }),
+                        ),
+                        IconButton(
+                          tooltip: 'Open Review',
+                          icon: const Icon(
+                            Icons.rate_review_outlined,
+                            size: 18,
+                          ),
+                          onPressed: () => _openConcernPage('/review', {
+                            'department': department,
+                          }),
+                        ),
+                        IconButton(
+                          tooltip: 'Open Reports',
+                          icon: const Icon(Icons.analytics_outlined, size: 18),
+                          onPressed: () => _openConcernPage('/reports', {
+                            'department': department,
+                          }),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ],
+              rows: filteredRows,
+              onFilterChanged: (fieldKey, value) {
+                setState(() {
+                  final v = value is String ? value : value.toString();
+                  switch (fieldKey) {
+                    case 'department':
+                      _departmentFilter = v;
+                      break;
+                    case 'client':
+                      _clientFilter = v;
+                      break;
+                    case 'show':
+                      _showFilter = v;
+                      break;
+                    case 'shots':
+                      _shotsFilter = v;
+                      break;
+                    case 'mandays':
+                      _mandaysFilter = v;
+                      break;
+                    case 'due':
+                      _dueFilter = v;
+                      break;
+                    default:
+                      break;
+                  }
+                });
+              },
+              empty: const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('No matching rows for current filters.'),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget _filterField(
+  //   String label,
+  //   double width,
+  //   void Function(String) onChanged,
+  // ) {
+  //   return SizedBox(
+  //     width: width,
+  //     child: TextField(
+  //       onChanged: (v) => setState(() => onChanged(v)),
+  //       decoration: InputDecoration(
+  //         isDense: true,
+  //         labelText: label,
+  //         border: const OutlineInputBorder(),
+  //       ),
+  //     ),
+  //   );
+  // }
+
+  String _fmt(DateTime d) =>
+      '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  void _openConcernPage(String path, Map<String, String> queryParams) {
+    final cleaned = <String, String>{};
+    queryParams.forEach((key, value) {
+      if (value.trim().isNotEmpty) {
+        cleaned[key] = value;
+      }
+    });
+    final uri = Uri(
+      path: path,
+      queryParameters: cleaned.isEmpty ? null : cleaned,
+    );
+    context.go(uri.toString());
+  }
+}
