@@ -37,6 +37,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   String _supervisorBidFilter = '';
   String _clientBidFilter = '';
   String _notesFilter = '';
+  String _taskFilter = '';
   String _etaFilter = '';
   String _statusFilter = '';
 
@@ -490,7 +491,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         'supervisorBid': shot.supervisorBid.toStringAsFixed(1),
         'clientBid': shot.clientBid.toStringAsFixed(1),
         'notes': shot.notes ?? '—',
-        'eta': _fmtDate(shot.clientEta),
+        'task':
+            (shot.description != null && shot.description!.trim().isNotEmpty)
+            ? shot.description
+            : '—',
+        'clientEta': _fmtDate(shot.clientEta),
         'status': shot.status,
         'shot': shot,
       };
@@ -511,7 +516,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               contains('supervisorBid', _supervisorBidFilter) &&
               contains('clientBid', _clientBidFilter) &&
               contains('notes', _notesFilter) &&
-              contains('eta', _etaFilter) &&
+              contains('task', _taskFilter) &&
+              contains('clientEta', _etaFilter) &&
               contains('status', _statusFilter);
         })
         .toList(growable: false);
@@ -567,7 +573,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   label: 'Notes',
                   width: 220,
                 ),
-                const DynamicTableField(key: 'eta', label: 'ETA', width: 110),
+                const DynamicTableField(key: 'task', label: 'Task', width: 240),
+                const DynamicTableField(
+                  key: 'clientEta',
+                  label: 'Client ETA',
+                  width: 130,
+                ),
                 DynamicTableField(
                   key: 'status',
                   label: 'Status',
@@ -635,7 +646,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     case 'notes':
                       _notesFilter = v;
                       break;
-                    case 'eta':
+                    case 'task':
+                      _taskFilter = v;
+                      break;
+                    case 'clientEta':
                       _etaFilter = v;
                       break;
                     case 'status':

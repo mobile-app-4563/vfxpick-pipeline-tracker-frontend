@@ -1,10 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/models/domain_models.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
@@ -40,42 +39,63 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Consumer<HomeController>(
       builder: (context, controller, child) {
-        final cards = <Widget>[
-          _AnimatedEntry(
-            order: 0,
-            child: _buildPickoutsCard(controller, isDark),
+        final pickoutsCard = _AnimatedEntry(
+          order: 0,
+          child: _buildPickoutsCard(controller, isDark),
+        );
+        final chartCard = _AnimatedEntry(
+          order: 1,
+          child: _buildPieSection(
+            title: 'Reports Mandays (Current Month)',
+            data: controller.reportMandaysByDepartment,
+            isLoading: controller.isInsightsLoading,
           ),
-          _AnimatedEntry(
-            order: 1,
-            child: _buildPieSection(
-              title: 'Reports Mandays (Current Month)',
-              data: controller.reportMandaysByDepartment,
-              isLoading: controller.isInsightsLoading,
-            ),
+        );
+        final inventCard = _AnimatedEntry(
+          order: 2,
+          child: _InventActiveShowsCard(
+            isLoading: controller.isLoading,
+            data: controller.inventSummary,
+            errorMessage: controller.errorMessage,
           ),
-          _AnimatedEntry(
-            order: 2,
-            child: _buildPieSection(
-              title: 'Reviews Mandays (Current Month)',
-              data: controller.reviewMandaysByDepartment,
-              isLoading: controller.isInsightsLoading,
-            ),
-          ),
-
-          // _AnimatedEntry(order: 1, child: _CalendarCard()),
-        ];
+        );
 
         return RefreshIndicator(
-          onRefresh: controller.fetchTodaysPickouts,
+          onRefresh: () => controller.fetchTodaysPickouts(),
           child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.all(16),
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
-                  final crossAxisCount = width >= 1280
-                      ? 3
-                      : (width >= 760 ? 2 : 1);
+                  final isWide = width >= 1180;
+
+                  if (isWide) {
+                    return SizedBox(
+                      height: MediaQuery.sizeOf(context).height * 0.8,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(width: width * 0.7, child: chartCard),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              children: [
+                                Expanded(child: pickoutsCard),
+                                const SizedBox(height: 16),
+                                Expanded(child: inventCard),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final cards = <Widget>[pickoutsCard, chartCard, inventCard];
+                  final crossAxisCount = width >= 760 ? 2 : 1;
 
                   return GridView.builder(
                     shrinkWrap: true,
@@ -91,18 +111,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 16),
-              _AnimatedEntry(
-                order: 3,
-                child: SizedBox(
-                  height: 460,
-                  width: double.infinity,
-                  child: _ArtistPerformanceCard(
-                    isLoading: controller.isInsightsLoading,
-                    rows: controller.artistPerformance,
-                  ),
-                ),
-              ),
+
+              // const SizedBox(height: 16),
+              // _AnimatedEntry(
+              //   order: 3,
+              //   child: SizedBox(
+              //     height: 460,
+              //     width: double.infinity,
+              //     child: _ArtistPerformanceCard(
+              //       isLoading: controller.isInsightsLoading,
+              //       rows: controller.artistPerformance,
+              //     ),
+              //   ),
+              // ),
             ],
           ),
         );
@@ -181,15 +202,17 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SizedBox(height: 4),
           Text(
             title,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 30),
-          if (isLoading)
-            const SizedBox(height: 220, child: Center(child: LoadingWidget()))
-          else
-            _DepartmentPieChart(data: data),
+          const SizedBox(height: 24),
+          Expanded(
+            child: isLoading
+                ? const Center(child: LoadingWidget())
+                : _DepartmentBarChart(data: data),
+          ),
         ],
       ),
     );
@@ -322,91 +345,396 @@ class _AnimatedEntryState extends State<_AnimatedEntry> {
 //   }
 // }
 
-class _DepartmentPieChart extends StatelessWidget {
+class _DepartmentBarChart extends StatefulWidget {
   final Map<String, double> data;
-  const _DepartmentPieChart({required this.data});
+  const _DepartmentBarChart({required this.data});
+
+  @override
+  State<_DepartmentBarChart> createState() => _DepartmentBarChartState();
+}
+
+class _DepartmentBarChartState extends State<_DepartmentBarChart>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _DepartmentBarChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.data != widget.data) {
+      _controller
+        ..reset()
+        ..forward();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double _niceCeil(double value) {
+    if (value <= 0) return 1;
+    final magnitude = value < 10
+        ? 1.0
+        : (value < 100 ? 10.0 : (value < 1000 ? 100.0 : 1000.0));
+    return (value / magnitude).ceil() * magnitude;
+  }
+
+  double _staggerProgress(int index, int total, double t) {
+    if (total <= 1) return Curves.easeOutCubic.transform(t.clamp(0.0, 1.0));
+    final slice = 0.62 / total;
+    final start = index * slice;
+    final end = (start + 0.38).clamp(0.0, 1.0);
+    final local = ((t - start) / (end - start)).clamp(0.0, 1.0);
+    return Curves.easeOutCubic.transform(local);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final items = data.entries
-        .where((e) => e.value > 0)
-        .toList(growable: false);
-    if (items.isEmpty) {
-      return const EmptyStateWidget(
-        icon: Icons.pie_chart_outline,
-        title: 'No chart data',
-        description: 'No mandays available for the selected period.',
-      );
-    }
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final items = widget.data.entries.toList(growable: false)
+          ..sort((a, b) => b.value.compareTo(a.value));
+        if (items.isEmpty) {
+          return const EmptyStateWidget(
+            icon: Icons.pie_chart_outline,
+            title: 'No chart data',
+            description: 'No mandays available for the selected period.',
+          );
+        }
 
-    final total = items.fold<double>(0, (sum, e) => sum + e.value);
-    const palette = [
-      Color(0xFF3EBA02),
-      Color(0xFF00B7C2),
-      Color(0xFFFFB020),
-      Color(0xFF5B8DEF),
-      Color(0xFFEF476F),
-    ];
+        final total = items.fold<double>(0, (sum, e) => sum + e.value);
+        final highest = items.first;
+        final maxY = _niceCeil(
+          items.fold<double>(0, (m, e) => e.value > m ? e.value : m),
+        );
+        final interval = ((maxY / 4).clamp(1.0, maxY)).toDouble();
 
-    return Column(
-      children: [
-        SizedBox(
-          height: 220,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 2,
-              centerSpaceRadius: 38,
-              sections: List.generate(items.length, (i) {
-                final part = items[i];
-                final percent = (part.value / total) * 100;
-                return PieChartSectionData(
-                  color: palette[i % palette.length],
-                  value: part.value,
-                  radius: 74,
-                  title: '${percent.toStringAsFixed(0)}%',
-                  titleStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-        const SizedBox(height: 30),
-        Wrap(
-          spacing: 12,
-          runSpacing: 6,
-          children: List.generate(items.length, (i) {
-            final part = items[i];
-            return Row(
-              mainAxisSize: MainAxisSize.min,
+        const palette = [
+          Color(0xFF3EBA02),
+          Color(0xFF00B7C2),
+          Color(0xFFFFB020),
+          Color(0xFF5B8DEF),
+          Color(0xFFEF476F),
+        ];
+
+        final textColor = Theme.of(context).brightness == Brightness.dark
+            ? AppColors.darkTextPrimary
+            : AppColors.lightTextPrimary;
+
+        return AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            final t = _controller.value;
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  width: 10,
-                  height: 10,
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: palette[i % palette.length],
-                    borderRadius: BorderRadius.circular(3),
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        AppColors.brandGreen.withValues(alpha: 0.14),
+                        Colors.transparent,
+                      ],
+                    ),
+                    border: Border.all(
+                      color: AppColors.brandGreen.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total ${total.toStringAsFixed(1)} MD',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w800,
+                                color: textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Highest: ${highest.key} (${highest.value.toStringAsFixed(1)} MD)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: textColor.withValues(alpha: 0.78),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(999),
+                          color: AppColors.brandGreen.withValues(alpha: 0.18),
+                        ),
+                        child: Text(
+                          '${items.length} Depts',
+                          style: const TextStyle(
+                            color: AppColors.brandGreen,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 6),
-                Text('${part.key}: ${part.value.toStringAsFixed(1)}'),
+                const SizedBox(height: 34),
+                SizedBox(
+                  height: MediaQuery.sizeOf(context).height * 0.4,
+                  child: BarChart(
+                    BarChartData(
+                      maxY: maxY,
+                      alignment: BarChartAlignment.spaceEvenly,
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          tooltipPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          getTooltipColor: (_) =>
+                              Colors.black.withValues(alpha: 0.85),
+                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                            final item = items[group.x.toInt()];
+                            final percent = total > 0
+                                ? (item.value / total) * 100
+                                : 0.0;
+                            return BarTooltipItem(
+                              '${item.key}\n${item.value.toStringAsFixed(1)} MD (${percent.toStringAsFixed(1)}%)',
+                              const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                                height: 1.4,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: interval,
+                        getDrawingHorizontalLine: (_) => FlLine(
+                          color: Colors.white.withValues(alpha: 0.14),
+                          strokeWidth: 1,
+                        ),
+                      ),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 40,
+                            interval: interval,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                value.toStringAsFixed(0),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: textColor.withValues(alpha: 0.7),
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 44,
+                            getTitlesWidget: (value, meta) {
+                              final index = value.toInt();
+                              if (index < 0 || index >= items.length) {
+                                return const SizedBox.shrink();
+                              }
+                              return SideTitleWidget(
+                                meta: meta,
+                                space: 8,
+                                child: SizedBox(
+                                  width: 64,
+                                  child: Text(
+                                    items[index].key,
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: textColor.withValues(alpha: 0.78),
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      barGroups: List.generate(items.length, (i) {
+                        final item = items[i];
+                        final color = palette[i % palette.length];
+                        final animatedToY =
+                            item.value * _staggerProgress(i, items.length, t);
+                        return BarChartGroupData(
+                          x: i,
+                          barsSpace: 3,
+                          barRods: [
+                            BarChartRodData(
+                              toY: animatedToY,
+                              width: 40,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(2),
+                              ),
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [color.withValues(alpha: 0.65), color],
+                              ),
+                              backDrawRodData: BackgroundBarChartRodData(
+                                show: true,
+                                toY: maxY,
+                                color: color.withValues(alpha: 0.12),
+                              ),
+                            ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: List.generate(items.length, (i) {
+                        final part = items[i];
+                        final percent = total > 0
+                            ? (part.value / total) * 100
+                            : 0.0;
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.white.withValues(alpha: 0.04),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.12),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 10,
+                                height: 10,
+                                decoration: BoxDecoration(
+                                  color: palette[i % palette.length],
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxWidth: 170,
+                                ),
+                                child: Text(
+                                  '${part.key}: ${part.value.toStringAsFixed(1)} MD (${percent.toStringAsFixed(0)}%)',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: textColor.withValues(alpha: 0.82),
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                ),
               ],
             );
-          }),
-        ),
-      ],
+          },
+        );
+      },
     );
   }
 }
 
-class _ArtistPerformanceCard extends StatelessWidget {
+class _InventActiveShowsCard extends StatefulWidget {
   final bool isLoading;
-  final List<Map<String, dynamic>> rows;
+  final String? errorMessage;
+  final Map<String, List<InventActiveShow>> data;
 
-  const _ArtistPerformanceCard({required this.isLoading, required this.rows});
+  const _InventActiveShowsCard({
+    required this.isLoading,
+    required this.errorMessage,
+    required this.data,
+  });
+
+  @override
+  State<_InventActiveShowsCard> createState() => _InventActiveShowsCardState();
+}
+
+class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  static const _statuses = ['Approved', 'Approved Internal'];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _statuses.length, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  String _dateLabel(DateTime? value) {
+    if (value == null) return '-';
+    final mm = value.month.toString().padLeft(2, '0');
+    final dd = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$mm-$dd';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -416,120 +744,139 @@ class _ArtistPerformanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Artist Performance (All Users)',
+            'InventActive Shows',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          if (isLoading)
-            Center(child: const LoadingWidget())
-          else if (rows.isEmpty)
-            const EmptyStateWidget(
-              icon: Icons.bar_chart,
-              title: 'No performance data',
-              description: 'No artist performance records available.',
+          TabBar(
+            controller: _tabController,
+            tabs: _statuses.map((s) => Tab(text: s)).toList(growable: false),
+            isScrollable: true,
+            labelColor: AppColors.brandGreen,
+            tabAlignment: TabAlignment.start,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: AppColors.brandGreen,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 0),
+            indicatorPadding: const EdgeInsets.symmetric(horizontal: 0),
+            indicatorSize: TabBarIndicatorSize.tab,
+          ),
+          const SizedBox(height: 12),
+          if (widget.isLoading)
+            const Expanded(child: Center(child: LoadingWidget()))
+          else if (widget.errorMessage != null)
+            Expanded(
+              child: EmptyStateWidget(
+                icon: Icons.error_outline,
+                title: 'Unable to load InventActive shows',
+                description: widget.errorMessage!,
+              ),
             )
           else
             Expanded(
-              child: Builder(
-                builder: (_) {
-                  final maxMandays = _maxMandays(rows);
-                  return BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: 100,
-                      barTouchData: BarTouchData(enabled: true),
-                      gridData: FlGridData(show: true),
-                      titlesData: FlTitlesData(
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: const AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 34,
-                            getTitlesWidget: _leftAxisTitle,
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 42,
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index < 0 || index >= rows.length) {
-                                return const SizedBox.shrink();
-                              }
-                              final name = (rows[index]['name'] ?? '')
-                                  .toString();
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Transform.rotate(
-                                  angle: -math.pi / 5,
-                                  child: Text(
-                                    name.length > 8
-                                        ? name.substring(0, 8)
-                                        : name,
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      barGroups: List.generate(rows.length, (i) {
-                        final raw = (rows[i]['totalMandays'] as num? ?? 0)
-                            .toDouble();
-                        final y = _toPercent(raw, maxMandays);
-                        return BarChartGroupData(
-                          x: i,
-                          barRods: [
-                            BarChartRodData(
-                              toY: y,
-                              width: 20,
-                              borderRadius: BorderRadius.circular(0),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF3EBA02), Color(0xFF00B7C2)],
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                              ),
-                            ),
-                          ],
+              child: TabBarView(
+                controller: _tabController,
+                children: _statuses
+                    .map((status) {
+                      final items =
+                          widget.data[status] ?? const <InventActiveShow>[];
+                      if (items.isEmpty) {
+                        return const EmptyStateWidget(
+                          icon: Icons.layers_clear,
+                          title: 'No shows found',
+                          description:
+                              'No show data available for this project status.',
                         );
-                      }),
-                    ),
-                  );
-                },
+                      }
+
+                      return ListView.separated(
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final show = items[index];
+                          return Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: ExpansionTile(
+                              tilePadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                12,
+                                0,
+                                12,
+                                12,
+                              ),
+                              title: Text(
+                                show.showName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${show.clientName} • ${show.shotCount} shots • ${show.totalMandays.toStringAsFixed(1)} MD',
+                              ),
+                              children: [
+                                _DetailRow(
+                                  label: 'Client ID',
+                                  value: show.clientId,
+                                ),
+                                _DetailRow(
+                                  label: 'Show ID',
+                                  value: show.showId,
+                                ),
+                                _DetailRow(label: 'Status', value: show.status),
+                                _DetailRow(
+                                  label: 'Departments',
+                                  value: show.departments.join(', '),
+                                ),
+                                _DetailRow(
+                                  label: 'Due Window',
+                                  value:
+                                      '${_dateLabel(show.minDueDate)} to ${_dateLabel(show.maxDueDate)}',
+                                ),
+                                _DetailRow(
+                                  label: 'Last Updated',
+                                  value: _dateLabel(show.lastUpdatedAt),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    })
+                    .toList(growable: false),
               ),
             ),
         ],
       ),
     );
   }
+}
 
-  static Widget _leftAxisTitle(double value, TitleMeta meta) {
-    if (value % 20 != 0) {
-      return const SizedBox.shrink();
-    }
-    return Text('${value.toInt()}%', style: const TextStyle(fontSize: 10));
-  }
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DetailRow({required this.label, required this.value});
 
-  double _maxMandays(List<Map<String, dynamic>> rows) {
-    double maxValue = 0;
-    for (final row in rows) {
-      final val = (row['totalMandays'] as num? ?? 0).toDouble();
-      if (val > maxValue) maxValue = val;
-    }
-    return maxValue <= 0 ? 1 : maxValue;
-  }
-
-  double _toPercent(double value, double total) {
-    if (total <= 0) return 0;
-    final percent = (value / total) * 100;
-    return percent.clamp(0, 100);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(value.isEmpty ? '-' : value)),
+        ],
+      ),
+    );
   }
 }

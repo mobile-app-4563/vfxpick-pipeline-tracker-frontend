@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/models/domain_models.dart';
 import '../../../core/models/todays_pickout_model.dart';
 import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/report_service.dart';
@@ -16,8 +17,14 @@ class HomeController extends ChangeNotifier {
   Map<String, double> _reportMandaysByDepartment = {};
   Map<String, double> _reviewMandaysByDepartment = {};
   List<Map<String, dynamic>> _artistPerformance = [];
-  bool _isLoading = false;
-  bool _isInsightsLoading = false;
+  final Map<String, List<InventActiveShow>> _inventActiveShowsByStatus = {
+    'Approved': const [],
+    'Approved Internal': const [],
+  };
+  bool _isLoading = true;
+  bool _isInsightsLoading = true;
+  bool _isInventActiveLoading = true;
+  bool _hasLoadedOnce = false;
   String? _errorMessage;
 
   List<TodaysPickoutModel> get todaysPickouts => _todaysPickouts;
@@ -26,8 +33,13 @@ class HomeController extends ChangeNotifier {
   Map<String, double> get reviewMandaysByDepartment =>
       _reviewMandaysByDepartment;
   List<Map<String, dynamic>> get artistPerformance => _artistPerformance;
+  Map<String, List<InventActiveShow>> get inventActiveShowsByStatus =>
+      _inventActiveShowsByStatus;
+  Map<String, List<InventActiveShow>> get inventSummary =>
+      _inventActiveShowsByStatus;
   bool get isLoading => _isLoading;
   bool get isInsightsLoading => _isInsightsLoading;
+  bool get isInventActiveLoading => _isInventActiveLoading;
   String? get errorMessage => _errorMessage;
 
   /// Fetch today's pickouts from the API
@@ -62,6 +74,13 @@ class HomeController extends ChangeNotifier {
 
   Future<void> fetchInsights() async {
     _isInsightsLoading = true;
+    _isInventActiveLoading = true;
+    if (!_hasLoadedOnce) {
+      _reportMandaysByDepartment = {};
+      _reviewMandaysByDepartment = {};
+      _artistPerformance = const [];
+      _inventActiveShowsByStatus.clear();
+    }
     notifyListeners();
 
     final now = DateTime.now();
@@ -109,6 +128,24 @@ class HomeController extends ChangeNotifier {
 
       _reportMandaysByDepartment = reports;
       _reviewMandaysByDepartment = reviews;
+
+      // Fetch InventActive Shows
+      try {
+        final inventResp = await _dashboardService.fetchInventActiveShows();
+        final statusesList = (inventResp['statuses'] as List<dynamic>?) ?? [];
+        for (final s in statusesList) {
+          final map = s as Map<String, dynamic>;
+          final status = map['status'] as String;
+          final showsList = (map['shows'] as List<dynamic>?) ?? [];
+          _inventActiveShowsByStatus[status] = showsList
+              .map((e) => InventActiveShow.fromJson(e as Map<String, dynamic>))
+              .toList();
+        }
+      } catch (e) {
+        debugPrint('Failed to load InventActive shows: $e');
+      }
+
+      _hasLoadedOnce = true;
     } catch (e) {
       _errorMessage ??= 'Failed to load insights: $e';
       _reportMandaysByDepartment = reports;
@@ -116,6 +153,7 @@ class HomeController extends ChangeNotifier {
       _artistPerformance = const [];
     } finally {
       _isInsightsLoading = false;
+      _isInventActiveLoading = false;
       notifyListeners();
     }
   }
@@ -126,9 +164,12 @@ class HomeController extends ChangeNotifier {
     _reportMandaysByDepartment = {};
     _reviewMandaysByDepartment = {};
     _artistPerformance = [];
+    _inventActiveShowsByStatus.clear();
     _errorMessage = null;
     _isLoading = false;
     _isInsightsLoading = false;
+    _isInventActiveLoading = false;
+    _hasLoadedOnce = false;
     notifyListeners();
   }
 }

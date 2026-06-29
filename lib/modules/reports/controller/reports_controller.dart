@@ -11,7 +11,7 @@ class ReportController extends ChangeNotifier {
   final ReportService _service = ReportService();
 
   List<ReportItem> _items = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _error;
 
   String? selectedDepartment;
@@ -37,6 +37,7 @@ class ReportController extends ChangeNotifier {
     selectedDepartment = department;
     _isLoading = true;
     _error = null;
+    _items = [];
     notifyListeners();
     try {
       final resp = await _service.getReport(

@@ -12,7 +12,7 @@ class ReviewController extends ChangeNotifier {
 
   DepartmentReview? _departmentReview;
   IndividualReview? _individualReview;
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _error;
 
   int month = DateTime.now().month;
@@ -36,6 +36,7 @@ class ReviewController extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _error = null;
+    _departmentReview = null;
     notifyListeners();
     try {
       final resp = await _service.getDepartmentReview(
@@ -61,6 +62,7 @@ class ReviewController extends ChangeNotifier {
   }) async {
     _isLoading = true;
     _error = null;
+    _individualReview = null;
     notifyListeners();
     try {
       final resp = await _service.getIndividualReview(

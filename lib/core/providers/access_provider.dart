@@ -15,6 +15,7 @@ class AccessProvider extends ChangeNotifier {
     '/assets',
     '/tasks',
     '/review',
+    '/feedback',
     '/reports',
     '/teams',
     '/notifications',
@@ -31,6 +32,7 @@ class AccessProvider extends ChangeNotifier {
     '/assets',
     '/tasks',
     '/review',
+    '/feedback',
     '/reports',
     '/teams',
     '/notifications',
@@ -54,6 +56,7 @@ class AccessProvider extends ChangeNotifier {
     '/assets',
     '/tasks',
     '/review',
+    '/feedback',
     '/reports',
     '/teams',
     '/notifications',
@@ -136,6 +139,8 @@ class AccessProvider extends ChangeNotifier {
         return 'Tasks';
       case '/review':
         return 'Review';
+      case '/feedback':
+        return 'Feedback';
       case '/reports':
         return 'Reports';
       case '/teams':

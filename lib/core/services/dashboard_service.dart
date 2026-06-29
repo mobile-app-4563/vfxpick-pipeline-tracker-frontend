@@ -21,4 +21,7 @@ class DashboardService {
 
   Future<Map<String, dynamic>> fetchArtistPerformance() =>
       _api.get(ApiConstants.dashboardArtistPerformance);
+
+  Future<Map<String, dynamic>> fetchInventActiveShows() =>
+      _api.get(ApiConstants.dashboardInventActiveShows);
 }

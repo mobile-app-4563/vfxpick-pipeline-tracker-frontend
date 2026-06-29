@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/models/domain_models.dart';
 import '../../../core/services/api_controller.dart';
 import '../../../core/services/team_service.dart';
@@ -8,18 +9,51 @@ class TeamController extends ChangeNotifier {
   final TeamService _service = TeamService();
 
   List<DepartmentTeam> _teams = [];
-  bool _isLoading = false;
+  List<String> _roleOptions = List<String>.from(AppConstants.userRoles);
+  List<String> _departmentOptions = List<String>.from(AppConstants.departments);
+  bool _isLoading = true;
   String? _error;
 
   List<DepartmentTeam> get teams => _teams;
+  List<String> get roleOptions => List<String>.unmodifiable(_roleOptions);
+  List<String> get departmentOptions =>
+      List<String>.unmodifiable(_departmentOptions);
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  Future<void> loadMemberOptions() async {
+    try {
+      final resp = await _service.getMemberOptions();
+      AppConstants.applyDynamicOptions(resp);
+      final roles = ((resp['roles'] as List<dynamic>?) ?? const [])
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList();
+      final departments = ((resp['departments'] as List<dynamic>?) ?? const [])
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toSet()
+          .toList();
+
+      if (roles.isNotEmpty) {
+        _roleOptions = roles;
+      }
+      if (departments.isNotEmpty) {
+        _departmentOptions = departments;
+      }
+    } catch (_) {
+      // Keep fallback constants when options endpoint is unavailable.
+    }
+  }
 
   Future<void> loadTeams({String? department}) async {
     _isLoading = true;
     _error = null;
+    _teams = [];
     notifyListeners();
     try {
+      await loadMemberOptions();
       final resp = await _service.getTeams(department: department);
       _teams = ((resp['departments'] as List<dynamic>?) ?? const [])
           .map((e) => DepartmentTeam.fromJson(e as Map<String, dynamic>))

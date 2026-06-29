@@ -52,6 +52,8 @@ class _CustomSidebarState extends State<CustomSidebar> {
         return Icons.task_outlined;
       case '/review':
         return Icons.fact_check_outlined;
+      case '/feedback':
+        return Icons.feedback_outlined;
       case '/reports':
         return Icons.analytics_outlined;
       case '/teams':

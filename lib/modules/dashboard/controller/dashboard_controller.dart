@@ -8,7 +8,7 @@ class DashboardController extends ChangeNotifier {
   final DashboardService _service = DashboardService();
 
   List<DashboardDepartment> _departments = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _error;
 
   // Cache of expanded show -> shots.
@@ -23,6 +23,8 @@ class DashboardController extends ChangeNotifier {
   Future<void> loadSummary() async {
     _isLoading = true;
     _error = null;
+    _departments = [];
+    _showShots.clear();
     notifyListeners();
     try {
       final response = await _service.getSummary();

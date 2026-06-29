@@ -37,6 +37,7 @@ class _MainLayoutState extends State<MainLayout> {
     if (path.contains('/assets')) return 'Assets';
     if (path.contains('/tasks')) return 'Tasks';
     if (path.contains('/review')) return 'Review';
+    if (path.contains('/feedback')) return 'Feedback';
     if (path.contains('/reports')) return 'Reports';
     if (path.contains('/teams')) return 'Teams';
     if (path.contains('/notifications')) return 'Notifications';
@@ -361,7 +362,7 @@ class _MainLayoutState extends State<MainLayout> {
       ),
       body: Padding(
         padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 20),
-        child: Transform.scale(scale: 1, child: widget.child),
+        child: Transform.scale(scale: 0.97, child: widget.child),
       ),
     );
   }

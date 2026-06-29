@@ -38,12 +38,11 @@ class _TasksScreenState extends State<TasksScreen> {
   List<String> _accessibleDepartments = AppConstants.pipelineDepartments;
   bool _isExporting = false;
   bool _isImporting = false;
-  String? _selectedDept;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final user = context.read<AuthController>().currentUser;
       final query = GoRouterState.of(context).uri.queryParameters;
       final dashboardDept = query['department'];
@@ -57,8 +56,9 @@ class _TasksScreenState extends State<TasksScreen> {
           ? AppConstants.pipelineDepartments
           : departments;
       final controller = context.read<TaskController>();
+      await controller.init(departments: _accessibleDepartments);
       if (_isArtist) {
-        controller.loadArtistShots();
+        await controller.loadArtistShots();
       } else {
         final roleDept = _accessibleDepartments.contains(user?.department)
             ? user?.department
@@ -69,16 +69,13 @@ class _TasksScreenState extends State<TasksScreen> {
                   ? dashboardDept
                   : roleDept)
             : roleDept;
-        _selectedDept = dept;
-        controller.loadDepartmentShots(department: dept);
+        if (dept != null) {
+          controller.selectDepartment(dept);
+        }
+        await controller.loadShots();
       }
       if (mounted) setState(() {});
     });
-  }
-
-  void _onDeptChanged(String? dept) {
-    setState(() => _selectedDept = dept);
-    context.read<TaskController>().loadDepartmentShots(department: dept);
   }
 
   @override
@@ -162,70 +159,138 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  Widget _importActions(BuildContext context, TaskController controller) {
+    final canImport = controller.selectedDepartment != null;
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.brandGreen,
+            foregroundColor: Colors.white,
+            fixedSize: const Size(160, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          onPressed: _isExporting ? null : () => _exportAsExcel(controller),
+          icon: _isExporting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.download_outlined),
+          label: const Text('Export Excel'),
+        ),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            fixedSize: const Size(160, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          onPressed: _isImporting || !canImport
+              ? null
+              : () => _openPasteCsvDialog(controller),
+          icon: const Icon(Icons.content_paste_go_outlined),
+          label: const Text('Paste CSV'),
+        ),
+      ],
+    );
+  }
+
   Widget _filters(BuildContext context, TaskController controller) {
     final canFilterDepartment = _isBroadAccess;
+    final canFilterClientShow = !_isArtist;
 
-    return GlassContainer(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _dropdown<String>(
-                hint: 'Department',
-                value: _selectedDept,
-                items: _accessibleDepartments,
-                label: (d) => d,
-                enabled: canFilterDepartment,
-                onChanged: (v) {
-                  _onDeptChanged(v);
-                },
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 25),
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandGreen,
-                    foregroundColor: Colors.white,
-                    fixedSize: const Size(160, 40),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  onPressed: _isExporting
-                      ? null
-                      : () => _exportAsExcel(controller),
-                  icon: _isExporting
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.download_outlined),
-                  label: const Text('Export Excel'),
+    return SizedBox(
+      width: double.infinity,
+      child: GlassContainer(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _dropdown<String>(
+                  hint: 'Department',
+                  value: controller.selectedDepartment,
+                  items: controller.departments,
+                  label: (d) => d,
+                  enabled: canFilterDepartment,
+                  onChanged: (v) {
+                    if (v != null) {
+                      controller.selectDepartment(v);
+                      controller.loadShots();
+                    }
+                  },
                 ),
+                _dropdown<String>(
+                  hint: 'Client',
+                  value: controller.selectedClientId,
+                  items: controller.clients.map((c) => c.clientId).toList(),
+                  label: _clientNameFor,
+                  enabled: canFilterClientShow,
+                  onChanged: (v) async {
+                    if (v != null) await controller.selectClient(v);
+                  },
+                ),
+                _dropdown<String>(
+                  hint: 'Show',
+                  value: controller.selectedShowId,
+                  items: controller.shows.map((s) => s.showId).toList(),
+                  label: _showNameFor,
+                  enabled: canFilterClientShow,
+                  onChanged: (v) async {
+                    if (v != null) await controller.selectShow(v);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _importActions(context, controller),
+            if (!canFilterDepartment || !canFilterClientShow) ...[
+              const SizedBox(height: 8),
+              Text(
+                !canFilterClientShow
+                    ? 'Filters are restricted for your role.'
+                    : 'Department is locked based on your role.',
+                style: const TextStyle(fontSize: 12),
               ),
             ],
-          ),
-          if (!canFilterDepartment) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Department is locked based on your role.',
-              style: TextStyle(fontSize: 12),
-            ),
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  String _clientNameFor(String clientId) {
+    final controller = context.read<TaskController>();
+    for (final client in controller.clients) {
+      if (client.clientId == clientId) return client.clientName;
+    }
+    return clientId;
+  }
+
+  String _showNameFor(String showId) {
+    final controller = context.read<TaskController>();
+    for (final show in controller.shows) {
+      if (show.showId == showId) return show.showName;
+    }
+    return showId;
   }
 
   Widget _dropdown<T>({

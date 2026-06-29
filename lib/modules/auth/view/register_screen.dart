@@ -21,6 +21,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
   static const String _addRoleOption = '__add_new_role__';
+  static const String _addDepartmentOption = '__add_new_department__';
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -30,14 +31,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _selectedRole = AppConstants.roleEmployee;
   String _selectedDept = AppConstants.departments[0];
-  late final List<String> _roleOptions;
+  final List<String> _roleOptions = List<String>.from(AppConstants.userRoles);
+  final List<String> _departmentOptions = List<String>.from(
+    AppConstants.departments,
+  );
   bool _acceptTerms = false;
   double _passwordStrength = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _roleOptions = List<String>.from(AppConstants.userRoles);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDynamicOptions());
+  }
+
+  Future<void> _loadDynamicOptions() async {
+    final authController = context.read<AuthController>();
+    final options = await authController.fetchRegistrationOptions();
+    if (!mounted) return;
+
+    final roles = options['roles'] ?? const <String>[];
+    final departments = options['departments'] ?? const <String>[];
+
+    setState(() {
+      if (roles.isNotEmpty) {
+        _roleOptions
+          ..clear()
+          ..addAll(roles);
+      }
+      if (departments.isNotEmpty) {
+        _departmentOptions
+          ..clear()
+          ..addAll(departments);
+      }
+
+      if (!_roleOptions.contains(_selectedRole) && _roleOptions.isNotEmpty) {
+        _selectedRole = _roleOptions.first;
+      }
+      if (!_departmentOptions.contains(_selectedDept) &&
+          _departmentOptions.isNotEmpty) {
+        _selectedDept = _departmentOptions.first;
+      }
+    });
   }
 
   @override
@@ -78,6 +112,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     setState(() => _selectedRole = role);
+  }
+
+  Future<void> _onDepartmentChanged(String? department) async {
+    if (department == null) return;
+    if (department == _addDepartmentOption) {
+      final newDepartment = await _showAddDepartmentDialog();
+      if (!mounted || newDepartment == null) return;
+      setState(() {
+        if (!_departmentOptions.contains(newDepartment)) {
+          _departmentOptions.add(newDepartment);
+        }
+        _selectedDept = newDepartment;
+      });
+      return;
+    }
+
+    setState(() => _selectedDept = department);
   }
 
   Future<String?> _showAddRoleDialog() async {
@@ -129,6 +180,60 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (duplicate) {
       return _roleOptions.firstWhere(
         (role) => role.toLowerCase() == normalized.toLowerCase(),
+      );
+    }
+    return normalized;
+  }
+
+  Future<String?> _showAddDepartmentDialog() async {
+    var draftDepartment = '';
+    final newDepartment = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Add New Department'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Department Name',
+              hintText: 'e.g. FX',
+            ),
+            onChanged: (value) => draftDepartment = value,
+            onSubmitted: (value) {
+              final department = value.trim();
+              if (department.isNotEmpty) {
+                Navigator.of(dialogContext).pop(department);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final department = draftDepartment.trim();
+                if (department.isEmpty) return;
+                Navigator.of(dialogContext).pop(department);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newDepartment == null) return null;
+    final normalized = newDepartment.trim();
+    if (normalized.isEmpty) return null;
+
+    final duplicate = _departmentOptions.any(
+      (department) => department.toLowerCase() == normalized.toLowerCase(),
+    );
+    if (duplicate) {
+      return _departmentOptions.firstWhere(
+        (department) => department.toLowerCase() == normalized.toLowerCase(),
       );
     }
     return normalized;
@@ -387,11 +492,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             Expanded(
                               child: CustomDropdown<String>(
                                 labelText: 'DEPARTMENT',
-                                items: AppConstants.departments,
+                                items: [
+                                  ..._departmentOptions,
+                                  _addDepartmentOption,
+                                ],
                                 value: _selectedDept,
-                                onChanged: (val) =>
-                                    setState(() => _selectedDept = val!),
-                                itemToString: (item) => item,
+                                onChanged: _onDepartmentChanged,
+                                itemToString: (item) =>
+                                    item == _addDepartmentOption
+                                    ? 'Add New Department...'
+                                    : item,
                               ),
                             ),
                             const SizedBox(width: 20),
@@ -495,11 +605,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         const SizedBox(height: 12),
                         CustomDropdown<String>(
                           labelText: 'DEPARTMENT',
-                          items: AppConstants.departments,
+                          items: [..._departmentOptions, _addDepartmentOption],
                           value: _selectedDept,
-                          onChanged: (val) =>
-                              setState(() => _selectedDept = val!),
-                          itemToString: (item) => item,
+                          onChanged: _onDepartmentChanged,
+                          itemToString: (item) => item == _addDepartmentOption
+                              ? 'Add New Department...'
+                              : item,
                         ),
                         const SizedBox(height: 12),
                         CustomDropdown<String>(
