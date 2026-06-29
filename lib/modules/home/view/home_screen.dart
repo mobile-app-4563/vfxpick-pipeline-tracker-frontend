@@ -416,7 +416,7 @@ class _DepartmentBarChartState extends State<_DepartmentBarChart>
         final total = items.fold<double>(0, (sum, e) => sum + e.value);
         final highest = items.first;
         final maxY = _niceCeil(
-          items.fold<double>(0, (m, e) => e.value > m ? e.value : m),
+          items.fold<double>(100, (m, e) => e.value > m ? e.value : m),
         );
         final interval = ((maxY / 4).clamp(1.0, maxY)).toDouble();
 
@@ -537,11 +537,7 @@ class _DepartmentBarChartState extends State<_DepartmentBarChart>
                       gridData: FlGridData(
                         show: true,
                         drawVerticalLine: false,
-                        horizontalInterval: interval,
-                        getDrawingHorizontalLine: (_) => FlLine(
-                          color: Colors.white.withValues(alpha: 0.14),
-                          strokeWidth: 1,
-                        ),
+                        drawHorizontalLine: false,
                       ),
                       borderData: FlBorderData(show: false),
                       titlesData: FlTitlesData(
