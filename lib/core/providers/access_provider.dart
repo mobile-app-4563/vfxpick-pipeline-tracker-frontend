@@ -18,6 +18,7 @@ class AccessProvider extends ChangeNotifier {
     '/feedback',
     '/reports',
     '/teams',
+    '/register',
     '/notifications',
     '/access-provider',
     '/hrms',
@@ -35,6 +36,7 @@ class AccessProvider extends ChangeNotifier {
     '/feedback',
     '/reports',
     '/teams',
+    '/register',
     '/notifications',
     '/access-provider',
     '/hrms',
@@ -80,7 +82,22 @@ class AccessProvider extends ChangeNotifier {
   bool get loadedFromApi => _loadedFromApi;
   bool get auditLoaded => _auditLoaded;
   List<Map<String, dynamic>> get auditLogs => _auditLogs;
-  List<String> get roles => List<String>.unmodifiable(_roles);
+  List<String> get roles {
+    final merged = <String>{...AppConstants.userRoles, ..._roles};
+    final ordered = <String>[];
+    for (final role in AppConstants.userRoles) {
+      if (merged.contains(role)) {
+        ordered.add(role);
+      }
+    }
+    for (final role in merged) {
+      if (!ordered.contains(role)) {
+        ordered.add(role);
+      }
+    }
+    return List<String>.unmodifiable(ordered);
+  }
+
   String? get errorMessage => _errorMessage;
 
   AccessProvider() {
@@ -145,6 +162,8 @@ class AccessProvider extends ChangeNotifier {
         return 'Reports';
       case '/teams':
         return 'Teams';
+      case '/register':
+        return 'Add Users';
       case '/notifications':
         return 'Notifications';
       case '/access-provider':
@@ -385,6 +404,7 @@ class AccessProvider extends ChangeNotifier {
     _roleRoutes[AppConstants.roleManagement] = {..._fullAccessDefaults};
     _roleRoutes[AppConstants.roleAdmin] = {
       ..._fullAccessDefaults,
+      '/register',
       '/access-provider',
     };
   }

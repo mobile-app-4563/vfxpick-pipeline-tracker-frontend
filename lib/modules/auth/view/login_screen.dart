@@ -255,28 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Sign Up Toggle
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    const Text(
-                                      "Don't have an account?",
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => context.go('/register'),
-                                      child: const Text(
-                                        'Create Account',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.brandGreen,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                // Signup is intentionally hidden from the login page.
                               ],
                             ),
                           ),
