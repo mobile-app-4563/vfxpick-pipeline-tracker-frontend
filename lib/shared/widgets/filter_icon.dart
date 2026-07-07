@@ -47,7 +47,7 @@ class FilterIcon extends StatefulWidget {
 class _FilterIconState extends State<FilterIcon> {
   final GlobalKey<State<Tooltip>> _tooltipKey = GlobalKey<State<Tooltip>>();
 
-  void _showFilterDropdown(BuildContext context) {
+  Future<void> _showFilterDropdown() async {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final RenderBox renderBox = context.findRenderObject() as RenderBox;
     final position = renderBox.localToGlobal(Offset.zero);
@@ -55,7 +55,7 @@ class _FilterIconState extends State<FilterIcon> {
     // Directly prompt when there is only a custom query filter option.
     if (widget.options.length == 1 && widget.options.first.needsQuery) {
       final TextEditingController inputController = TextEditingController();
-      showDialog<String>(
+      final result = await showDialog<String>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: const Text('Enter query'),
@@ -76,12 +76,11 @@ class _FilterIconState extends State<FilterIcon> {
             ),
           ],
         ),
-      ).then((result) {
-        if (!mounted) return;
-        if (result != null && result.isNotEmpty) {
-          widget.onFilterChanged(result);
-        }
-      });
+      );
+      if (!mounted) return;
+      if (result != null && result.isNotEmpty) {
+        widget.onFilterChanged(result);
+      }
       return;
     }
 
@@ -132,7 +131,7 @@ class _FilterIconState extends State<FilterIcon> {
       ),
     ];
 
-    showMenu(
+    final value = await showMenu(
       context: context,
       position: RelativeRect.fromLTRB(
         position.dx + renderBox.size.width - 200,
@@ -141,50 +140,49 @@ class _FilterIconState extends State<FilterIcon> {
         0,
       ),
       items: menuItems,
-    ).then((value) async {
-      if (!mounted) return;
-      final dialogContext = context;
-      if (value != null) {
-        if (value == '__clear__') {
-          widget.onClear?.call();
-        } else {
-          final idx = widget.options.indexWhere((o) => o.value == value);
-          if (idx != -1 && widget.options[idx].needsQuery) {
-            final TextEditingController inputController =
-                TextEditingController();
-            final result = await showDialog<String>(
-              context: dialogContext,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Enter query'),
-                content: TextField(
-                  controller: inputController,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: 'Type filter query',
-                  ),
+    );
+    if (!mounted) return;
+    if (value != null) {
+      if (value == '__clear__') {
+        widget.onClear?.call();
+      } else {
+        final idx = widget.options.indexWhere((o) => o.value == value);
+        if (idx != -1 && widget.options[idx].needsQuery) {
+          final TextEditingController inputController =
+              TextEditingController();
+          final result = await showDialog<String>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: const Text('Enter query'),
+              content: TextField(
+                controller: inputController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Type filter query',
                 ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () =>
-                        Navigator.of(ctx).pop(inputController.text.trim()),
-                    child: const Text('OK'),
-                  ),
-                ],
               ),
-            );
-            if (result != null && result.isNotEmpty) {
-              widget.onFilterChanged(result);
-            }
-          } else {
-            widget.onFilterChanged(value);
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () =>
+                      Navigator.of(ctx).pop(inputController.text.trim()),
+                  child: const Text('OK'),
+                ),
+              ],
+            ),
+          );
+          if (!mounted) return;
+          if (result != null && result.isNotEmpty) {
+            widget.onFilterChanged(result);
           }
+        } else {
+          widget.onFilterChanged(value);
         }
       }
-    });
+    }
   }
 
   bool get _hasActiveFilter => widget.options.any((opt) => opt.isSelected);
@@ -210,7 +208,7 @@ class _FilterIconState extends State<FilterIcon> {
             size: 20,
           ),
           onPressed: () {
-            _showFilterDropdown(context);
+            _showFilterDropdown();
           },
           tooltip: '',
         ),

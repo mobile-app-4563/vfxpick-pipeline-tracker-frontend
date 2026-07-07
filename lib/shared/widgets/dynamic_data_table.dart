@@ -53,7 +53,7 @@ class DynamicDataTable extends StatelessWidget {
     required this.rows,
     this.width,
     this.height,
-    this.minColumnWidth = 130,
+    this.minColumnWidth = 0,
     this.headingRowHeight = 44,
     this.dataRowMinHeight = 44,
     this.dataRowMaxHeight = 56,
@@ -68,10 +68,15 @@ class DynamicDataTable extends StatelessWidget {
   double _estimatedWidth() {
     var total = 0.0;
     for (final field in fields) {
-      total += field.width ?? minColumnWidth;
+      total += field.width ?? _autoWidthForLabel(field.label);
     }
     total += math.max(0, fields.length - 1) * columnSpacing;
     return total + 32;
+  }
+
+  double _autoWidthForLabel(String label) {
+    final estimated = (label.length * 9) + 40;
+    return math.max(minColumnWidth, estimated.toDouble());
   }
 
   String _initialFilterValueForField(DynamicTableField field) {
@@ -246,20 +251,16 @@ class DynamicDataTable extends StatelessWidget {
               .map(
                 (field) => DataColumn(
                   numeric: field.numeric,
-                  label: SizedBox(
-                    width: field.width,
+                  label: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minWidth: field.width ?? _autoWidthForLabel(field.label),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.start,
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Flexible(
-                          child: Text(
-                            field.label,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.left,
-                          ),
-                        ),
+                        Text(field.label, textAlign: TextAlign.left),
                         if (!isMobile && field.filterRequired != false)
                           FilterIcon(
                             label: field.label,
@@ -305,14 +306,15 @@ class DynamicDataTable extends StatelessWidget {
                     textAlign: field.numeric
                         ? TextAlign.center
                         : TextAlign.start,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
                   );
                 }
 
-                if (field.width != null) {
-                  child = SizedBox(width: field.width, child: child);
-                }
+                child = ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minWidth: field.width ?? _autoWidthForLabel(field.label),
+                  ),
+                  child: child,
+                );
                 return DataCell(child);
               }).toList(),
             );

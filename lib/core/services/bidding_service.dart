@@ -14,8 +14,8 @@ class BiddingService {
   }) => _api.get(
     '/bidding/pending',
     queryParams: {
-      if (department != null) 'department': department,
-      if (status != null) 'status': status,
+      'department': ?department,
+      'status': ?status,
     },
   );
 

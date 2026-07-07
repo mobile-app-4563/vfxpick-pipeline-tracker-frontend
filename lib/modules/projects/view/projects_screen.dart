@@ -139,38 +139,24 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final viewportHeight = constraints.maxHeight > 0
-              ? constraints.maxHeight
-              : MediaQuery.of(context).size.height;
-          final shotsHeight = (viewportHeight * 0.58).clamp(320.0, 680.0);
-
-          return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: viewportHeight),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: const Text(
-                      'Select department and show to import.',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                  _filters(context, controller),
-                  if (_importDraftRows.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _importPreviewTable(),
-                  ],
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: shotsHeight,
-                    child: _shots(context, controller),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: const Text(
+                  'Select department and show to import.',
+                  style: TextStyle(fontSize: 16),
+                ),
               ),
-            ),
+              _filters(context, controller),
+              if (_importDraftRows.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _importPreviewTable(),
+              ],
+              const SizedBox(height: 8),
+              Expanded(child: _shots(context, controller)),
+            ],
           );
         },
       ),
@@ -525,10 +511,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 10),
         Flexible(
           child: GlassContainer(
             child: DynamicDataTable(
+              columnSpacing: 10,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               dataRowMinHeight: 48,
               dataRowMaxHeight: 62,
               fields: [
@@ -815,6 +802,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           // ),
           DynamicDataTable(
             height: 240,
+            columnSpacing: 10,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             headingRowHeight: 40,
             dataRowMinHeight: 40,
             dataRowMaxHeight: 52,

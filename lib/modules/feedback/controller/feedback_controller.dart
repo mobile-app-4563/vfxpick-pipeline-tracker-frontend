@@ -90,6 +90,22 @@ class FeedbackController extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateShotFeedback(String shotId, String feedback) async {
+    _isSaving = true;
+    notifyListeners();
+    try {
+      await _feedbackService.updateFeedback(shotId, clientFeedback: feedback);
+      await loadFeedbacks();
+    } catch (e) {
+      _error = e.toString();
+      debugPrint('FeedbackController.updateShotFeedback error: $e');
+      rethrow;
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> loadFeedbacks() async {
     _isLoading = true;
     _error = null;
@@ -125,6 +141,47 @@ class FeedbackController extends ChangeNotifier {
         status: status,
         clientFeedback: clientFeedback,
       );
+      await loadFeedbacks();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (e) {
+      return e.toString();
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+  }
+
+  Future<List<ShowModel>> getShowsForClient(String clientId) async {
+    try {
+      final resp = await _projectService.getShows(clientId);
+      return ((resp['shows'] as List<dynamic>?) ?? const [])
+          .map((e) => ShowModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('FeedbackController.getShowsForClient error: $e');
+      return [];
+    }
+  }
+
+  Future<String?> createFeedbackShot({
+    required String showId,
+    required String department,
+    required String shotCode,
+    required String status,
+    required String clientFeedback,
+  }) async {
+    _isSaving = true;
+    notifyListeners();
+    try {
+      await _projectService.createShot({
+        'showId': showId,
+        'department': department,
+        'shotCode': shotCode,
+        'status': status,
+        'clientFeedback': clientFeedback,
+      });
       await loadFeedbacks();
       return null;
     } on ApiException catch (e) {

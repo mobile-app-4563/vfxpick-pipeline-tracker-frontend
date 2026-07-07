@@ -6,10 +6,14 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/models/shot_model.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
+import '../../../shared/widgets/dynamic_data_table.dart';
+import '../../../shared/widgets/filter_icon.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../controller/feedback_controller.dart';
+import '../../../core/models/domain_models.dart';
+import '../../tasks/controller/tasks_controller.dart';
 
 class FeedbackScreen extends StatefulWidget {
   const FeedbackScreen({super.key});
@@ -21,6 +25,14 @@ class FeedbackScreen extends StatefulWidget {
 class _FeedbackScreenState extends State<FeedbackScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _departmentFilter = '';
+  String _clientFilter = '';
+  String _showFilter = '';
+  String _statusFilter = '';
+  String _artistFilter = '';
+  String _artistEtaFilter = '';
+  String _supervisorStatusFilter = '';
+  String _artistStatusFilter = '';
 
   @override
   void initState() {
@@ -90,6 +102,11 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
             Expanded(child: _buildBody(controller)),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showCreateFeedbackDialog(context, controller),
+        tooltip: 'Create new feedback',
+        child: const Icon(Icons.add),
       ),
     );
   }
@@ -254,7 +271,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       );
     }
 
-    final rows = _filteredRows(controller.feedbackShots);
+    final rows = _buildTableRows(controller.feedbackShots);
     if (rows.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.forum_outlined,
@@ -263,114 +280,262 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       );
     }
 
-    return ListView.separated(
-      itemCount: rows.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, index) => _feedbackCard(rows[index], controller),
-    );
-  }
-
-  List<ShotModel> _filteredRows(List<ShotModel> shots) {
-    final query = _searchQuery.trim().toLowerCase();
-    if (query.isEmpty) return shots;
-
-    return shots.where((shot) {
-      final client = (shot.clientName ?? '').toLowerCase();
-      final show = (shot.showName ?? '').toLowerCase();
-      final shotCode = shot.shotCode.toLowerCase();
-      final feedback = (shot.clientFeedback ?? '').toLowerCase();
-      return client.contains(query) ||
-          show.contains(query) ||
-          shotCode.contains(query) ||
-          feedback.contains(query);
-    }).toList();
-  }
-
-  Widget _feedbackCard(ShotModel shot, FeedbackController controller) {
-    final statusColor = _statusColor(shot.status);
-
     return GlassContainer(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      shot.shotCode,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    _pill(shot.department, AppColors.statusAssigned),
-                    _pill(shot.status, statusColor),
-                  ],
-                ),
-              ),
-              OutlinedButton.icon(
+      padding: const EdgeInsets.all(8),
+      child: DynamicDataTable(
+        headingRowHeight: 42,
+        dataRowMinHeight: 44,
+        dataRowMaxHeight: 56,
+        fields: [
+          const DynamicTableField(
+            key: 'sno',
+            label: 'S.No',
+            width: 55,
+            numeric: true,
+            filterRequired: false,
+          ),
+          const DynamicTableField(
+            key: 'shotId',
+            label: 'Shot ID',
+            width: 120,
+            filterRequired: false,
+          ),
+          // ── Actions column positioned early so it is always visible ──
+          DynamicTableField(
+            key: 'actions',
+            label: 'Actions',
+            width: 90,
+            filterRequired: false,
+            builder: (context, value, row, rowIndex) {
+              final shot = row['shot'] as ShotModel;
+              return IconButton(
+                tooltip: 'Update feedback',
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.edit_outlined, size: 18),
                 onPressed: controller.isSaving
                     ? null
                     : () => _openUpdateDialog(shot, controller),
-                icon: const Icon(Icons.edit_outlined, size: 18),
-                label: const Text('Update'),
-              ),
-            ],
+              );
+            },
           ),
-          const SizedBox(height: 8),
-          Text(
-            '${shot.clientName ?? 'Unknown Client'}  •  ${shot.showName ?? 'Unknown Show'}',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.8),
-              fontSize: 12,
+          DynamicTableField(
+            key: 'department',
+            label: 'Department',
+            width: 120,
+            filterOptions: _buildOptions(
+              controller.departments,
+              _departmentFilter,
             ),
           ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(6),
-              color: Colors.white.withValues(alpha: 0.03),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+          DynamicTableField(
+            key: 'status',
+            label: 'Status',
+            width: 130,
+            filterOptions: _buildOptions(
+              AppConstants.shotStatuses,
+              _statusFilter,
             ),
-            child: Text(
-              shot.clientFeedback?.trim().isNotEmpty == true
-                  ? shot.clientFeedback!
-                  : 'No feedback text',
-              style: TextStyle(
-                fontSize: 13,
-                color: Colors.white.withValues(alpha: 0.95),
-              ),
+            builder: (context, value, row, rowIndex) {
+              final status = (value ?? '—').toString();
+              final color = _statusColor(status);
+              return Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(100),
+                  color: color.withValues(alpha: 0.15),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+              );
+            },
+          ),
+          const DynamicTableField(
+            key: 'artist',
+            label: 'Artist',
+            width: 140,
+            filterRequired: false,
+          ),
+          const DynamicTableField(
+            key: 'artistBid',
+            label: 'Artist Bid',
+            width: 90,
+            numeric: true,
+            filterRequired: false,
+          ),
+          const DynamicTableField(
+            key: 'artistEta',
+            label: 'Artist ETA',
+            width: 110,
+            filterRequired: false,
+          ),
+          DynamicTableField(
+            key: 'supervisorStatus',
+            label: 'Supervisor Status',
+            width: 145,
+            filterOptions: _buildOptions(
+              AppConstants.supervisorStatuses,
+              _supervisorStatusFilter,
             ),
+          ),
+          DynamicTableField(
+            key: 'artistStatus',
+            label: 'Artist Status',
+            width: 130,
+            filterOptions: _buildOptions(
+              AppConstants.artistStatuses,
+              _artistStatusFilter,
+            ),
+          ),
+          DynamicTableField(
+            key: 'feedback',
+            label: 'Client Feedback',
+            width: 230,
+            filterRequired: false,
+            builder: (context, value, row, rowIndex) {
+              final feedback = (value ?? '—').toString();
+              return Tooltip(
+                message: feedback,
+                child: SizedBox(
+                  width: 220,
+                  child: Text(
+                    feedback,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              );
+            },
           ),
         ],
+        rows: rows,
+        onFilterChanged: (fieldKey, value) {
+          setState(() {
+            final query = value is String ? value : value.toString();
+            switch (fieldKey) {
+              case 'department':
+                _departmentFilter = query;
+                break;
+              case 'status':
+                _statusFilter = query;
+                break;
+              case 'supervisorStatus':
+                _supervisorStatusFilter = query;
+                break;
+              case 'artistStatus':
+                _artistStatusFilter = query;
+                break;
+            }
+          });
+        },
       ),
     );
   }
 
-  Widget _pill(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(100),
-        color: color.withValues(alpha: 0.15),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: color,
-        ),
-      ),
-    );
+  List<Map<String, dynamic>> _buildTableRows(List<ShotModel> shots) {
+    final filtered = shots.where((shot) {
+      final query = _searchQuery.trim().toLowerCase();
+      if (query.isNotEmpty) {
+        final client = (shot.clientName ?? '').toLowerCase();
+        final show = (shot.showName ?? '').toLowerCase();
+        final shotCode = shot.shotCode.toLowerCase();
+        final feedback = (shot.clientFeedback ?? '').toLowerCase();
+        if (!client.contains(query) &&
+            !show.contains(query) &&
+            !shotCode.contains(query) &&
+            !feedback.contains(query)) {
+          return false;
+        }
+      }
+
+      if (_departmentFilter.isNotEmpty &&
+          shot.department != _departmentFilter) {
+        return false;
+      }
+      if (_clientFilter.isNotEmpty &&
+          (shot.clientName ?? '').toLowerCase() !=
+              _clientFilter.toLowerCase()) {
+        return false;
+      }
+      if (_showFilter.isNotEmpty &&
+          (shot.showName ?? '').toLowerCase() != _showFilter.toLowerCase()) {
+        return false;
+      }
+      if (_statusFilter.isNotEmpty && shot.status != _statusFilter) {
+        return false;
+      }
+      if (_artistFilter.isNotEmpty &&
+          !(shot.artistName ?? 'Unassigned').toLowerCase().contains(
+            _artistFilter.toLowerCase(),
+          )) {
+        return false;
+      }
+      if (_artistEtaFilter.isNotEmpty &&
+          !_fmtDate(
+            shot.artistEta,
+          ).toLowerCase().contains(_artistEtaFilter.toLowerCase())) {
+        return false;
+      }
+      if (_supervisorStatusFilter.isNotEmpty &&
+          shot.supervisorStatus != _supervisorStatusFilter) {
+        return false;
+      }
+      if (_artistStatusFilter.isNotEmpty &&
+          shot.artistStatus != _artistStatusFilter) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+
+    return filtered
+        .asMap()
+        .entries
+        .map((entry) {
+          final shot = entry.value;
+          final index = entry.key;
+          return {
+            'sno': index + 1,
+            'shotId': shot.shotCode,
+            'department': shot.department,
+            'status': shot.status,
+            'feedback': shot.clientFeedback ?? '—',
+            'artist': shot.artistName ?? 'Unassigned',
+            'artistBid': shot.artistBid.toStringAsFixed(1),
+            'artistEta': _fmtDate(shot.artistEta),
+            'supervisorStatus': shot.supervisorStatus ?? '—',
+            'artistStatus': shot.artistStatus,
+            'shot': shot,
+          };
+        })
+        .toList(growable: false);
+  }
+
+  String _fmtDate(DateTime? d) => d == null
+      ? '—'
+      : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  List<FilterOption> _buildOptions(List<String> items, String currentValue) {
+    final options = <String>{
+      if (currentValue.isNotEmpty) currentValue,
+      ...items.where((item) => item.isNotEmpty),
+    };
+    return options
+        .map(
+          (item) => FilterOption(
+            label: item,
+            value: item,
+            isSelected: item == currentValue,
+          ),
+        )
+        .toList();
   }
 
   Color _statusColor(String status) {
@@ -474,5 +639,267 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         content: Text('Feedback updated. Concerned team has been notified.'),
       ),
     );
+  }
+
+  Future<void> _showCreateFeedbackDialog(
+    BuildContext context,
+    FeedbackController controller,
+  ) async {
+    String? selectedClientId;
+    String? selectedShowId;
+    String? selectedDepartment;
+    String? selectedStatus = 'Awaiting Approval';
+    List<ShowModel> showsList = [];
+    bool isShowsLoading = false;
+
+    final shotIdController = TextEditingController();
+    final feedbackController = TextEditingController();
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Create Client Feedback'),
+            content: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Client',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedClientId,
+                      hint: const Text('Select Client'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: controller.clients
+                          .map(
+                            (client) => DropdownMenuItem<String>(
+                              value: client.clientId,
+                              child: Text(client.clientName),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        setState(() {
+                          selectedClientId = value;
+                          selectedShowId = null;
+                          showsList = [];
+                          isShowsLoading = true;
+                        });
+                        final shows = await controller.getShowsForClient(value);
+                        setState(() {
+                          showsList = shows;
+                          isShowsLoading = false;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Show',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedShowId,
+                      hint: isShowsLoading
+                          ? const Text('Loading shows...')
+                          : const Text('Select Show'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: showsList
+                          .map(
+                            (show) => DropdownMenuItem<String>(
+                              value: show.showId,
+                              child: Text(show.showName),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedShowId = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Department',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedDepartment,
+                      hint: const Text('Select Department'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: controller.departments
+                          .map(
+                            (dept) => DropdownMenuItem<String>(
+                              value: dept,
+                              child: Text(dept),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedDepartment = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Shot ID',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: shotIdController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'Enter Shot ID (e.g. S01_shot10)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Status',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedStatus,
+                      hint: const Text('Select Status'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: AppConstants.shotStatuses
+                          .map(
+                            (status) => DropdownMenuItem<String>(
+                              value: status,
+                              child: Text(status),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedStatus = value;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+
+                    const Text(
+                      'Client Feedback',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: feedbackController,
+                      minLines: 3,
+                      maxLines: 5,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(2)),
+                        ),
+                        hintText: 'Enter client feedback...',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  if (selectedClientId == null ||
+                      selectedShowId == null ||
+                      selectedDepartment == null ||
+                      shotIdController.text.trim().isEmpty ||
+                      selectedStatus == null ||
+                      feedbackController.text.trim().isEmpty) {
+                    ScaffoldMessenger.of(dialogContext).showSnackBar(
+                      const SnackBar(content: Text('Please fill all fields')),
+                    );
+                    return;
+                  }
+                  Navigator.pop(dialogContext, true);
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (saved != true ||
+        selectedShowId == null ||
+        selectedDepartment == null ||
+        shotIdController.text.trim().isEmpty ||
+        selectedStatus == null ||
+        feedbackController.text.trim().isEmpty) {
+      shotIdController.dispose();
+      feedbackController.dispose();
+      return;
+    }
+
+    try {
+      final error = await controller.createFeedbackShot(
+        showId: selectedShowId!,
+        department: selectedDepartment!,
+        shotCode: shotIdController.text.trim(),
+        status: selectedStatus!,
+        clientFeedback: feedbackController.text.trim(),
+      );
+
+      if (error != null) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error: $error')));
+        }
+      } else {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Feedback saved successfully')),
+          );
+          try {
+            Provider.of<TaskController>(context, listen: false).loadShots();
+          } catch (e) {
+            debugPrint('Failed to refresh TaskController: $e');
+          }
+        }
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error saving feedback: $e')));
+      }
+    } finally {
+      shotIdController.dispose();
+      feedbackController.dispose();
+    }
   }
 }

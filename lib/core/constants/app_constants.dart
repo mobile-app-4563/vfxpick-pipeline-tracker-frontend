@@ -144,11 +144,9 @@ class AppConstants {
 
   // ──── Supervisor review statuses ─────────────────────────────────────────────
   static const List<String> _defaultSupervisorStatuses = [
-    'Awaiting QC',
     'Feedback',
     'Approved',
     'Hold',
-    'Client FB',
   ];
   static List<String> _supervisorStatuses = List<String>.from(
     _defaultSupervisorStatuses,
@@ -160,7 +158,9 @@ class AppConstants {
   static const List<String> _defaultArtistStatuses = [
     'YTS',
     'In Progress',
-    'WIP Complete',
+    'Awaiting QC',
+    'WIP Completed',
+    'Render & Upload Completed',
     'QC',
     'Additional',
   ];
