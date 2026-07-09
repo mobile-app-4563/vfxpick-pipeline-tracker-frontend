@@ -26,11 +26,11 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _departmentFilter = '';
-  String _clientFilter = '';
-  String _showFilter = '';
+  final String _clientFilter = '';
+  final String _showFilter = '';
   String _statusFilter = '';
-  String _artistFilter = '';
-  String _artistEtaFilter = '';
+  final String _artistFilter = '';
+  final String _artistEtaFilter = '';
   String _supervisorStatusFilter = '';
   String _artistStatusFilter = '';
 
@@ -340,8 +340,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               final status = (value ?? '—').toString();
               final color = _statusColor(status);
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(100),
                   color: color.withValues(alpha: 0.15),

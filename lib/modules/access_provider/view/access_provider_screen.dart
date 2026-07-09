@@ -24,10 +24,12 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _loadScheduled) return;
       _loadScheduled = true;
-      await context.read<AuthController>().fetchRegistrationOptions();
-      await context.read<AccessProvider>().ensureLoaded();
+      final authController = context.read<AuthController>();
+      final accessProvider = context.read<AccessProvider>();
+      await authController.fetchRegistrationOptions();
+      await accessProvider.ensureLoaded();
       if (!mounted) return;
-      await context.read<AccessProvider>().ensureAuditLoaded();
+      await accessProvider.ensureAuditLoaded();
       if (mounted) setState(() {});
     });
   }

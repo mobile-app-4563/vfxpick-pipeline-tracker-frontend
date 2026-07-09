@@ -104,6 +104,8 @@ class AccessProvider extends ChangeNotifier {
     _resetDefaults();
   }
 
+  String _normalizeRole(String role) => role.trim().toLowerCase();
+
   Future<void> ensureLoaded() async {
     if (_loadedFromApi || _isLoading) return;
     await loadPermissions();
@@ -114,16 +116,19 @@ class AccessProvider extends ChangeNotifier {
     await loadAuditLogs();
   }
 
-  bool isAdminRole(String role) => role == AppConstants.roleAdmin;
+  bool isAdminRole(String role) =>
+      _normalizeRole(role) == AppConstants.roleAdmin.toLowerCase();
 
-  bool isArtistRole(String role) => role == AppConstants.roleArtist;
+  bool isArtistRole(String role) =>
+      _normalizeRole(role) == AppConstants.roleArtist.toLowerCase();
 
   bool isFullAccessRole(String role) {
-    return role == AppConstants.roleSupervisor ||
-        role == AppConstants.roleTeamLead ||
-        role == AppConstants.roleAdmin ||
-        role == AppConstants.roleProduction ||
-        role == AppConstants.roleManagement;
+    final normalized = _normalizeRole(role);
+    return normalized == AppConstants.roleSupervisor.toLowerCase() ||
+        normalized == AppConstants.roleTeamLead.toLowerCase() ||
+        normalized == AppConstants.roleAdmin.toLowerCase() ||
+        normalized == AppConstants.roleProduction.toLowerCase() ||
+        normalized == AppConstants.roleManagement.toLowerCase();
   }
 
   Set<String> _effectiveAllowedRoutes(String role) {
@@ -132,6 +137,7 @@ class AccessProvider extends ChangeNotifier {
       allowed.add('/hrms');
     }
     if (isAdminRole(role)) {
+      allowed.add('/register');
       allowed.add('/access-provider');
     }
     return allowed;

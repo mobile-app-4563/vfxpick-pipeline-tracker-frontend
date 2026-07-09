@@ -507,7 +507,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
   Future<void> _pickAndParseImportFile(TeamController controller) async {
     setState(() => _isImporting = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods', 'csv'],
         withData: true,

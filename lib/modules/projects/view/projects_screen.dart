@@ -838,7 +838,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Future<void> _pickAndParseExcel(ProjectController controller) async {
     setState(() => _isImporting = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods', 'csv'],
         withData: true,

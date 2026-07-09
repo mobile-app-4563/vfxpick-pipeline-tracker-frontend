@@ -58,6 +58,8 @@ class _CustomSidebarState extends State<CustomSidebar> {
         return Icons.analytics_outlined;
       case '/teams':
         return Icons.groups_outlined;
+      case '/register':
+        return Icons.person_add_alt_1_outlined;
       case '/notifications':
         return Icons.notifications_none_outlined;
       case '/hrms':
