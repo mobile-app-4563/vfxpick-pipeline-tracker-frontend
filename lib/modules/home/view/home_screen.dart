@@ -72,18 +72,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(width: width * 0.7, child: chartCard),
+                          SizedBox(width: width * 0.35, child: chartCard),
                           const SizedBox(width: 16),
-                          Expanded(
-                            flex: 5,
-                            child: Column(
-                              children: [
-                                Expanded(child: pickoutsCard),
-                                const SizedBox(height: 16),
-                                Expanded(child: inventCard),
-                              ],
-                            ),
-                          ),
+                          Expanded(child: pickoutsCard),
+                          const SizedBox(width: 16),
+                          Expanded(child: inventCard),
                         ],
                       ),
                     );
@@ -254,227 +247,150 @@ class _DepartmentRadialChart extends StatelessWidget {
       );
     }
 
-    final total = items.fold<double>(0, (sum, e) => sum + e.value);
-    final highest = items.first;
-    final maxValue = items.first.value <= 0 ? 1.0 : items.first.value;
-
-    const lightPalette = [
-      AppColors.brandGreen,
-      Color(0xFF00C2B2),
-      Color(0xFF6EC5FF),
-      Color(0xFFFFC86A),
-      Color(0xFFFF9FAE),
-      Color(0xFFAFC8FF),
-    ];
-
+    final topItems = items.take(4).toList(growable: false);
+    final maxValue = topItems.first.value <= 0 ? 1.0 : topItems.first.value;
     final textColor = Theme.of(context).brightness == Brightness.dark
         ? AppColors.darkTextPrimary
         : AppColors.lightTextPrimary;
-    final ringTrack = Theme.of(context).brightness == Brightness.dark
-        ? Colors.white.withValues(alpha: 0.14)
-        : Colors.black.withValues(alpha: 0.08);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final radialData = List.generate(items.length, (i) {
-      final e = items[i];
+    const palette = [
+      _RingPalette(
+        fill: Color(0xFF90E2E0),
+        balanceDark: Color(0xFF2C3438),
+        balanceLight: Color(0xFFD7DDDF),
+      ),
+      _RingPalette(
+        fill: Color(0xFFAED8EC),
+        balanceDark: Color(0xFF2D363D),
+        balanceLight: Color(0xFFDCE1E5),
+      ),
+      _RingPalette(
+        fill: Color(0xFFF3C2CF),
+        balanceDark: Color(0xFF3A3135),
+        balanceLight: Color(0xFFE5DCDF),
+      ),
+      _RingPalette(
+        fill: Color(0xFFF2DBAF),
+        balanceDark: Color(0xFF3E3930),
+        balanceLight: Color(0xFFE7E0D3),
+      ),
+    ];
+
+    final radialData = List.generate(topItems.length, (index) {
+      final entry = topItems[index];
+      final percent = (entry.value / maxValue) * 100;
+      final colors = palette[index % palette.length];
       return _DepartmentRadialData(
-        name: e.key,
-        value: e.value,
-        color: lightPalette[i % lightPalette.length],
+        name: entry.key,
+        value: percent.clamp(0, 100),
+        color: colors.fill,
+        balanceColor: isDark ? colors.balanceDark : colors.balanceLight,
       );
     });
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppColors.brandGreen.withValues(alpha: 0.14),
-                Colors.transparent,
-              ],
-            ),
-            border: Border.all(
-              color: AppColors.brandGreen.withValues(alpha: 0.35),
-            ),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Total ${total.toStringAsFixed(1)} MD',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Highest: ${highest.key} (${highest.value.toStringAsFixed(1)} MD)',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: textColor.withValues(alpha: 0.78),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(999),
-                  color: AppColors.brandGreen.withValues(alpha: 0.18),
-                ),
-                child: Text(
-                  '${items.length} Depts',
-                  style: const TextStyle(
-                    color: AppColors.brandGreen,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 20),
-        SizedBox(
-          height: MediaQuery.sizeOf(context).height * 0.4,
-          child: SfCircularChart(
-            margin: EdgeInsets.zero,
-            tooltipBehavior: TooltipBehavior(
-              enable: true,
-              format: 'point.x\npoint.y MD',
-              color: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.black.withValues(alpha: 0.85)
-                  : Colors.white,
-              textStyle: TextStyle(
-                fontSize: 11,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : AppColors.lightTextPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            annotations: <CircularChartAnnotation>[
-              CircularChartAnnotation(
-                widget: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      total.toStringAsFixed(1),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: textColor,
-                      ),
-                    ),
-                    Text(
-                      'Mandays',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: textColor.withValues(alpha: 0.72),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-            series: <RadialBarSeries<_DepartmentRadialData, String>>[
-              RadialBarSeries<_DepartmentRadialData, String>(
-                dataSource: radialData,
-                xValueMapper: (_DepartmentRadialData d, _) => d.name,
-                yValueMapper: (_DepartmentRadialData d, _) => d.value,
-                pointColorMapper: (_DepartmentRadialData d, _) => d.color,
-                maximumValue: maxValue,
-                cornerStyle: CornerStyle.bothCurve,
-                radius: '96%',
-                gap: '10%',
-                innerRadius: '28%',
-                trackOpacity: 1,
-                trackColor: ringTrack,
-                useSeriesColor: true,
-                animationDuration: 900,
-                dataLabelSettings: const DataLabelSettings(
-                  isVisible: true,
-                  labelPosition: ChartDataLabelPosition.outside,
-                  textStyle: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        Expanded(
-          child: SingleChildScrollView(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: List.generate(items.length, (i) {
-                final part = items[i];
-                final percent = total > 0 ? (part.value / total) * 100 : 0.0;
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(8),
-                    color: Colors.white.withValues(alpha: 0.04),
-                    border: Border.all(
-                      color: Theme.of(context).brightness == Brightness.dark
-                          ? Colors.white.withValues(alpha: 0.12)
-                          : Colors.black.withValues(alpha: 0.08),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: lightPalette[i % lightPalette.length],
-                          borderRadius: BorderRadius.circular(3),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 170),
-                        child: Text(
-                          '${part.key}: ${part.value.toStringAsFixed(1)} MD (${percent.toStringAsFixed(0)}%)',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: textColor.withValues(alpha: 0.82),
-                            fontWeight: FontWeight.w600,
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: radialData
+                .map((item) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(top: 3),
+                          decoration: BoxDecoration(
+                            color: item.color,
+                            borderRadius: BorderRadius.circular(2),
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: RichText(
+                            text: TextSpan(
+                              style: TextStyle(
+                                color: textColor,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              children: [
+                                TextSpan(text: '${item.name} '),
+                                TextSpan(
+                                  text: '${item.value.round()}%',
+                                  style: TextStyle(
+                                    color: item.color,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                })
+                .toList(growable: false),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            flex: 5,
+            child: Align(
+              alignment: Alignment.center,
+              child: SizedBox(
+                width: 455,
+                height: 455,
+                child: SfCircularChart(
+                  margin: EdgeInsets.zero,
+                  series: List.generate(radialData.length, (index) {
+                    final item = radialData[index];
+                    return DoughnutSeries<_ChartSlice, String>(
+                      dataSource: [
+                        _ChartSlice(item.name, item.value, item.color),
+                        _ChartSlice(
+                          '${item.name} Balance',
+                          100 - item.value,
+                          item.balanceColor,
+                        ),
+                      ],
+                      xValueMapper: (_ChartSlice point, _) => point.label,
+                      yValueMapper: (_ChartSlice point, _) => point.value,
+                      pointColorMapper: (_ChartSlice point, _) => point.color,
+                      radius: '${100 - (index * 15)}%',
+                      innerRadius: '${91 - (index * 15)}%',
+                      startAngle: 0,
+                      endAngle: 270,
+                      explode: false,
+                      animationDuration: 900,
+                      strokeColor: isDark
+                          ? Colors.white.withValues(alpha: 0.04)
+                          : Colors.white,
+                      strokeWidth: 1.5,
+                      dataLabelSettings: const DataLabelSettings(
+                        isVisible: false,
                       ),
-                    ],
+                    );
+                  }),
+                  tooltipBehavior: TooltipBehavior(
+                    enable: true,
+                    format: 'point.x\npoint.y%',
                   ),
-                );
-              }),
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -483,12 +399,34 @@ class _DepartmentRadialData {
   final String name;
   final double value;
   final Color color;
+  final Color balanceColor;
 
   const _DepartmentRadialData({
     required this.name,
     required this.value,
     required this.color,
+    required this.balanceColor,
   });
+}
+
+class _RingPalette {
+  final Color fill;
+  final Color balanceDark;
+  final Color balanceLight;
+
+  const _RingPalette({
+    required this.fill,
+    required this.balanceDark,
+    required this.balanceLight,
+  });
+}
+
+class _ChartSlice {
+  final String label;
+  final double value;
+  final Color color;
+
+  const _ChartSlice(this.label, this.value, this.color);
 }
 
 class _InventActiveShowsCard extends StatefulWidget {
