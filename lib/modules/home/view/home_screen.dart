@@ -1,6 +1,6 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
@@ -211,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: isLoading
                 ? const Center(child: LoadingWidget())
-                : _DepartmentBarChart(data: data),
+                : _DepartmentRadialChart(data: data),
           ),
         ],
       ),
@@ -345,352 +345,257 @@ class _AnimatedEntryState extends State<_AnimatedEntry> {
 //   }
 // }
 
-class _DepartmentBarChart extends StatefulWidget {
+class _DepartmentRadialChart extends StatelessWidget {
   final Map<String, double> data;
-  const _DepartmentBarChart({required this.data});
-
-  @override
-  State<_DepartmentBarChart> createState() => _DepartmentBarChartState();
-}
-
-class _DepartmentBarChartState extends State<_DepartmentBarChart>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..forward();
-  }
-
-  @override
-  void didUpdateWidget(covariant _DepartmentBarChart oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.data != widget.data) {
-      _controller
-        ..reset()
-        ..forward();
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  double _niceCeil(double value) {
-    if (value <= 0) return 1;
-    final magnitude = value < 10
-        ? 1.0
-        : (value < 100 ? 10.0 : (value < 1000 ? 100.0 : 1000.0));
-    return (value / magnitude).ceil() * magnitude;
-  }
-
-  double _staggerProgress(int index, int total, double t) {
-    if (total <= 1) return Curves.easeOutCubic.transform(t.clamp(0.0, 1.0));
-    final slice = 0.62 / total;
-    final start = index * slice;
-    final end = (start + 0.38).clamp(0.0, 1.0);
-    final local = ((t - start) / (end - start)).clamp(0.0, 1.0);
-    return Curves.easeOutCubic.transform(local);
-  }
+  const _DepartmentRadialChart({required this.data});
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final items = widget.data.entries.toList(growable: false)
-          ..sort((a, b) => b.value.compareTo(a.value));
-        if (items.isEmpty) {
-          return const EmptyStateWidget(
-            icon: Icons.pie_chart_outline,
-            title: 'No chart data',
-            description: 'No mandays available for the selected period.',
-          );
-        }
+    final items = data.entries.toList(growable: false)
+      ..sort((a, b) => b.value.compareTo(a.value));
+    if (items.isEmpty) {
+      return const EmptyStateWidget(
+        icon: Icons.pie_chart_outline,
+        title: 'No chart data',
+        description: 'No mandays available for the selected period.',
+      );
+    }
 
-        final total = items.fold<double>(0, (sum, e) => sum + e.value);
-        final highest = items.first;
-        final maxY = _niceCeil(
-          items.fold<double>(100, (m, e) => e.value > m ? e.value : m),
-        );
-        final interval = ((maxY / 4).clamp(1.0, maxY)).toDouble();
+    final total = items.fold<double>(0, (sum, e) => sum + e.value);
+    final highest = items.first;
+    final maxValue = items.first.value <= 0 ? 1.0 : items.first.value;
 
-        const palette = [
-          Color(0xFF3EBA02),
-          Color(0xFF00B7C2),
-          Color(0xFFFFB020),
-          Color(0xFF5B8DEF),
-          Color(0xFFEF476F),
-        ];
+    const lightPalette = [
+      AppColors.brandGreen,
+      Color(0xFF00C2B2),
+      Color(0xFF6EC5FF),
+      Color(0xFFFFC86A),
+      Color(0xFFFF9FAE),
+      Color(0xFFAFC8FF),
+    ];
 
-        final textColor = Theme.of(context).brightness == Brightness.dark
-            ? AppColors.darkTextPrimary
-            : AppColors.lightTextPrimary;
+    final textColor = Theme.of(context).brightness == Brightness.dark
+        ? AppColors.darkTextPrimary
+        : AppColors.lightTextPrimary;
+    final ringTrack = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.14)
+        : Colors.black.withValues(alpha: 0.08);
 
-        return AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) {
-            final t = _controller.value;
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppColors.brandGreen.withValues(alpha: 0.14),
-                        Colors.transparent,
-                      ],
+    final radialData = List.generate(items.length, (i) {
+      final e = items[i];
+      return _DepartmentRadialData(
+        name: e.key,
+        value: e.value,
+        color: lightPalette[i % lightPalette.length],
+      );
+    });
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppColors.brandGreen.withValues(alpha: 0.14),
+                Colors.transparent,
+              ],
+            ),
+            border: Border.all(
+              color: AppColors.brandGreen.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Total ${total.toStringAsFixed(1)} MD',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                      ),
                     ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Highest: ${highest.key} (${highest.value.toStringAsFixed(1)} MD)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: textColor.withValues(alpha: 0.78),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(999),
+                  color: AppColors.brandGreen.withValues(alpha: 0.18),
+                ),
+                child: Text(
+                  '${items.length} Depts',
+                  style: const TextStyle(
+                    color: AppColors.brandGreen,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 20),
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.4,
+          child: SfCircularChart(
+            margin: EdgeInsets.zero,
+            tooltipBehavior: TooltipBehavior(
+              enable: true,
+              format: 'point.x\npoint.y MD',
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.black.withValues(alpha: 0.85)
+                  : Colors.white,
+              textStyle: TextStyle(
+                fontSize: 11,
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white
+                    : AppColors.lightTextPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            annotations: <CircularChartAnnotation>[
+              CircularChartAnnotation(
+                widget: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      total.toStringAsFixed(1),
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: textColor,
+                      ),
+                    ),
+                    Text(
+                      'Mandays',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: textColor.withValues(alpha: 0.72),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            series: <RadialBarSeries<_DepartmentRadialData, String>>[
+              RadialBarSeries<_DepartmentRadialData, String>(
+                dataSource: radialData,
+                xValueMapper: (_DepartmentRadialData d, _) => d.name,
+                yValueMapper: (_DepartmentRadialData d, _) => d.value,
+                pointColorMapper: (_DepartmentRadialData d, _) => d.color,
+                maximumValue: maxValue,
+                cornerStyle: CornerStyle.bothCurve,
+                radius: '96%',
+                gap: '10%',
+                innerRadius: '28%',
+                trackOpacity: 1,
+                trackColor: ringTrack,
+                useSeriesColor: true,
+                animationDuration: 900,
+                dataLabelSettings: const DataLabelSettings(
+                  isVisible: true,
+                  labelPosition: ChartDataLabelPosition.outside,
+                  textStyle: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Expanded(
+          child: SingleChildScrollView(
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: List.generate(items.length, (i) {
+                final part = items[i];
+                final percent = total > 0 ? (part.value / total) * 100 : 0.0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withValues(alpha: 0.04),
                     border: Border.all(
-                      color: AppColors.brandGreen.withValues(alpha: 0.35),
+                      color: Theme.of(context).brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : Colors.black.withValues(alpha: 0.08),
                     ),
                   ),
                   child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Total ${total.toStringAsFixed(1)} MD',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w800,
-                                color: textColor,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Highest: ${highest.key} (${highest.value.toStringAsFixed(1)} MD)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: textColor.withValues(alpha: 0.78),
-                              ),
-                            ),
-                          ],
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: lightPalette[i % lightPalette.length],
+                          borderRadius: BorderRadius.circular(3),
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(999),
-                          color: AppColors.brandGreen.withValues(alpha: 0.18),
-                        ),
+                      const SizedBox(width: 6),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 170),
                         child: Text(
-                          '${items.length} Depts',
-                          style: const TextStyle(
-                            color: AppColors.brandGreen,
-                            fontWeight: FontWeight.w700,
+                          '${part.key}: ${part.value.toStringAsFixed(1)} MD (${percent.toStringAsFixed(0)}%)',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
                             fontSize: 11,
+                            color: textColor.withValues(alpha: 0.82),
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 34),
-                SizedBox(
-                  height: MediaQuery.sizeOf(context).height * 0.4,
-                  child: BarChart(
-                    BarChartData(
-                      maxY: maxY,
-                      alignment: BarChartAlignment.spaceEvenly,
-                      barTouchData: BarTouchData(
-                        enabled: true,
-                        touchTooltipData: BarTouchTooltipData(
-                          tooltipPadding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          getTooltipColor: (_) =>
-                              Colors.black.withValues(alpha: 0.85),
-                          getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                            final item = items[group.x.toInt()];
-                            final percent = total > 0
-                                ? (item.value / total) * 100
-                                : 0.0;
-                            return BarTooltipItem(
-                              '${item.key}\n${item.value.toStringAsFixed(1)} MD (${percent.toStringAsFixed(1)}%)',
-                              const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 11,
-                                height: 1.4,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                      gridData: FlGridData(
-                        show: true,
-                        drawVerticalLine: false,
-                        drawHorizontalLine: false,
-                      ),
-                      borderData: FlBorderData(show: false),
-                      titlesData: FlTitlesData(
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 40,
-                            interval: interval,
-                            getTitlesWidget: (value, meta) {
-                              return Text(
-                                value.toStringAsFixed(0),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: textColor.withValues(alpha: 0.7),
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 44,
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index < 0 || index >= items.length) {
-                                return const SizedBox.shrink();
-                              }
-                              return SideTitleWidget(
-                                meta: meta,
-                                space: 8,
-                                child: SizedBox(
-                                  width: 64,
-                                  child: Text(
-                                    items[index].key,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: textColor.withValues(alpha: 0.78),
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      barGroups: List.generate(items.length, (i) {
-                        final item = items[i];
-                        final color = palette[i % palette.length];
-                        final animatedToY =
-                            item.value * _staggerProgress(i, items.length, t);
-                        return BarChartGroupData(
-                          x: i,
-                          barsSpace: 3,
-                          barRods: [
-                            BarChartRodData(
-                              toY: animatedToY,
-                              width: 40,
-                              borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(2),
-                              ),
-                              gradient: LinearGradient(
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                                colors: [color.withValues(alpha: 0.65), color],
-                              ),
-                              backDrawRodData: BackgroundBarChartRodData(
-                                show: true,
-                                toY: maxY,
-                                color: color.withValues(alpha: 0.12),
-                              ),
-                            ),
-                          ],
-                        );
-                      }),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: List.generate(items.length, (i) {
-                        final part = items[i];
-                        final percent = total > 0
-                            ? (part.value / total) * 100
-                            : 0.0;
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                            color: Colors.white.withValues(alpha: 0.04),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.12),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 10,
-                                height: 10,
-                                decoration: BoxDecoration(
-                                  color: palette[i % palette.length],
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              ConstrainedBox(
-                                constraints: const BoxConstraints(
-                                  maxWidth: 170,
-                                ),
-                                child: Text(
-                                  '${part.key}: ${part.value.toStringAsFixed(1)} MD (${percent.toStringAsFixed(0)}%)',
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: textColor.withValues(alpha: 0.82),
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }),
-                    ),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
+                );
+              }),
+            ),
+          ),
+        ),
+      ],
     );
   }
+}
+
+class _DepartmentRadialData {
+  final String name;
+  final double value;
+  final Color color;
+
+  const _DepartmentRadialData({
+    required this.name,
+    required this.value,
+    required this.color,
+  });
 }
 
 class _InventActiveShowsCard extends StatefulWidget {
