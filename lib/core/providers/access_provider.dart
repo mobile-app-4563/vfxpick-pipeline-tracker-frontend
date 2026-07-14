@@ -18,7 +18,6 @@ class AccessProvider extends ChangeNotifier {
     '/feedback',
     '/reports',
     '/teams',
-    '/register',
     '/notifications',
     '/user-register',
     '/access-provider',
@@ -37,7 +36,6 @@ class AccessProvider extends ChangeNotifier {
     '/feedback',
     '/reports',
     '/teams',
-    '/register',
     '/notifications',
     '/user-register',
     '/access-provider',
@@ -140,7 +138,6 @@ class AccessProvider extends ChangeNotifier {
       allowed.add('/hrms');
     }
     if (isAdminRole(role)) {
-      allowed.add('/register');
       allowed.add('/access-provider');
     }
     return allowed;
@@ -171,12 +168,10 @@ class AccessProvider extends ChangeNotifier {
         return 'Reports';
       case '/teams':
         return 'Teams';
-      case '/register':
-        return 'Add Users';
       case '/notifications':
         return 'Notifications';
       case '/user-register':
-        return 'Register';
+        return 'Add Users';
       case '/access-provider':
         return 'Access Provider';
       case '/hrms':
@@ -415,7 +410,6 @@ class AccessProvider extends ChangeNotifier {
     _roleRoutes[AppConstants.roleManagement] = {..._fullAccessDefaults};
     _roleRoutes[AppConstants.roleAdmin] = {
       ..._fullAccessDefaults,
-      '/register',
       '/access-provider',
     };
   }
