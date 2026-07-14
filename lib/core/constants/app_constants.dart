@@ -144,6 +144,7 @@ class AppConstants {
 
   // ──── Supervisor review statuses ─────────────────────────────────────────────
   static const List<String> _defaultSupervisorStatuses = [
+    'Awaiting QC',
     'Feedback',
     'Approved',
     'Hold',

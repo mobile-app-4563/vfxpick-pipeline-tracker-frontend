@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_charts/charts.dart';
+import 'package:vfxpick_pipeline/core/models/domain_models.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/models/domain_models.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
@@ -39,26 +39,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Consumer<HomeController>(
       builder: (context, controller, child) {
-        final pickoutsCard = _AnimatedEntry(
-          order: 0,
-          child: _buildPickoutsCard(controller, isDark),
-        );
-        final chartCard = _AnimatedEntry(
-          order: 1,
-          child: _buildPieSection(
-            title: 'Reports Mandays (Current Month)',
-            data: controller.reportMandaysByDepartment,
-            isLoading: controller.isInsightsLoading,
+        final cards = <Widget>[
+          _AnimatedEntry(
+            order: 0,
+            child: _buildPickoutsCard(controller, isDark),
           ),
-        );
-        final inventCard = _AnimatedEntry(
-          order: 2,
-          child: _InventActiveShowsCard(
-            isLoading: controller.isLoading,
-            data: controller.inventSummary,
-            errorMessage: controller.errorMessage,
+          _AnimatedEntry(
+            order: 1,
+            child: _buildPieSection(
+              title: 'Reports Mandays (Current Month)',
+              data: controller.reportMandaysByDepartment,
+              isLoading: controller.isInsightsLoading,
+            ),
           ),
-        );
+          _AnimatedEntry(
+            order: 2,
+            child: _buildPieSection(
+              title: 'Reviews Mandays (Current Month)',
+              data: controller.reviewMandaysByDepartment,
+              isLoading: controller.isInsightsLoading,
+            ),
+          ),
+
+          // _AnimatedEntry(order: 1, child: _CalendarCard()),
+        ];
 
         return RefreshIndicator(
           onRefresh: () => controller.fetchTodaysPickouts(),
@@ -69,33 +73,9 @@ class _HomeScreenState extends State<HomeScreen> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
-                  final isWide = width >= 1180;
-
-                  if (isWide) {
-                    return SizedBox(
-                      height: MediaQuery.sizeOf(context).height * 0.8,
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          SizedBox(width: width * 0.7, child: chartCard),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            flex: 5,
-                            child: Column(
-                              children: [
-                                Expanded(child: pickoutsCard),
-                                const SizedBox(height: 16),
-                                Expanded(child: inventCard),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }
-
-                  final cards = <Widget>[pickoutsCard, chartCard, inventCard];
-                  final crossAxisCount = width >= 760 ? 2 : 1;
+                  final crossAxisCount = width >= 1280
+                      ? 3
+                      : (width >= 760 ? 2 : 1);
 
                   return GridView.builder(
                     shrinkWrap: true,
@@ -202,7 +182,6 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 4),
           Text(
             title,
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),

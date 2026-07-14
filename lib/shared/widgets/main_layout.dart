@@ -44,6 +44,7 @@ class _MainLayoutState extends State<MainLayout> {
     if (path.contains('/hrms')) return 'HRMS';
     if (path.contains('/access-provider')) return 'Access Provider';
     if (path.contains('/inventory')) return 'Inventory';
+    if (path.contains('/user-register')) return 'Register';
     return 'VFXPICK Pipeline';
   }
 

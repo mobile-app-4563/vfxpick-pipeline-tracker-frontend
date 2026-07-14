@@ -113,6 +113,10 @@ class AppRoutes {
               path: '/inventory',
               builder: (context, state) => const InventoryScreen(),
             ),
+            GoRoute(
+              path: '/user-register',
+              builder: (context, state) => const RegisterScreen(),
+            ),
           ],
         ),
       ],

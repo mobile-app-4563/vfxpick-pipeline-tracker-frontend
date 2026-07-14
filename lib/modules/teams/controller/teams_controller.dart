@@ -11,7 +11,7 @@ class TeamController extends ChangeNotifier {
   List<DepartmentTeam> _teams = [];
   List<String> _roleOptions = List<String>.from(AppConstants.userRoles);
   List<String> _departmentOptions = List<String>.from(AppConstants.departments);
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _error;
 
   List<DepartmentTeam> get teams => _teams;
