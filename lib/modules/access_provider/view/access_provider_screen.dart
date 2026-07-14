@@ -29,7 +29,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
       await authController.fetchRegistrationOptions();
       await accessProvider.ensureLoaded();
       if (!mounted) return;
-      await accessProvider.ensureAuditLoaded();
+      await accessProvider.loadAuditLogs();
       if (mounted) setState(() {});
     });
   }
@@ -328,6 +328,12 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                 ? const Padding(
                     padding: EdgeInsets.all(20),
                     child: Center(child: CircularProgressIndicator()),
+                  )
+                : access.auditErrorMessage != null
+                ? EmptyStateWidget(
+                    icon: Icons.error_outline,
+                    title: 'Could not load audit log',
+                    description: access.auditErrorMessage!,
                   )
                 : const EmptyStateWidget(
                     icon: Icons.history,

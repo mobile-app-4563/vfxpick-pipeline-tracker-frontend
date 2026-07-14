@@ -68,6 +68,7 @@ class AccessProvider extends ChangeNotifier {
   };
 
   final Map<String, Set<String>> _roleRoutes = {};
+  Set<String>? _serverRoutes;
   List<String> _roles = List<String>.from(AppConstants.userRoles);
   List<Map<String, dynamic>> _auditLogs = [];
   bool _isLoading = false;
@@ -76,6 +77,7 @@ class AccessProvider extends ChangeNotifier {
   bool _loadedFromApi = false;
   bool _auditLoaded = false;
   String? _errorMessage;
+  String? _auditErrorMessage;
 
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
@@ -83,6 +85,7 @@ class AccessProvider extends ChangeNotifier {
   bool get loadedFromApi => _loadedFromApi;
   bool get auditLoaded => _auditLoaded;
   List<Map<String, dynamic>> get auditLogs => _auditLogs;
+  String? get auditErrorMessage => _auditErrorMessage;
   List<String> get roles {
     final merged = <String>{...AppConstants.userRoles, ..._roles};
     final ordered = <String>[];
@@ -106,6 +109,14 @@ class AccessProvider extends ChangeNotifier {
   }
 
   String _normalizeRole(String role) => role.trim().toLowerCase();
+
+  Set<String> get _safeServerRoutes =>
+      _serverRoutes ??= Set<String>.from(orderedMenuRoutes);
+
+  String _normalizeClientRoute(String route) {
+    if (route == '/register') return '/user-register';
+    return route;
+  }
 
   Future<void> ensureLoaded() async {
     if (_loadedFromApi || _isLoading) return;
@@ -212,12 +223,23 @@ class AccessProvider extends ChangeNotifier {
       final response = await _api.get(ApiConstants.accessPermissions);
       final permissions = response['permissions'];
       if (permissions is Map<String, dynamic>) {
+        final rawRoutes =
+            (response['routes'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toSet() ??
+            <String>{};
+        if (rawRoutes.isNotEmpty) {
+          _serverRoutes = rawRoutes;
+        } else {
+          _safeServerRoutes;
+        }
         _applyPermissionsMap(
           permissions,
           rolesFromApi: (response['roles'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList(growable: false),
         );
+        _applyAuditLogsPayload(response['logs']);
         _loadedFromApi = true;
         _errorMessage = null;
         return true;
@@ -239,22 +261,23 @@ class AccessProvider extends ChangeNotifier {
   Future<bool> loadAuditLogs({int limit = 200}) async {
     if (_isAuditLoading) return false;
     _isAuditLoading = true;
+    _auditErrorMessage = null;
     notifyListeners();
     try {
       final response = await _api.get(
         ApiConstants.accessPermissionsAudit,
         queryParams: {'limit': '$limit'},
       );
-      final rows = (response['logs'] as List<dynamic>?) ?? const [];
-      _auditLogs = rows.whereType<Map<String, dynamic>>().toList(
-        growable: false,
-      );
-      _auditLoaded = true;
+      _applyAuditLogsPayload(response['logs']);
       return true;
     } on ApiException catch (e) {
+      _auditLoaded = false;
+      _auditErrorMessage = e.message;
       _errorMessage = e.message;
       return false;
     } catch (e) {
+      _auditLoaded = false;
+      _auditErrorMessage = e.toString();
       _errorMessage = e.toString();
       return false;
     } finally {
@@ -288,27 +311,54 @@ class AccessProvider extends ChangeNotifier {
         ..clear()
         ..addAll(snapshot);
       notifyListeners();
-    } else {
-      await loadAuditLogs();
     }
     return saved;
   }
 
   Future<bool> savePermissions() async {
-    if (_isSaving) return false;
+    if (_isSaving) {
+      _errorMessage = 'Please wait, permission update is in progress.';
+      return false;
+    }
     _isSaving = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final payload = {
-        'permissions': {
-          for (final role in _roles) role: allowedMenuRoutes(role),
-        },
-      };
-      await _api.put(ApiConstants.accessPermissions, payload);
+      final response = await _api.put(
+        ApiConstants.accessPermissions,
+        _buildPermissionsPayload(),
+      );
+      _applyPermissionsResponse(response);
       _loadedFromApi = true;
       return true;
     } on ApiException catch (e) {
+      final message = e.message.toLowerCase();
+      final invalidRoute = message.contains('invalid route');
+      final mentionsUserRegister = message.contains('/user-register');
+      final mentionsRegister =
+          message.contains('/register') && !mentionsUserRegister;
+
+      if (invalidRoute && (mentionsUserRegister || mentionsRegister)) {
+        try {
+          final response = await _api.put(
+            ApiConstants.accessPermissions,
+            _buildPermissionsPayload(
+              forceLegacyRegisterAlias: mentionsUserRegister,
+            ),
+          );
+          _applyPermissionsResponse(response);
+          _loadedFromApi = true;
+          _errorMessage = null;
+          return true;
+        } on ApiException catch (retryError) {
+          _errorMessage = retryError.message;
+          return false;
+        } catch (retryError) {
+          _errorMessage = retryError.toString();
+          return false;
+        }
+      }
+
       _errorMessage = e.message;
       return false;
     } catch (e) {
@@ -320,6 +370,32 @@ class AccessProvider extends ChangeNotifier {
     }
   }
 
+  Map<String, dynamic> _buildPermissionsPayload({
+    bool forceLegacyRegisterAlias = false,
+  }) {
+    return {
+      'permissions': {
+        for (final role in _roles)
+          role: allowedMenuRoutes(role)
+              .map((route) {
+                final normalizedRoute = _normalizeClientRoute(route);
+                if (normalizedRoute == '/user-register') {
+                  if (forceLegacyRegisterAlias) return '/register';
+                  return '/user-register';
+                }
+                return normalizedRoute;
+              })
+              .where(
+                (route) =>
+                    _safeServerRoutes.contains(route) ||
+                    route == '/user-register',
+              )
+              .toSet()
+              .toList(growable: false),
+      },
+    };
+  }
+
   Future<bool> resetDefaults() async {
     if (_isSaving) return false;
     _isSaving = true;
@@ -327,19 +403,8 @@ class AccessProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _api.post(ApiConstants.accessPermissionsReset, {});
-      final permissions = response['permissions'];
-      if (permissions is Map<String, dynamic>) {
-        _applyPermissionsMap(
-          permissions,
-          rolesFromApi: (response['roles'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList(growable: false),
-        );
-      } else {
-        _resetDefaults();
-      }
+      _applyPermissionsResponse(response, fallbackToDefaults: true);
       _loadedFromApi = true;
-      await loadAuditLogs();
       return true;
     } on ApiException catch (e) {
       _errorMessage = e.message;
@@ -356,6 +421,34 @@ class AccessProvider extends ChangeNotifier {
   void resetDefaultsLocal() {
     _resetDefaults();
     notifyListeners();
+  }
+
+  void _applyPermissionsResponse(
+    Map<String, dynamic> response, {
+    bool fallbackToDefaults = false,
+  }) {
+    final permissions = response['permissions'];
+    if (permissions is Map<String, dynamic>) {
+      _applyPermissionsMap(
+        permissions,
+        rolesFromApi: (response['roles'] as List<dynamic>?)
+            ?.map((e) => e.toString())
+            .toList(growable: false),
+      );
+    } else if (fallbackToDefaults) {
+      _resetDefaults();
+    }
+    _applyAuditLogsPayload(response['logs']);
+  }
+
+  void _applyAuditLogsPayload(dynamic rawLogs) {
+    if (rawLogs is! List) return;
+    _auditLogs = rawLogs
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList(growable: false);
+    _auditLoaded = true;
+    _auditErrorMessage = null;
   }
 
   void _applyPermissionsMap(
@@ -386,6 +479,7 @@ class AccessProvider extends ChangeNotifier {
       if (raw is List) {
         _roleRoutes[role] = raw
             .map((e) => e.toString())
+            .map(_normalizeClientRoute)
             .where(validRoutes.contains)
             .toSet();
       } else {
