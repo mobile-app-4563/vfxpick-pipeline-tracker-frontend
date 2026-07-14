@@ -175,7 +175,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   Widget _membersTable(TeamController controller) {
-    bool _matches(String value, String query) {
+    bool matches(String value, String query) {
       if (query.trim().isEmpty) return true;
       return value.toLowerCase().contains(query.trim().toLowerCase());
     }
@@ -195,10 +195,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
     final rows = allRows
         .where((row) {
-          return _matches(row['department'] as String, _deptFilter) &&
-              _matches(row['name'] as String, _nameFilter) &&
-              _matches(row['role'] as String, _roleFilter) &&
-              _matches(row['level'] as String, _levelFilter);
+          return matches(row['department'] as String, _deptFilter) &&
+              matches(row['name'] as String, _nameFilter) &&
+              matches(row['role'] as String, _roleFilter) &&
+              matches(row['level'] as String, _levelFilter);
         })
         .toList(growable: false);
 
@@ -507,7 +507,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
   Future<void> _pickAndParseImportFile(TeamController controller) async {
     setState(() => _isImporting = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods', 'csv'],
         withData: true,

@@ -17,7 +17,7 @@ class ProjectController extends ChangeNotifier {
   String? selectedClientId;
   String? selectedShowId;
 
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _error;
 
   List<String> get departments => _departments;
@@ -81,6 +81,8 @@ class ProjectController extends ChangeNotifier {
 
   Future<void> loadShots() async {
     _isLoading = true;
+    _error = null;
+    _shots = [];
     notifyListeners();
     try {
       final resp = await _service.getShots(

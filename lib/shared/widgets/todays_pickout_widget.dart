@@ -65,7 +65,7 @@ class TodaysPickoutWidget extends StatelessWidget {
         ),
       ),
       child: GestureDetector(
-        onTap: onTap != null ? onTap : () => _showChatDialog(context),
+        onTap: onTap ?? () => _showChatDialog(context),
         child: Container(
           padding: const EdgeInsets.all(12),
           child: Row(

@@ -8,7 +8,7 @@ class BiddingController extends ChangeNotifier {
   final BiddingService _biddingService = BiddingService();
 
   List<ShotModel> _pendingBids = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _errorMessage;
   String? _successMessage;
   String? _selectedDepartment;
@@ -26,6 +26,7 @@ class BiddingController extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     _successMessage = null;
+    _pendingBids = [];
     notifyListeners();
 
     try {

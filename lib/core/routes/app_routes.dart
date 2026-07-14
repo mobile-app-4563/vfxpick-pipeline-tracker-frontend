@@ -10,6 +10,7 @@ import '../../modules/auth/view/register_screen.dart';
 import '../../modules/assets/view/assets_screen.dart';
 import '../../modules/bidding/view/bidding_screen.dart';
 import '../../modules/dashboard/view/dashboard_screen.dart';
+import '../../modules/feedback/view/feedback_screen.dart';
 import '../../modules/home/view/home_screen.dart';
 import '../../modules/notifications/view/notifications_screen.dart';
 import '../../modules/projects/view/projects_screen.dart';
@@ -32,9 +33,10 @@ class AppRoutes {
         final isLoggedIn = authController.isAuthenticated;
         final role = authController.currentUser?.role ?? '';
         final path = state.uri.path;
-        final isGoingToAuth = path == '/login' || path == '/register';
+        final isGoingToAuth = path == '/login';
 
         if (!isLoggedIn && !isGoingToAuth) return '/login';
+        if (!isLoggedIn && path == '/register') return '/login';
         if (isLoggedIn && isGoingToAuth) return '/home';
         if (isLoggedIn && !accessProvider.canAccessPath(role, path)) {
           return '/home';
@@ -82,6 +84,10 @@ class AppRoutes {
             GoRoute(
               path: '/review',
               builder: (context, state) => const ReviewScreen(),
+            ),
+            GoRoute(
+              path: '/feedback',
+              builder: (context, state) => const FeedbackScreen(),
             ),
             GoRoute(
               path: '/reports',

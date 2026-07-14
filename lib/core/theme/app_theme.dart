@@ -5,6 +5,7 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Roboto',
       brightness: Brightness.dark,
       scaffoldBackgroundColor: AppColors.darkBg,
       colorScheme: const ColorScheme.dark(
@@ -71,6 +72,7 @@ class AppTheme {
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
+      fontFamily: 'Roboto',
       brightness: Brightness.light,
       scaffoldBackgroundColor: AppColors.lightBg,
       colorScheme: const ColorScheme.light(

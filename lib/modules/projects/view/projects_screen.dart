@@ -37,6 +37,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   String _supervisorBidFilter = '';
   String _clientBidFilter = '';
   String _notesFilter = '';
+  String _taskFilter = '';
   String _etaFilter = '';
   String _statusFilter = '';
 
@@ -138,38 +139,24 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          final viewportHeight = constraints.maxHeight > 0
-              ? constraints.maxHeight
-              : MediaQuery.of(context).size.height;
-          final shotsHeight = (viewportHeight * 0.58).clamp(320.0, 680.0);
-
-          return SingleChildScrollView(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: viewportHeight),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8.0),
-                    child: const Text(
-                      'Select department and show to import.',
-                      style: TextStyle(fontSize: 16),
-                    ),
-                  ),
-                  _filters(context, controller),
-                  if (_importDraftRows.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    _importPreviewTable(),
-                  ],
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    height: shotsHeight,
-                    child: _shots(context, controller),
-                  ),
-                  const SizedBox(height: 12),
-                ],
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
+                child: const Text(
+                  'Select department and show to import.',
+                  style: TextStyle(fontSize: 16),
+                ),
               ),
-            ),
+              _filters(context, controller),
+              if (_importDraftRows.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                _importPreviewTable(),
+              ],
+              const SizedBox(height: 8),
+              Expanded(child: _shots(context, controller)),
+            ],
           );
         },
       ),
@@ -490,7 +477,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         'supervisorBid': shot.supervisorBid.toStringAsFixed(1),
         'clientBid': shot.clientBid.toStringAsFixed(1),
         'notes': shot.notes ?? '—',
-        'eta': _fmtDate(shot.clientEta),
+        'task':
+            (shot.description != null && shot.description!.trim().isNotEmpty)
+            ? shot.description
+            : '—',
+        'clientEta': _fmtDate(shot.clientEta),
         'status': shot.status,
         'shot': shot,
       };
@@ -511,7 +502,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               contains('supervisorBid', _supervisorBidFilter) &&
               contains('clientBid', _clientBidFilter) &&
               contains('notes', _notesFilter) &&
-              contains('eta', _etaFilter) &&
+              contains('task', _taskFilter) &&
+              contains('clientEta', _etaFilter) &&
               contains('status', _statusFilter);
         })
         .toList(growable: false);
@@ -519,10 +511,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 10),
         Flexible(
           child: GlassContainer(
             child: DynamicDataTable(
+              columnSpacing: 10,
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
               dataRowMinHeight: 48,
               dataRowMaxHeight: 62,
               fields: [
@@ -567,7 +560,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   label: 'Notes',
                   width: 220,
                 ),
-                const DynamicTableField(key: 'eta', label: 'ETA', width: 110),
+                const DynamicTableField(key: 'task', label: 'Task', width: 240),
+                const DynamicTableField(
+                  key: 'clientEta',
+                  label: 'Client ETA',
+                  width: 130,
+                ),
                 DynamicTableField(
                   key: 'status',
                   label: 'Status',
@@ -635,7 +633,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     case 'notes':
                       _notesFilter = v;
                       break;
-                    case 'eta':
+                    case 'task':
+                      _taskFilter = v;
+                      break;
+                    case 'clientEta':
                       _etaFilter = v;
                       break;
                     case 'status':
@@ -801,6 +802,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           // ),
           DynamicDataTable(
             height: 240,
+            columnSpacing: 10,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             headingRowHeight: 40,
             dataRowMinHeight: 40,
             dataRowMaxHeight: 52,
@@ -835,7 +838,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Future<void> _pickAndParseExcel(ProjectController controller) async {
     setState(() => _isImporting = true);
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: const ['xlsx', 'xls', 'xlsm', 'xlsb', 'ods', 'csv'],
         withData: true,

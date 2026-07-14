@@ -8,7 +8,7 @@ class NotificationController extends ChangeNotifier {
 
   List<NotificationModel> _notifications = [];
   int _unreadCount = 0;
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _error;
 
   List<NotificationModel> get notifications => _notifications;
@@ -19,6 +19,8 @@ class NotificationController extends ChangeNotifier {
   Future<void> loadNotifications() async {
     _isLoading = true;
     _error = null;
+    _notifications = [];
+    _unreadCount = 0;
     notifyListeners();
     try {
       final resp = await _service.getAll();

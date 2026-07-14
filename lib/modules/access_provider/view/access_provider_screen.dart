@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/providers/access_provider.dart';
 import '../../../modules/auth/controller/auth_controller.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
@@ -23,9 +24,13 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted || _loadScheduled) return;
       _loadScheduled = true;
-      await context.read<AccessProvider>().ensureLoaded();
+      final authController = context.read<AuthController>();
+      final accessProvider = context.read<AccessProvider>();
+      await authController.fetchRegistrationOptions();
+      await accessProvider.ensureLoaded();
       if (!mounted) return;
-      await context.read<AccessProvider>().ensureAuditLoaded();
+      await accessProvider.ensureAuditLoaded();
+      if (mounted) setState(() {});
     });
   }
 
@@ -214,6 +219,50 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                 },
                 icon: const Icon(Icons.refresh),
                 label: const Text('Reset Defaults'),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        GlassContainer(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Registered Roles & Departments',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ...AppConstants.userRoles.map(
+                    (role) => Chip(
+                      label: Text(role),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Departments',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ...AppConstants.departments.map(
+                    (department) => Chip(
+                      label: Text(department),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

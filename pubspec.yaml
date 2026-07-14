@@ -38,9 +38,10 @@ dependencies:
   go_router: ^17.3.0
   fl_chart: ^1.2.0
   http: ^1.2.2
-  file_picker: ^10.1.9
+  file_picker: ^11.0.2
   excel: ^4.0.6
-  file_saver: ^0.3.1
+  file_saver: ^0.4.0
+  web: ^1.1.1
   webview_flutter: ^4.8.0
   webview_flutter_web: ^0.2.3+4
   pointer_interceptor: ^0.10.1+2
@@ -66,6 +67,13 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  fonts:
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-VariableFont_wdth,wght.ttf
+        - asset: assets/fonts/Roboto-Italic-VariableFont_wdth,wght.ttf
+          style: italic
 
   # To add assets to your application, add an assets section, like this:
   # assets:

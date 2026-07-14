@@ -16,8 +16,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'admin@vfxpick.com');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
 
   @override
   void dispose() {
@@ -62,13 +62,10 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
-          color: AppColors.darkBg,
-          image: DecorationImage(
-            image: NetworkImage(
-              'https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=1000&auto=format&fit=crop',
-            ),
-            fit: BoxFit.cover,
-            opacity: 0.1,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF040814), Color(0xFF07142A), Color(0xFF0A1F3D)],
           ),
         ),
         child: Center(
@@ -255,28 +252,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 const SizedBox(height: 16),
 
-                                // Sign Up Toggle
-                                Wrap(
-                                  alignment: WrapAlignment.center,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    const Text(
-                                      "Don't have an account?",
-                                      style: TextStyle(fontSize: 13),
-                                    ),
-                                    TextButton(
-                                      onPressed: () => context.go('/register'),
-                                      child: const Text(
-                                        'Create Account',
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.brandGreen,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                // Signup is intentionally hidden from the login page.
                               ],
                             ),
                           ),

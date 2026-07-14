@@ -6,11 +6,12 @@ class ApiConstants {
   // ───────────────────────────────────────────────────────────────────────────
   // BASE CONFIGURATION
   // ───────────────────────────────────────────────────────────────────────────
-  static const String baseUrlOffice =
+  static const String baseUrlOfficeLaptop =
       'https://zr855qq4-3000.inc1.devtunnels.ms/api';
-  static const String baseUrlHome =
+  static const String baseUrlPersonalLaptop =
       'https://t06z0dmj-3000.inc1.devtunnels.ms/api';
-  static const String baseUrl = baseUrlHome;
+  static const String baseUrlServer = 'http://192.168.1.15:3000/api';
+  static const String baseUrl = baseUrlServer;
   static const String baseUrlProduction = 'https://api.vfxpick.com/api';
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -104,6 +105,12 @@ class ApiConstants {
   static const String markAllNotificationsAsRead =
       '/notifications/mark-all-read';
   static const String clearAllNotifications = '/notifications/clear-all';
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // FEEDBACK (/api/feedback)
+  // ───────────────────────────────────────────────────────────────────────────
+  static const String feedbackClientList = '/feedback/client';
+  static String feedbackShot(String shotId) => '/feedback/shots/$shotId';
 
   // ───────────────────────────────────────────────────────────────────────────
   // ACCESS (/api/access)

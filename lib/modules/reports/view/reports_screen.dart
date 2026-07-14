@@ -79,6 +79,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       lastDate: DateTime(2100),
     );
     if (picked == null) return;
+    if (!mounted) return;
     final controller = context.read<ReportController>();
     setState(() {
       if (isStart) {

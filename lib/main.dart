@@ -9,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'modules/auth/controller/auth_controller.dart';
 import 'modules/bidding/controller/bidding_controller.dart';
 import 'modules/dashboard/controller/dashboard_controller.dart';
+import 'modules/feedback/controller/feedback_controller.dart';
 import 'modules/home/controller/home_controller.dart';
 import 'modules/notifications/controller/notification_controller.dart';
 import 'modules/projects/controller/projects_controller.dart';
@@ -27,6 +28,7 @@ void main() {
         ChangeNotifierProvider(create: (_) => HomeController()),
         ChangeNotifierProvider(create: (_) => BiddingController()),
         ChangeNotifierProvider(create: (_) => DashboardController()),
+        ChangeNotifierProvider(create: (_) => FeedbackController()),
         ChangeNotifierProvider(create: (_) => ProjectController()),
         ChangeNotifierProvider(create: (_) => TaskController()),
         ChangeNotifierProvider(create: (_) => TeamController()),

@@ -1,7 +1,7 @@
-import 'dart:html' as html;
 import 'dart:ui_web' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:web/web.dart' as web;
 
 import '../../../core/constants/api_constants.dart';
 
@@ -18,7 +18,7 @@ class _HrmsViewState extends State<HrmsView> {
   static bool _factoryRegistered = false;
 
   String get _proxyUrl {
-    final host = html.window.location.hostname;
+    final host = web.window.location.hostname;
     final isLocalHost = host == 'localhost' || host == '127.0.0.1';
     if (isLocalHost) {
       return 'http://127.0.0.1:3000/api/hrms-proxy/Home/Index';
@@ -32,25 +32,25 @@ class _HrmsViewState extends State<HrmsView> {
 
     if (!_factoryRegistered) {
       ui.platformViewRegistry.registerViewFactory(_viewType, (int viewId) {
-        final container = html.DivElement()
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..style.position = 'relative'
-          ..style.overflow = 'hidden'
-          ..style.zIndex = '0';
+        final container = web.HTMLDivElement()
+          ..style.setProperty('width', '100%')
+          ..style.setProperty('height', '100%')
+          ..style.setProperty('position', 'relative')
+          ..style.setProperty('overflow', 'hidden')
+          ..style.setProperty('z-index', '0');
 
-        final iframe = html.IFrameElement()
+        final iframe = web.HTMLIFrameElement()
           ..src = _proxyUrl
-          ..style.border = '0'
-          ..style.position = 'absolute'
-          ..style.left = '0'
-          ..style.top = '${_reservedTopPx}px'
-          ..style.width = '100%'
-          ..style.height = 'calc(100% - ${_reservedTopPx}px)'
-          ..style.zIndex = '0'
+          ..style.setProperty('border', '0')
+          ..style.setProperty('position', 'absolute')
+          ..style.setProperty('left', '0')
+          ..style.setProperty('top', '${_reservedTopPx}px')
+          ..style.setProperty('width', '100%')
+          ..style.setProperty('height', 'calc(100% - ${_reservedTopPx}px)')
+          ..style.setProperty('z-index', '0')
           ..allow = 'fullscreen';
 
-        container.children.add(iframe);
+        container.append(iframe);
         return container;
       });
       _factoryRegistered = true;

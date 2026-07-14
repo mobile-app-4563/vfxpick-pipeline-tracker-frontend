@@ -38,12 +38,11 @@ class _TasksScreenState extends State<TasksScreen> {
   List<String> _accessibleDepartments = AppConstants.pipelineDepartments;
   bool _isExporting = false;
   bool _isImporting = false;
-  String? _selectedDept;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final user = context.read<AuthController>().currentUser;
       final query = GoRouterState.of(context).uri.queryParameters;
       final dashboardDept = query['department'];
@@ -57,8 +56,9 @@ class _TasksScreenState extends State<TasksScreen> {
           ? AppConstants.pipelineDepartments
           : departments;
       final controller = context.read<TaskController>();
+      await controller.init(departments: _accessibleDepartments);
       if (_isArtist) {
-        controller.loadArtistShots();
+        await controller.loadArtistShots();
       } else {
         final roleDept = _accessibleDepartments.contains(user?.department)
             ? user?.department
@@ -69,16 +69,13 @@ class _TasksScreenState extends State<TasksScreen> {
                   ? dashboardDept
                   : roleDept)
             : roleDept;
-        _selectedDept = dept;
-        controller.loadDepartmentShots(department: dept);
+        if (dept != null) {
+          controller.selectDepartment(dept);
+        }
+        await controller.loadShots();
       }
       if (mounted) setState(() {});
     });
-  }
-
-  void _onDeptChanged(String? dept) {
-    setState(() => _selectedDept = dept);
-    context.read<TaskController>().loadDepartmentShots(department: dept);
   }
 
   @override
@@ -162,70 +159,138 @@ class _TasksScreenState extends State<TasksScreen> {
     );
   }
 
+  Widget _importActions(BuildContext context, TaskController controller) {
+    final canImport = controller.selectedDepartment != null;
+
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 12,
+      children: [
+        ElevatedButton.icon(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.brandGreen,
+            foregroundColor: Colors.white,
+            fixedSize: const Size(160, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          onPressed: _isExporting ? null : () => _exportAsExcel(controller),
+          icon: _isExporting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.download_outlined),
+          label: const Text('Export Excel'),
+        ),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            fixedSize: const Size(160, 40),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          onPressed: _isImporting || !canImport
+              ? null
+              : () => _openPasteCsvDialog(controller),
+          icon: const Icon(Icons.content_paste_go_outlined),
+          label: const Text('Paste CSV'),
+        ),
+      ],
+    );
+  }
+
   Widget _filters(BuildContext context, TaskController controller) {
     final canFilterDepartment = _isBroadAccess;
+    final canFilterClientShow = !_isArtist;
 
-    return GlassContainer(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _dropdown<String>(
-                hint: 'Department',
-                value: _selectedDept,
-                items: _accessibleDepartments,
-                label: (d) => d,
-                enabled: canFilterDepartment,
-                onChanged: (v) {
-                  _onDeptChanged(v);
-                },
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 25),
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandGreen,
-                    foregroundColor: Colors.white,
-                    fixedSize: const Size(160, 40),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  onPressed: _isExporting
-                      ? null
-                      : () => _exportAsExcel(controller),
-                  icon: _isExporting
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.download_outlined),
-                  label: const Text('Export Excel'),
+    return SizedBox(
+      width: double.infinity,
+      child: GlassContainer(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _dropdown<String>(
+                  hint: 'Department',
+                  value: controller.selectedDepartment,
+                  items: controller.departments,
+                  label: (d) => d,
+                  enabled: canFilterDepartment,
+                  onChanged: (v) {
+                    if (v != null) {
+                      controller.selectDepartment(v);
+                      controller.loadShots();
+                    }
+                  },
                 ),
+                _dropdown<String>(
+                  hint: 'Client',
+                  value: controller.selectedClientId,
+                  items: controller.clients.map((c) => c.clientId).toList(),
+                  label: _clientNameFor,
+                  enabled: canFilterClientShow,
+                  onChanged: (v) async {
+                    if (v != null) await controller.selectClient(v);
+                  },
+                ),
+                _dropdown<String>(
+                  hint: 'Show',
+                  value: controller.selectedShowId,
+                  items: controller.shows.map((s) => s.showId).toList(),
+                  label: _showNameFor,
+                  enabled: canFilterClientShow,
+                  onChanged: (v) async {
+                    if (v != null) await controller.selectShow(v);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _importActions(context, controller),
+            if (!canFilterDepartment || !canFilterClientShow) ...[
+              const SizedBox(height: 8),
+              Text(
+                !canFilterClientShow
+                    ? 'Filters are restricted for your role.'
+                    : 'Department is locked based on your role.',
+                style: const TextStyle(fontSize: 12),
               ),
             ],
-          ),
-          if (!canFilterDepartment) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'Department is locked based on your role.',
-              style: TextStyle(fontSize: 12),
-            ),
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  String _clientNameFor(String clientId) {
+    final controller = context.read<TaskController>();
+    for (final client in controller.clients) {
+      if (client.clientId == clientId) return client.clientName;
+    }
+    return clientId;
+  }
+
+  String _showNameFor(String showId) {
+    final controller = context.read<TaskController>();
+    for (final show in controller.shows) {
+      if (show.showId == showId) return show.showName;
+    }
+    return showId;
   }
 
   Widget _dropdown<T>({
@@ -803,8 +868,6 @@ class _DepartmentView extends StatefulWidget {
 
 class _DepartmentViewState extends State<_DepartmentView> {
   String _shotIdFilter = '';
-  String _clientFilter = '';
-  String _showFilter = '';
   String _frameInFilter = '';
   String _frameOutFilter = '';
   String _supervisorBidFilter = '';
@@ -814,6 +877,13 @@ class _DepartmentViewState extends State<_DepartmentView> {
   String _artistEtaFilter = '';
   String _supervisorStatusFilter = '';
   String _artistStatusFilter = '';
+  String _feedbackShotIdFilter = '';
+  String _feedbackDepartmentFilter = '';
+  String _feedbackFilter = '';
+  String _feedbackArtistFilter = '';
+  String _feedbackArtistEtaFilter = '';
+  String _feedbackSupervisorStatusFilter = '';
+  String _feedbackArtistStatusFilter = '';
 
   bool _contains(dynamic value, String query) {
     if (query.trim().isEmpty) return true;
@@ -834,6 +904,84 @@ class _DepartmentViewState extends State<_DepartmentView> {
         .toList(growable: false);
   }
 
+  void _applyTaskGridFilter(String fieldKey, String query) {
+    switch (fieldKey) {
+      case 'shotId':
+        _shotIdFilter = query;
+        _feedbackShotIdFilter = query;
+        break;
+      case 'frameIn':
+        _frameInFilter = query;
+        break;
+      case 'frameOut':
+        _frameOutFilter = query;
+        break;
+      case 'supervisorBid':
+        _supervisorBidFilter = query;
+        break;
+      case 'clientBid':
+        _clientBidFilter = query;
+        break;
+      case 'artist':
+        _artistFilter = query;
+        _feedbackArtistFilter = query;
+        break;
+      case 'artistBid':
+        _artistBidFilter = query;
+        break;
+      case 'artistEta':
+        _artistEtaFilter = query;
+        _feedbackArtistEtaFilter = query;
+        break;
+      case 'supervisorStatus':
+        _supervisorStatusFilter = query;
+        _feedbackSupervisorStatusFilter = query;
+        break;
+      case 'artistStatus':
+        _artistStatusFilter = query;
+        _feedbackArtistStatusFilter = query;
+        break;
+      default:
+        break;
+    }
+  }
+
+  void _applyFeedbackGridFilter(String fieldKey, String query) {
+    switch (fieldKey) {
+      case 'shotId':
+        _feedbackShotIdFilter = query;
+        _shotIdFilter = query;
+        break;
+      case 'department':
+        _feedbackDepartmentFilter = query;
+        break;
+      case 'artist':
+        _feedbackArtistFilter = query;
+        _artistFilter = query;
+        break;
+      case 'artistBid':
+        _artistBidFilter = query;
+        break;
+      case 'artistEta':
+        _feedbackArtistEtaFilter = query;
+        _artistEtaFilter = query;
+        break;
+      case 'supervisorStatus':
+        _feedbackSupervisorStatusFilter = query;
+        _supervisorStatusFilter = query;
+        break;
+      case 'artistStatus':
+        _feedbackArtistStatusFilter = query;
+        _artistStatusFilter = query;
+        break;
+      case 'feedback':
+        _feedbackFilter = query;
+        break;
+      default:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = widget.controller;
@@ -852,11 +1000,6 @@ class _DepartmentViewState extends State<_DepartmentView> {
     final filteredShots = controller.departmentShots
         .where((shot) {
           return _contains(shot.shotCode, _shotIdFilter) &&
-              _contains(
-                shot.clientName ?? shot.clientId ?? '—',
-                _clientFilter,
-              ) &&
-              _contains(shot.showName ?? '—', _showFilter) &&
               _contains(shot.frameIn, _frameInFilter) &&
               _contains(shot.frameOut, _frameOutFilter) &&
               _contains(
@@ -880,8 +1023,6 @@ class _DepartmentViewState extends State<_DepartmentView> {
           return {
             'sno': filteredShots.indexOf(shot) + 1,
             'shotId': shot.shotCode,
-            'client': shot.clientName ?? shot.clientId ?? '—',
-            'show': shot.showName ?? '—',
             'frameIn': shot.frameIn,
             'frameOut': shot.frameOut,
             'supervisorBid': shot.supervisorBid.toStringAsFixed(1),
@@ -903,6 +1044,15 @@ class _DepartmentViewState extends State<_DepartmentView> {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              'Task Management',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
           GlassContainer(
             padding: const EdgeInsets.all(8),
             child: DynamicDataTable(
@@ -910,65 +1060,40 @@ class _DepartmentViewState extends State<_DepartmentView> {
                 const DynamicTableField(
                   key: 'sno',
                   label: 'S.No',
-                  width: 60,
                   numeric: true,
                   filterRequired: false,
                 ),
-                const DynamicTableField(
-                  key: 'shotId',
-                  label: 'Shot ID',
-                  width: 120,
-                ),
-                const DynamicTableField(
-                  key: 'client',
-                  label: 'Client',
-                  width: 160,
-                ),
-                const DynamicTableField(key: 'show', label: 'Show', width: 140),
+                const DynamicTableField(key: 'shotId', label: 'Shot ID'),
                 const DynamicTableField(
                   key: 'frameIn',
                   label: 'Frame In',
-                  width: 100,
                   numeric: true,
                 ),
                 const DynamicTableField(
                   key: 'frameOut',
                   label: 'Frame Out',
-                  width: 100,
                   numeric: true,
                 ),
                 const DynamicTableField(
                   key: 'supervisorBid',
                   label: 'Supervisor Bid',
-                  width: 120,
                   numeric: true,
                 ),
                 const DynamicTableField(
                   key: 'clientBid',
                   label: 'Client Bid',
-                  width: 120,
                   numeric: true,
                 ),
-                const DynamicTableField(
-                  key: 'artist',
-                  label: 'Artist',
-                  width: 150,
-                ),
+                const DynamicTableField(key: 'artist', label: 'Artist'),
                 const DynamicTableField(
                   key: 'artistBid',
                   label: 'Artist Bid',
-                  width: 110,
                   numeric: true,
                 ),
-                const DynamicTableField(
-                  key: 'artistEta',
-                  label: 'Artist ETA',
-                  width: 120,
-                ),
+                const DynamicTableField(key: 'artistEta', label: 'Artist ETA'),
                 DynamicTableField(
                   key: 'supervisorStatus',
                   label: 'Supervisor Status',
-                  width: 150,
                   filterOptions: _buildOptions(
                     AppConstants.supervisorStatuses,
                     _supervisorStatusFilter,
@@ -977,7 +1102,6 @@ class _DepartmentViewState extends State<_DepartmentView> {
                 DynamicTableField(
                   key: 'artistStatus',
                   label: 'Artist Status',
-                  width: 150,
                   filterOptions: _buildOptions(
                     AppConstants.artistStatuses,
                     _artistStatusFilter,
@@ -986,7 +1110,6 @@ class _DepartmentViewState extends State<_DepartmentView> {
                 DynamicTableField(
                   key: 'actions',
                   label: 'Actions',
-                  width: 140,
                   filterRequired: false,
                   builder: (context, value, row, rowIndex) {
                     final shot = row['shot'] as ShotModel;
@@ -1018,51 +1141,165 @@ class _DepartmentViewState extends State<_DepartmentView> {
               onFilterChanged: (fieldKey, value) {
                 setState(() {
                   final query = value is String ? value : value.toString();
-                  switch (fieldKey) {
-                    case 'shotId':
-                      _shotIdFilter = query;
-                      break;
-                    case 'client':
-                      _clientFilter = query;
-                      break;
-                    case 'show':
-                      _showFilter = query;
-                      break;
-                    case 'frameIn':
-                      _frameInFilter = query;
-                      break;
-                    case 'frameOut':
-                      _frameOutFilter = query;
-                      break;
-                    case 'supervisorBid':
-                      _supervisorBidFilter = query;
-                      break;
-                    case 'clientBid':
-                      _clientBidFilter = query;
-                      break;
-                    case 'artist':
-                      _artistFilter = query;
-                      break;
-                    case 'artistBid':
-                      _artistBidFilter = query;
-                      break;
-                    case 'artistEta':
-                      _artistEtaFilter = query;
-                      break;
-                    case 'supervisorStatus':
-                      _supervisorStatusFilter = query;
-                      break;
-                    case 'artistStatus':
-                      _artistStatusFilter = query;
-                      break;
-                    default:
-                      break;
-                  }
+                  _applyTaskGridFilter(fieldKey, query);
                 });
               },
             ),
           ),
+          const SizedBox(height: 20),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Text(
+              'Client Feedback Details',
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          _buildFeedbackTable(controller, rows),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFeedbackTable(
+    TaskController controller,
+    List<Map<String, dynamic>> taskRows,
+  ) {
+    final filteredRows = taskRows
+        .where((row) {
+          final shot = row['shot'] as ShotModel;
+          return _contains(shot.shotCode, _feedbackShotIdFilter) &&
+              _contains(shot.department, _feedbackDepartmentFilter) &&
+              _contains(shot.clientFeedback ?? '—', _feedbackFilter) &&
+              _contains(
+                shot.artistName ?? 'Unassigned',
+                _feedbackArtistFilter,
+              ) &&
+              _contains(_fmtDate(shot.artistEta), _feedbackArtistEtaFilter) &&
+              _contains(
+                shot.supervisorStatus ?? '—',
+                _feedbackSupervisorStatusFilter,
+              ) &&
+              _contains(shot.artistStatus, _feedbackArtistStatusFilter);
+        })
+        .map((row) {
+          final shot = row['shot'] as ShotModel;
+          return {
+            'sno': taskRows.indexOf(row) + 1,
+            'shotId': shot.shotCode,
+            'department': shot.department,
+            'feedback': shot.clientFeedback ?? '—',
+            'artist': shot.artistName ?? 'Unassigned',
+            'artistBid': shot.artistBid.toStringAsFixed(1),
+            'artistEta': _fmtDate(shot.artistEta),
+            'supervisorStatus': shot.supervisorStatus ?? '—',
+            'artistStatus': shot.artistStatus,
+            'shot': shot,
+          };
+        })
+        .toList(growable: false);
+
+    return GlassContainer(
+      padding: const EdgeInsets.all(8),
+      child: DynamicDataTable(
+        headingRowHeight: 42,
+        dataRowMinHeight: 44,
+        dataRowMaxHeight: 56,
+        fields: [
+          const DynamicTableField(
+            key: 'sno',
+            label: 'S.No',
+            numeric: true,
+            filterRequired: false,
+          ),
+          const DynamicTableField(key: 'shotId', label: 'Shot ID'),
+          DynamicTableField(
+            key: 'department',
+            label: 'Department',
+            filterOptions: _buildOptions(
+              AppConstants.pipelineDepartments,
+              _feedbackDepartmentFilter,
+            ),
+          ),
+          const DynamicTableField(key: 'artist', label: 'Artist'),
+          const DynamicTableField(
+            key: 'artistBid',
+            label: 'Artist Bid',
+            numeric: true,
+          ),
+          const DynamicTableField(key: 'artistEta', label: 'Artist ETA'),
+          DynamicTableField(
+            key: 'supervisorStatus',
+            label: 'Supervisor Status',
+            filterOptions: _buildOptions(
+              AppConstants.supervisorStatuses,
+              _feedbackSupervisorStatusFilter,
+            ),
+          ),
+          DynamicTableField(
+            key: 'artistStatus',
+            label: 'Artist Status',
+            filterOptions: _buildOptions(
+              AppConstants.artistStatuses,
+              _feedbackArtistStatusFilter,
+            ),
+          ),
+          DynamicTableField(
+            key: 'feedback',
+            label: 'Client Feedback',
+            builder: (context, value, row, rowIndex) {
+              final feedback = (value ?? '—').toString();
+              return Tooltip(
+                message: feedback,
+                child: SizedBox(
+                  width: 240,
+                  child: Text(
+                    feedback,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              );
+            },
+          ),
+          DynamicTableField(
+            key: 'actions',
+            label: 'Actions',
+            filterRequired: false,
+            builder: (context, value, row, rowIndex) {
+              final shot = row['shot'] as ShotModel;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Assign artist',
+                    icon: const Icon(Icons.person_add_alt, size: 18),
+                    onPressed: () => _assign(context, shot),
+                  ),
+                  IconButton(
+                    tooltip: 'Chat',
+                    icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                    onPressed: () => showDialog(
+                      context: context,
+                      builder: (_) => ShotChatDialog(
+                        shotId: shot.shotId,
+                        shotCode: shot.shotCode,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ],
+        rows: filteredRows,
+        onFilterChanged: (fieldKey, value) {
+          setState(() {
+            final query = value is String ? value : value.toString();
+            _applyFeedbackGridFilter(fieldKey, query);
+          });
+        },
       ),
     );
   }

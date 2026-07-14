@@ -50,6 +50,7 @@ class TeamController extends ChangeNotifier {
   Future<void> loadTeams({String? department}) async {
     _isLoading = true;
     _error = null;
+    _teams = [];
     notifyListeners();
     try {
       await loadMemberOptions();
