@@ -11,8 +11,7 @@ class ApiConstants {
   static const String baseUrlPersonalLaptop =
       'https://t06z0dmj-3000.inc1.devtunnels.ms/api';
   static const String baseUrlServer = 'http://192.168.1.15:3000/api';
-  static const String baseUrl = baseUrlPersonalLaptop;
-  static const String baseUrlProduction = 'https://api.vfxpick.com/api';
+  static const String baseUrl = baseUrlServer;
 
   // ───────────────────────────────────────────────────────────────────────────
   // AUTH (/api/auth) — unchanged
