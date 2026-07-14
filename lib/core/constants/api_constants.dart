@@ -19,6 +19,7 @@ class ApiConstants {
   static const String login = '/auth/login';
   static const String register = '/auth/register';
   static const String logout = '/auth/logout';
+  static const String authOptions = '/auth/options';
 
   // ───────────────────────────────────────────────────────────────────────────
   // DASHBOARD (/api/dashboard)
@@ -27,6 +28,8 @@ class ApiConstants {
   static const String dashboardTodaysPickouts = '/dashboard/today-pickouts';
   static const String dashboardArtistPerformance =
       '/dashboard/artist-performance';
+  static const String dashboardInventActiveShows =
+      '/dashboard/invent-active-shows';
   static String dashboardShowShots(String showId) =>
       '/dashboard/show/$showId/shots';
 

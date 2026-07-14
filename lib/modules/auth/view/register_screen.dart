@@ -21,6 +21,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
 
   static const String _addRoleOption = '__add_new_role__';
+  static const String _addDepartmentOption = '__add_new_department__';
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
@@ -30,14 +31,47 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   String _selectedRole = AppConstants.roleEmployee;
   String _selectedDept = AppConstants.departments[0];
-  late final List<String> _roleOptions;
+  final List<String> _roleOptions = List<String>.from(AppConstants.userRoles);
+  final List<String> _departmentOptions = List<String>.from(
+    AppConstants.departments,
+  );
   bool _acceptTerms = false;
   double _passwordStrength = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _roleOptions = List<String>.from(AppConstants.userRoles);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadDynamicOptions());
+  }
+
+  Future<void> _loadDynamicOptions() async {
+    final authController = context.read<AuthController>();
+    final options = await authController.fetchRegistrationOptions();
+    if (!mounted) return;
+
+    final roles = options['roles'] ?? const <String>[];
+    final departments = options['departments'] ?? const <String>[];
+
+    setState(() {
+      if (roles.isNotEmpty) {
+        _roleOptions
+          ..clear()
+          ..addAll(roles);
+      }
+      if (departments.isNotEmpty) {
+        _departmentOptions
+          ..clear()
+          ..addAll(departments);
+      }
+
+      if (!_roleOptions.contains(_selectedRole) && _roleOptions.isNotEmpty) {
+        _selectedRole = _roleOptions.first;
+      }
+      if (!_departmentOptions.contains(_selectedDept) &&
+          _departmentOptions.isNotEmpty) {
+        _selectedDept = _departmentOptions.first;
+      }
+    });
   }
 
   @override
@@ -78,6 +112,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
 
     setState(() => _selectedRole = role);
+  }
+
+  Future<void> _onDepartmentChanged(String? department) async {
+    if (department == null) return;
+    if (department == _addDepartmentOption) {
+      final newDepartment = await _showAddDepartmentDialog();
+      if (!mounted || newDepartment == null) return;
+      setState(() {
+        if (!_departmentOptions.contains(newDepartment)) {
+          _departmentOptions.add(newDepartment);
+        }
+        _selectedDept = newDepartment;
+      });
+      return;
+    }
+
+    setState(() => _selectedDept = department);
   }
 
   Future<String?> _showAddRoleDialog() async {
@@ -129,6 +180,60 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (duplicate) {
       return _roleOptions.firstWhere(
         (role) => role.toLowerCase() == normalized.toLowerCase(),
+      );
+    }
+    return normalized;
+  }
+
+  Future<String?> _showAddDepartmentDialog() async {
+    var draftDepartment = '';
+    final newDepartment = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Add New Department'),
+          content: TextField(
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Department Name',
+              hintText: 'e.g. FX',
+            ),
+            onChanged: (value) => draftDepartment = value,
+            onSubmitted: (value) {
+              final department = value.trim();
+              if (department.isNotEmpty) {
+                Navigator.of(dialogContext).pop(department);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final department = draftDepartment.trim();
+                if (department.isEmpty) return;
+                Navigator.of(dialogContext).pop(department);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (newDepartment == null) return null;
+    final normalized = newDepartment.trim();
+    if (normalized.isEmpty) return null;
+
+    final duplicate = _departmentOptions.any(
+      (department) => department.toLowerCase() == normalized.toLowerCase(),
+    );
+    if (duplicate) {
+      return _departmentOptions.firstWhere(
+        (department) => department.toLowerCase() == normalized.toLowerCase(),
       );
     }
     return normalized;
@@ -227,13 +332,56 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
+  Widget _buildFieldCard({
+    required BuildContext context,
+    required String title,
+    required Widget child,
+    Widget? footer,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.16)
+              : Colors.black.withValues(alpha: 0.09),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w700,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.85)
+                  : Colors.black.withValues(alpha: 0.72),
+            ),
+          ),
+          const SizedBox(height: 10),
+          child,
+          if (footer != null) ...[const SizedBox(height: 10), footer],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth > 850;
+    final isDesktop = screenWidth >= 1024;
     final cardWidth = isDesktop
-        ? 950.0
-        : (screenWidth - 48).clamp(300.0, 450.0);
+        ? 1040.0
+        : (screenWidth - 32).clamp(300.0, 760.0);
     final authController = Provider.of<AuthController>(context);
 
     return Scaffold(
@@ -319,103 +467,128 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ],
                             ),
                       const SizedBox(height: 30),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final hasTwoColumns = constraints.maxWidth >= 760;
+                          final tileWidth = hasTwoColumns
+                              ? (constraints.maxWidth - 16) / 2
+                              : constraints.maxWidth;
 
-                      // Responsive Grid of inputs
-                      if (isDesktop) ...[
-                        Row(
-                          children: [
-                            Expanded(
-                              child: CustomTextField(
-                                controller: _nameController,
-                                labelText: 'FULL NAME',
-                                hintText: 'Sarah Connor',
-                                prefixIcon: Icons.person_outline,
-                                validator: (value) =>
-                                    value == null || value.isEmpty
-                                    ? 'Enter your full name'
-                                    : null,
+                          return Wrap(
+                            spacing: 16,
+                            runSpacing: 16,
+                            children: [
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'IDENTITY',
+                                  child: CustomTextField(
+                                    controller: _nameController,
+                                    labelText: 'FULL NAME',
+                                    hintText: 'Sarah Connor',
+                                    prefixIcon: Icons.person_outline,
+                                    validator: (value) =>
+                                        value == null || value.isEmpty
+                                        ? 'Enter your full name'
+                                        : null,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: CustomTextField(
-                                controller: _emailController,
-                                labelText: 'STUDIO EMAIL',
-                                hintText: 'email@vfxpick.com',
-                                prefixIcon: Icons.email_outlined,
-                                validator: (value) =>
-                                    value == null || !value.contains('@')
-                                    ? 'Enter a valid email'
-                                    : null,
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'EMAIL',
+                                  child: CustomTextField(
+                                    controller: _emailController,
+                                    labelText: 'STUDIO EMAIL',
+                                    hintText: 'email@vfxpick.com',
+                                    prefixIcon: Icons.email_outlined,
+                                    validator: (value) =>
+                                        value == null || !value.contains('@')
+                                        ? 'Enter a valid email'
+                                        : null,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: CustomTextField(
-                                controller: _phoneController,
-                                labelText: 'PHONE NUMBER',
-                                hintText: '+1 555-0199',
-                                prefixIcon: Icons.phone_android_outlined,
-                                validator: (value) =>
-                                    value == null || value.isEmpty
-                                    ? 'Enter phone number'
-                                    : null,
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'CONTACT',
+                                  child: CustomTextField(
+                                    controller: _phoneController,
+                                    labelText: 'PHONE NUMBER',
+                                    hintText: '+1 555-0199',
+                                    prefixIcon: Icons.phone_android_outlined,
+                                    validator: (value) =>
+                                        value == null || value.isEmpty
+                                        ? 'Enter phone number'
+                                        : null,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: CustomTextField(
-                                controller: _employeeIdController,
-                                labelText: 'EMPLOYEE ID',
-                                hintText: 'EMP-980',
-                                prefixIcon: Icons.badge_outlined,
-                                validator: (value) =>
-                                    value == null || value.isEmpty
-                                    ? 'Enter Employee ID'
-                                    : null,
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'ORGANIZATION',
+                                  child: CustomTextField(
+                                    controller: _employeeIdController,
+                                    labelText: 'EMPLOYEE ID',
+                                    hintText: 'EMP-980',
+                                    prefixIcon: Icons.badge_outlined,
+                                    validator: (value) =>
+                                        value == null || value.isEmpty
+                                        ? 'Enter Employee ID'
+                                        : null,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: CustomDropdown<String>(
-                                labelText: 'DEPARTMENT',
-                                items: AppConstants.departments,
-                                value: _selectedDept,
-                                onChanged: (val) =>
-                                    setState(() => _selectedDept = val!),
-                                itemToString: (item) => item,
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'DEPARTMENT',
+                                  child: CustomDropdown<String>(
+                                    labelText: 'DEPARTMENT',
+                                    items: [
+                                      ..._departmentOptions,
+                                      _addDepartmentOption,
+                                    ],
+                                    value: _selectedDept,
+                                    onChanged: _onDepartmentChanged,
+                                    itemToString: (item) =>
+                                        item == _addDepartmentOption
+                                        ? 'Add New Department...'
+                                        : item,
+                                  ),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: CustomDropdown<String>(
-                                labelText: 'ROLE ACCESS LEVEL',
-                                items: [..._roleOptions, _addRoleOption],
-                                value: _selectedRole,
-                                onChanged: _onRoleChanged,
-                                itemToString: (item) => item == _addRoleOption
-                                    ? 'Add New Role...'
-                                    : item,
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'ROLE',
+                                  child: CustomDropdown<String>(
+                                    labelText: 'ROLE ACCESS LEVEL',
+                                    items: [..._roleOptions, _addRoleOption],
+                                    value: _selectedRole,
+                                    onChanged: _onRoleChanged,
+                                    itemToString: (item) =>
+                                        item == _addRoleOption
+                                        ? 'Add New Role...'
+                                        : item,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  CustomTextField(
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'SECURITY',
+                                  child: CustomTextField(
                                     controller: _passwordController,
                                     labelText: 'PASSWORD',
                                     hintText: 'Minimum 6 characters',
@@ -427,14 +600,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         ? 'Password must be >= 6 chars'
                                         : null,
                                   ),
-                                  const SizedBox(height: 8),
-                                  // Password strength bar
-                                  ClipRRect(
+                                  footer: ClipRRect(
                                     borderRadius: BorderRadius.circular(4),
                                     child: LinearProgressIndicator(
                                       value: _passwordStrength,
-                                      backgroundColor: Colors.grey.withOpacity(
-                                        0.2,
+                                      backgroundColor: Colors.grey.withValues(
+                                        alpha: 0.2,
                                       ),
                                       valueColor: AlwaysStoppedAnimation<Color>(
                                         _passwordStrength <= 0.25
@@ -448,82 +619,30 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                       minHeight: 4,
                                     ),
                                   ),
-                                ],
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: CustomTextField(
-                                controller: _confirmPasswordController,
-                                labelText: 'CONFIRM PASSWORD',
-                                hintText: 'Re-enter password',
-                                prefixIcon: Icons.lock_clock_outlined,
-                                isPassword: true,
-                                validator: (value) =>
-                                    value == null || value.isEmpty
-                                    ? 'Re-enter password'
-                                    : null,
+                              SizedBox(
+                                width: tileWidth,
+                                child: _buildFieldCard(
+                                  context: context,
+                                  title: 'SECURITY',
+                                  child: CustomTextField(
+                                    controller: _confirmPasswordController,
+                                    labelText: 'CONFIRM PASSWORD',
+                                    hintText: 'Re-enter password',
+                                    prefixIcon: Icons.lock_clock_outlined,
+                                    isPassword: true,
+                                    validator: (value) =>
+                                        value == null || value.isEmpty
+                                        ? 'Re-enter password'
+                                        : null,
+                                  ),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ] else ...[
-                        // Mobile Layout: Column stack
-                        CustomTextField(
-                          controller: _nameController,
-                          labelText: 'FULL NAME',
-                          prefixIcon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomTextField(
-                          controller: _emailController,
-                          labelText: 'STUDIO EMAIL',
-                          prefixIcon: Icons.email_outlined,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomTextField(
-                          controller: _phoneController,
-                          labelText: 'PHONE NUMBER',
-                          prefixIcon: Icons.phone_android_outlined,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomTextField(
-                          controller: _employeeIdController,
-                          labelText: 'EMPLOYEE ID',
-                          prefixIcon: Icons.badge_outlined,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomDropdown<String>(
-                          labelText: 'DEPARTMENT',
-                          items: AppConstants.departments,
-                          value: _selectedDept,
-                          onChanged: (val) =>
-                              setState(() => _selectedDept = val!),
-                          itemToString: (item) => item,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomDropdown<String>(
-                          labelText: 'ROLE ACCESS LEVEL',
-                          items: [..._roleOptions, _addRoleOption],
-                          value: _selectedRole,
-                          onChanged: _onRoleChanged,
-                          itemToString: (item) =>
-                              item == _addRoleOption ? 'Add New Role...' : item,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomTextField(
-                          controller: _passwordController,
-                          labelText: 'PASSWORD',
-                          isPassword: true,
-                          onChanged: _calculatePasswordStrength,
-                        ),
-                        const SizedBox(height: 12),
-                        CustomTextField(
-                          controller: _confirmPasswordController,
-                          labelText: 'CONFIRM PASSWORD',
-                          isPassword: true,
-                        ),
-                      ],
+                            ],
+                          );
+                        },
+                      ),
                       const SizedBox(height: 24),
 
                       // Terms Agreement

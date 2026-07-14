@@ -1,10 +1,9 @@
-import 'dart:math' as math;
-
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/models/domain_models.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
@@ -40,31 +39,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Consumer<HomeController>(
       builder: (context, controller, child) {
-        final cards = <Widget>[
-          _AnimatedEntry(
-            order: 0,
-            child: _buildPickoutsCard(controller, isDark),
-          ),
-          _AnimatedEntry(
-            order: 1,
-            child: _buildPieSection(
-              title: 'Reports Mandays (Current Month)',
-              data: controller.reportMandaysByDepartment,
-              isLoading: controller.isInsightsLoading,
-            ),
-          ),
-          _AnimatedEntry(
-            order: 2,
-            child: _buildPieSection(
-              title: 'Reviews Mandays (Current Month)',
-              data: controller.reviewMandaysByDepartment,
-              isLoading: controller.isInsightsLoading,
-            ),
-          ),
-
-          // _AnimatedEntry(order: 1, child: _CalendarCard()),
-        ];
-
         return RefreshIndicator(
           onRefresh: controller.fetchTodaysPickouts,
           child: ListView(
@@ -73,36 +47,94 @@ class _HomeScreenState extends State<HomeScreen> {
               LayoutBuilder(
                 builder: (context, constraints) {
                   final width = constraints.maxWidth;
-                  final crossAxisCount = width >= 1280
-                      ? 3
-                      : (width >= 760 ? 2 : 1);
+                  if (width >= 980) {
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 15.0),
+                            child: SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.85,
+                              width: MediaQuery.of(context).size.width * 0.35,
+                              child: _AnimatedEntry(
+                                order: 1,
+                                child: _RadialBarCard(
+                                  title: 'Mandays Radial View',
+                                  data: controller.reportMandaysByDepartment,
+                                  isLoading: controller.isInsightsLoading,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          height: MediaQuery.of(context).size.height * 0.85,
+                          width: MediaQuery.of(context).size.width * 0.35,
+                          child: _AnimatedEntry(
+                            order: 0,
+                            child: _buildPickoutsCard(controller, isDark),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        SizedBox(
+                          width: MediaQuery.of(context).size.width * 0.25,
+                          height: MediaQuery.of(context).size.height * 0.85,
+                          child: _AnimatedEntry(
+                            order: 2,
+                            child: _InventActiveShowsCard(
+                              isLoading: controller.isInventActiveLoading,
+                              errorMessage: controller.inventActiveError,
+                              data: controller.inventActiveShowsByStatus,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  }
 
-                  return GridView.builder(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: cards.length,
-                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      mainAxisExtent: 390,
-                    ),
-                    itemBuilder: (context, index) => cards[index],
+                  return Column(
+                    children: [
+                      _AnimatedEntry(
+                        order: 0,
+                        child: _buildPickoutsCard(controller, isDark),
+                      ),
+                      const SizedBox(height: 16),
+                      _AnimatedEntry(
+                        order: 1,
+                        child: _RadialBarCard(
+                          title: 'Mandays Radial View',
+                          data: controller.reportMandaysByDepartment,
+                          isLoading: controller.isInsightsLoading,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      _AnimatedEntry(
+                        order: 2,
+                        child: _InventActiveShowsCard(
+                          isLoading: controller.isInventActiveLoading,
+                          errorMessage: controller.inventActiveError,
+                          data: controller.inventActiveShowsByStatus,
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
-              const SizedBox(height: 16),
-              _AnimatedEntry(
-                order: 3,
-                child: SizedBox(
-                  height: 460,
-                  width: double.infinity,
-                  child: _ArtistPerformanceCard(
-                    isLoading: controller.isInsightsLoading,
-                    rows: controller.artistPerformance,
-                  ),
-                ),
-              ),
+
+              // const SizedBox(height: 16),
+              // _AnimatedEntry(
+              //   order: 3,
+              //   child: SizedBox(
+              //     height: 460,
+              //     width: double.infinity,
+              //     child: _ArtistPerformanceCard(
+              //       isLoading: controller.isInsightsLoading,
+              //       rows: controller.artistPerformance,
+              //     ),
+              //   ),
+              // ),
             ],
           ),
         );
@@ -165,31 +197,6 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPieSection({
-    required String title,
-    required Map<String, double> data,
-    required bool isLoading,
-  }) {
-    return GlassContainer(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 30),
-          if (isLoading)
-            const SizedBox(height: 220, child: Center(child: LoadingWidget()))
-          else
-            _DepartmentPieChart(data: data),
         ],
       ),
     );
@@ -321,92 +328,302 @@ class _AnimatedEntryState extends State<_AnimatedEntry> {
 //     );
 //   }
 // }
-
-class _DepartmentPieChart extends StatelessWidget {
+class _RadialBarCard extends StatelessWidget {
+  final String title;
   final Map<String, double> data;
-  const _DepartmentPieChart({required this.data});
+  final bool isLoading;
+
+  const _RadialBarCard({
+    required this.title,
+    required this.data,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final items = data.entries
-        .where((e) => e.value > 0)
-        .toList(growable: false);
-    if (items.isEmpty) {
-      return const EmptyStateWidget(
-        icon: Icons.pie_chart_outline,
-        title: 'No chart data',
-        description: 'No mandays available for the selected period.',
-      );
-    }
+    final sorted = data.entries.toList(growable: false)
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final ringItems = sorted.take(3).toList(growable: false);
 
-    final total = items.fold<double>(0, (sum, e) => sum + e.value);
-    const palette = [
-      Color(0xFF3EBA02),
-      Color(0xFF00B7C2),
-      Color(0xFFFFB020),
-      Color(0xFF5B8DEF),
-      Color(0xFFEF476F),
-    ];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark
+        ? AppColors.darkTextPrimary
+        : AppColors.lightTextPrimary;
 
-    return Column(
-      children: [
-        SizedBox(
-          height: 220,
-          child: PieChart(
-            PieChartData(
-              sectionsSpace: 2,
-              centerSpaceRadius: 38,
-              sections: List.generate(items.length, (i) {
-                final part = items[i];
-                final percent = (part.value / total) * 100;
-                return PieChartSectionData(
-                  color: palette[i % palette.length],
-                  value: part.value,
-                  radius: 74,
-                  title: '${percent.toStringAsFixed(0)}%',
-                  titleStyle: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                );
-              }),
+    return GlassContainer(
+      padding: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 8.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
             ),
-          ),
-        ),
-        const SizedBox(height: 30),
-        Wrap(
-          spacing: 12,
-          runSpacing: 6,
-          children: List.generate(items.length, (i) {
-            final part = items[i];
-            return Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: palette[i % palette.length],
-                    borderRadius: BorderRadius.circular(3),
-                  ),
+            const SizedBox(height: 20),
+            if (isLoading)
+              const Expanded(child: Center(child: LoadingWidget()))
+            else if (sorted.isEmpty)
+              const Expanded(
+                child: EmptyStateWidget(
+                  icon: Icons.donut_large,
+                  title: 'No radial data',
+                  description: 'No mandays available to build radial chart.',
                 ),
-                const SizedBox(width: 6),
-                Text('${part.key}: ${part.value.toStringAsFixed(1)}'),
-              ],
-            );
-          }),
+              )
+            else
+              Expanded(
+                child: _RadialProgressChart(
+                  ringItems: ringItems,
+                  allItems: sorted,
+                  maxValue: sorted.first.value <= 0 ? 1.0 : sorted.first.value,
+                ),
+              ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
-class _ArtistPerformanceCard extends StatelessWidget {
-  final bool isLoading;
-  final List<Map<String, dynamic>> rows;
+class _RadialProgressChart extends StatelessWidget {
+  final List<MapEntry<String, double>> ringItems;
+  final List<MapEntry<String, double>> allItems;
+  final double maxValue;
 
-  const _ArtistPerformanceCard({required this.isLoading, required this.rows});
+  const _RadialProgressChart({
+    required this.ringItems,
+    required this.allItems,
+    required this.maxValue,
+  });
+
+  static const _palette = [
+    Color(0xFF00C2D1),
+    Color(0xFF0BBF9A),
+    Color(0xFFEF476F),
+    Color(0xFFFF9F68),
+  ];
+
+  static const double _progressStrokeWidth = 32;
+  static const double _emptyStrokeWidth = 32;
+  static const double _ringStep = 90;
+
+  @override
+  Widget build(BuildContext context) {
+    final rings = ringItems.take(3).toList(growable: false);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.maxWidth / 1.3;
+        final innerRingSize = size - ((rings.length - 1) * _ringStep);
+        final centerHoleSize = (innerRingSize - (_emptyStrokeWidth * 6) - 6)
+            .clamp(34.0, 110.0);
+
+        final chart = SizedBox(
+          width: size,
+          height: size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ...List.generate(rings.length, (i) {
+                final item = rings[i];
+                final progress = (item.value / maxValue).clamp(0.0, 1.0);
+                final ringSize = size - (i * _ringStep);
+                final color = _palette[i % _palette.length];
+
+                return SizedBox(
+                  width: ringSize,
+                  height: ringSize,
+                  child: TweenAnimationBuilder<double>(
+                    tween: Tween(begin: 0, end: progress),
+                    duration: Duration(milliseconds: 520 + (i * 120)),
+                    curve: Curves.easeOutCubic,
+                    builder: (context, value, _) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          CircularProgressIndicator(
+                            value: 1,
+                            strokeWidth: _emptyStrokeWidth,
+                            backgroundColor: Colors.transparent,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.green.withValues(alpha: 0.22),
+                            ),
+                          ),
+                          CircularProgressIndicator(
+                            value: value,
+                            strokeWidth: _progressStrokeWidth,
+                            backgroundColor: Colors.transparent,
+                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                );
+              }),
+              Container(
+                width: centerHoleSize,
+                height: centerHoleSize,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark
+                      ? AppColors.darkBg.withValues(alpha: 0.88)
+                      : Colors.white.withValues(alpha: 0.88),
+                ),
+              ),
+            ],
+          ),
+        );
+
+        final legend = Padding(
+          padding: EdgeInsets.only(left: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Row(
+                children: [
+                  Text(
+                    'Department',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                  SizedBox(
+                    width: 72,
+                    child: Text(
+                      'Share',
+                      textAlign: TextAlign.right,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.separated(
+                  itemCount: allItems.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    final item = allItems[i];
+                    final isRingMember = i < rings.length;
+                    final color = isRingMember
+                        ? _palette[i % _palette.length]
+                        : Colors.grey.withValues(alpha: 0.55);
+                    final nameColor = isRingMember
+                        ? null
+                        : (isDark
+                              ? Colors.white.withValues(alpha: 0.72)
+                              : Colors.black.withValues(alpha: 0.64));
+                    final valueColor = isRingMember
+                        ? null
+                        : (isDark
+                              ? Colors.white.withValues(alpha: 0.78)
+                              : Colors.black.withValues(alpha: 0.68));
+                    final pct = ((item.value / maxValue) * 100)
+                        .clamp(0, 100)
+                        .toStringAsFixed(0);
+                    return Row(
+                      children: [
+                        Container(
+                          width: 10,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: color,
+                            borderRadius: BorderRadius.circular(99),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          item.key,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: nameColor,
+                          ),
+                        ),
+                        SizedBox(
+                          width: 85,
+                          child: Text(
+                            '$pct%',
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: valueColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Flexible(child: legend),
+            chart,
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _InventActiveShowsCard extends StatefulWidget {
+  final bool isLoading;
+  final String? errorMessage;
+  final Map<String, List<InventActiveShow>> data;
+
+  const _InventActiveShowsCard({
+    required this.isLoading,
+    required this.errorMessage,
+    required this.data,
+  });
+
+  @override
+  State<_InventActiveShowsCard> createState() => _InventActiveShowsCardState();
+}
+
+class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  static const _statuses = ['Approved', 'Approved Internal'];
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: _statuses.length, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  String _dateLabel(DateTime? value) {
+    if (value == null) return '-';
+    final mm = value.month.toString().padLeft(2, '0');
+    final dd = value.day.toString().padLeft(2, '0');
+    return '${value.year}-$mm-$dd';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -416,120 +633,138 @@ class _ArtistPerformanceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Artist Performance (All Users)',
+            'InventActive Shows',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          if (isLoading)
-            Center(child: const LoadingWidget())
-          else if (rows.isEmpty)
-            const EmptyStateWidget(
-              icon: Icons.bar_chart,
-              title: 'No performance data',
-              description: 'No artist performance records available.',
+          TabBar(
+            controller: _tabController,
+            tabs: _statuses.map((s) => Tab(text: s)).toList(growable: false),
+            isScrollable: true,
+            labelColor: AppColors.brandGreen,
+            tabAlignment: TabAlignment.start,
+            unselectedLabelColor: Colors.grey,
+            indicatorColor: AppColors.brandGreen,
+            labelPadding: const EdgeInsets.symmetric(horizontal: 15),
+            padding: const EdgeInsets.symmetric(horizontal: 0),
+            indicatorPadding: const EdgeInsets.symmetric(horizontal: 0),
+            indicatorSize: TabBarIndicatorSize.tab,
+          ),
+          const SizedBox(height: 12),
+          if (widget.isLoading)
+            const SizedBox(height: 220, child: Center(child: LoadingWidget()))
+          else if (widget.errorMessage != null)
+            EmptyStateWidget(
+              icon: Icons.error_outline,
+              title: 'Unable to load InventActive shows',
+              description: widget.errorMessage!,
             )
           else
-            Expanded(
-              child: Builder(
-                builder: (_) {
-                  final maxMandays = _maxMandays(rows);
-                  return BarChart(
-                    BarChartData(
-                      alignment: BarChartAlignment.spaceAround,
-                      maxY: 100,
-                      barTouchData: BarTouchData(enabled: true),
-                      gridData: FlGridData(show: true),
-                      titlesData: FlTitlesData(
-                        topTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        rightTitles: const AxisTitles(
-                          sideTitles: SideTitles(showTitles: false),
-                        ),
-                        leftTitles: const AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 34,
-                            getTitlesWidget: _leftAxisTitle,
-                          ),
-                        ),
-                        bottomTitles: AxisTitles(
-                          sideTitles: SideTitles(
-                            showTitles: true,
-                            reservedSize: 42,
-                            getTitlesWidget: (value, meta) {
-                              final index = value.toInt();
-                              if (index < 0 || index >= rows.length) {
-                                return const SizedBox.shrink();
-                              }
-                              final name = (rows[index]['name'] ?? '')
-                                  .toString();
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Transform.rotate(
-                                  angle: -math.pi / 5,
-                                  child: Text(
-                                    name.length > 8
-                                        ? name.substring(0, 8)
-                                        : name,
-                                    style: const TextStyle(fontSize: 10),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                      borderData: FlBorderData(show: false),
-                      barGroups: List.generate(rows.length, (i) {
-                        final raw = (rows[i]['totalMandays'] as num? ?? 0)
-                            .toDouble();
-                        final y = _toPercent(raw, maxMandays);
-                        return BarChartGroupData(
-                          x: i,
-                          barRods: [
-                            BarChartRodData(
-                              toY: y,
-                              width: 20,
-                              borderRadius: BorderRadius.circular(0),
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFF3EBA02), Color(0xFF00B7C2)],
-                                begin: Alignment.bottomCenter,
-                                end: Alignment.topCenter,
-                              ),
-                            ),
-                          ],
+            SizedBox(
+              height: 220,
+              child: TabBarView(
+                controller: _tabController,
+                children: _statuses
+                    .map((status) {
+                      final items =
+                          widget.data[status] ?? const <InventActiveShow>[];
+                      if (items.isEmpty) {
+                        return const EmptyStateWidget(
+                          icon: Icons.layers_clear,
+                          title: 'No shows found',
+                          description:
+                              'No show data available for this project status.',
                         );
-                      }),
-                    ),
-                  );
-                },
+                      }
+
+                      return ListView.separated(
+                        itemCount: items.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final show = items[index];
+                          return Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.white24),
+                            ),
+                            child: ExpansionTile(
+                              tilePadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              childrenPadding: const EdgeInsets.fromLTRB(
+                                12,
+                                0,
+                                12,
+                                12,
+                              ),
+                              title: Text(
+                                show.showName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${show.clientName} • ${show.shotCount} shots • ${show.totalMandays.toStringAsFixed(1)} MD',
+                              ),
+                              children: [
+                                _DetailRow(
+                                  label: 'Client ID',
+                                  value: show.clientId,
+                                ),
+                                _DetailRow(
+                                  label: 'Show ID',
+                                  value: show.showId,
+                                ),
+                                _DetailRow(label: 'Status', value: show.status),
+                                _DetailRow(
+                                  label: 'Departments',
+                                  value: show.departments.join(', '),
+                                ),
+                                _DetailRow(
+                                  label: 'Due Window',
+                                  value:
+                                      '${_dateLabel(show.minDueDate)} to ${_dateLabel(show.maxDueDate)}',
+                                ),
+                                _DetailRow(
+                                  label: 'Last Updated',
+                                  value: _dateLabel(show.lastUpdatedAt),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    })
+                    .toList(growable: false),
               ),
             ),
         ],
       ),
     );
   }
+}
 
-  static Widget _leftAxisTitle(double value, TitleMeta meta) {
-    if (value % 20 != 0) {
-      return const SizedBox.shrink();
-    }
-    return Text('${value.toInt()}%', style: const TextStyle(fontSize: 10));
-  }
+class _DetailRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _DetailRow({required this.label, required this.value});
 
-  double _maxMandays(List<Map<String, dynamic>> rows) {
-    double maxValue = 0;
-    for (final row in rows) {
-      final val = (row['totalMandays'] as num? ?? 0).toDouble();
-      if (val > maxValue) maxValue = val;
-    }
-    return maxValue <= 0 ? 1 : maxValue;
-  }
-
-  double _toPercent(double value, double total) {
-    if (total <= 0) return 0;
-    final percent = (value / total) * 100;
-    return percent.clamp(0, 100);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 110,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(child: Text(value.isEmpty ? '-' : value)),
+        ],
+      ),
+    );
   }
 }

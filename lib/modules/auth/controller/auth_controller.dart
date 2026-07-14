@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/services/api_controller.dart';
 import '../../users/model/user_model.dart';
@@ -17,6 +18,15 @@ class AuthController extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
 
   bool get isAuthenticated => _currentUser != null;
+
+  Future<void> _refreshDynamicOptions() async {
+    try {
+      final response = await _api.get(ApiConstants.authOptions);
+      AppConstants.applyDynamicOptions(response);
+    } catch (_) {
+      // Keep existing in-memory defaults if options fetch fails.
+    }
+  }
 
   void toggleRememberMe(bool value) {
     _rememberMe = value;
@@ -39,6 +49,7 @@ class AuthController extends ChangeNotifier {
       _currentUser = UserModel.fromJson(
         response['user'] as Map<String, dynamic>,
       );
+      await _refreshDynamicOptions();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -84,6 +95,7 @@ class AuthController extends ChangeNotifier {
       _currentUser = UserModel.fromJson(
         response['user'] as Map<String, dynamic>,
       );
+      await _refreshDynamicOptions();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -97,6 +109,23 @@ class AuthController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<Map<String, List<String>>> fetchRegistrationOptions() async {
+    try {
+      final response = await _api.get(ApiConstants.authOptions);
+      AppConstants.applyDynamicOptions(response);
+
+      return {
+        'roles': List<String>.from(AppConstants.userRoles),
+        'departments': List<String>.from(AppConstants.departments),
+      };
+    } catch (_) {
+      return {
+        'roles': List<String>.from(AppConstants.userRoles),
+        'departments': List<String>.from(AppConstants.departments),
+      };
     }
   }
 

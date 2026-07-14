@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/models/domain_models.dart';
 import '../../../core/models/todays_pickout_model.dart';
 import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/report_service.dart';
@@ -16,9 +17,15 @@ class HomeController extends ChangeNotifier {
   Map<String, double> _reportMandaysByDepartment = {};
   Map<String, double> _reviewMandaysByDepartment = {};
   List<Map<String, dynamic>> _artistPerformance = [];
+  Map<String, List<InventActiveShow>> _inventActiveShowsByStatus = {
+    'Approved': const [],
+    'Approved Internal': const [],
+  };
   bool _isLoading = false;
   bool _isInsightsLoading = false;
+  bool _isInventActiveLoading = false;
   String? _errorMessage;
+  String? _inventActiveError;
 
   List<TodaysPickoutModel> get todaysPickouts => _todaysPickouts;
   Map<String, double> get reportMandaysByDepartment =>
@@ -26,9 +33,13 @@ class HomeController extends ChangeNotifier {
   Map<String, double> get reviewMandaysByDepartment =>
       _reviewMandaysByDepartment;
   List<Map<String, dynamic>> get artistPerformance => _artistPerformance;
+  Map<String, List<InventActiveShow>> get inventActiveShowsByStatus =>
+      _inventActiveShowsByStatus;
   bool get isLoading => _isLoading;
   bool get isInsightsLoading => _isInsightsLoading;
+  bool get isInventActiveLoading => _isInventActiveLoading;
   String? get errorMessage => _errorMessage;
+  String? get inventActiveError => _inventActiveError;
 
   /// Fetch today's pickouts from the API
   Future<void> fetchTodaysPickouts() async {
@@ -51,11 +62,50 @@ class HomeController extends ChangeNotifier {
 
       _errorMessage = null;
       await fetchInsights();
+      await fetchInventActiveShows();
     } catch (e) {
       _errorMessage = 'Failed to load today\'s pickouts: $e';
       _todaysPickouts = [];
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchInventActiveShows() async {
+    _isInventActiveLoading = true;
+    _inventActiveError = null;
+    notifyListeners();
+
+    try {
+      final response = await _dashboardService.fetchInventActiveShows();
+      final statuses =
+          (response['statuses'] as List<dynamic>?) ?? const <dynamic>[];
+
+      final byStatus = <String, List<InventActiveShow>>{
+        'Approved': const <InventActiveShow>[],
+        'Approved Internal': const <InventActiveShow>[],
+      };
+
+      for (final statusRow in statuses) {
+        if (statusRow is! Map<String, dynamic>) continue;
+        final status = (statusRow['status'] ?? '').toString();
+        final showsRaw = (statusRow['shows'] as List<dynamic>?) ?? const [];
+        byStatus[status] = showsRaw
+            .whereType<Map<String, dynamic>>()
+            .map(InventActiveShow.fromJson)
+            .toList(growable: false);
+      }
+
+      _inventActiveShowsByStatus = byStatus;
+    } catch (e) {
+      _inventActiveError = 'Failed to load InventActive shows: $e';
+      _inventActiveShowsByStatus = {
+        'Approved': const [],
+        'Approved Internal': const [],
+      };
+    } finally {
+      _isInventActiveLoading = false;
       notifyListeners();
     }
   }
@@ -126,9 +176,15 @@ class HomeController extends ChangeNotifier {
     _reportMandaysByDepartment = {};
     _reviewMandaysByDepartment = {};
     _artistPerformance = [];
+    _inventActiveShowsByStatus = {
+      'Approved': const [],
+      'Approved Internal': const [],
+    };
+    _inventActiveError = null;
     _errorMessage = null;
     _isLoading = false;
     _isInsightsLoading = false;
+    _isInventActiveLoading = false;
     notifyListeners();
   }
 }

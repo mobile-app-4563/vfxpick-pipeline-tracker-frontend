@@ -298,7 +298,12 @@ class _TeamsScreenState extends State<TeamsScreen> {
   ) async {
     final updated = await showDialog<bool>(
       context: context,
-      builder: (_) => _EditMemberDialog(member: member, controller: controller),
+      builder: (_) => _EditMemberDialog(
+        member: member,
+        controller: controller,
+        roleOptions: controller.roleOptions,
+        departmentOptions: controller.departmentOptions,
+      ),
     );
     if (updated == true && context.mounted) {
       ScaffoldMessenger.of(
@@ -756,23 +761,33 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   Map<String, dynamic> _toApiImportRow(Map<String, dynamic> row) {
+    final teamController = context.read<TeamController>();
+    final roleOptions = teamController.roleOptions;
+    final departmentOptions = teamController.departmentOptions;
+
     final roleRaw =
         (_pickAny(row, ['role', 'user_role']) ?? AppConstants.roleArtist)
             .toString()
             .trim();
-    final role = AppConstants.userRoles.contains(roleRaw)
-        ? roleRaw
-        : AppConstants.roleArtist;
+    final role = roleOptions.firstWhere(
+      (r) => r.toLowerCase() == roleRaw.toLowerCase(),
+      orElse: () =>
+          roleOptions.isNotEmpty ? roleOptions.first : AppConstants.roleArtist,
+    );
 
     final departmentRaw =
         (_pickAny(row, ['department', 'dept']) ??
-                AppConstants.pipelineDepartments.first)
+                (departmentOptions.isNotEmpty
+                    ? departmentOptions.first
+                    : AppConstants.pipelineDepartments.first))
             .toString()
-            .trim()
-            .toUpperCase();
-    final department = AppConstants.pipelineDepartments.contains(departmentRaw)
-        ? departmentRaw
-        : AppConstants.pipelineDepartments.first;
+            .trim();
+    final department = departmentOptions.firstWhere(
+      (d) => d.toLowerCase() == departmentRaw.toLowerCase(),
+      orElse: () => departmentOptions.isNotEmpty
+          ? departmentOptions.first
+          : AppConstants.pipelineDepartments.first,
+    );
 
     final levelRaw = (_pickAny(row, ['level', 'artist_level']) ?? '')
         .toString()
@@ -815,7 +830,11 @@ class _TeamsScreenState extends State<TeamsScreen> {
   ) async {
     final added = await showDialog<bool>(
       context: context,
-      builder: (_) => _MemberDialog(controller: controller),
+      builder: (_) => _MemberDialog(
+        controller: controller,
+        roleOptions: controller.roleOptions,
+        departmentOptions: controller.departmentOptions,
+      ),
     );
     if (added == true && context.mounted) {
       ScaffoldMessenger.of(
@@ -975,7 +994,14 @@ class _AssignTaskDialogState extends State<_AssignTaskDialog> {
 class _EditMemberDialog extends StatefulWidget {
   final TeamMember member;
   final TeamController controller;
-  const _EditMemberDialog({required this.member, required this.controller});
+  final List<String> roleOptions;
+  final List<String> departmentOptions;
+  const _EditMemberDialog({
+    required this.member,
+    required this.controller,
+    required this.roleOptions,
+    required this.departmentOptions,
+  });
 
   @override
   State<_EditMemberDialog> createState() => _EditMemberDialogState();
@@ -994,19 +1020,27 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
   void initState() {
     super.initState();
     _name = TextEditingController(text: widget.member.name);
-    _role = AppConstants.userRoles.contains(widget.member.role)
+    final roleSource = widget.roleOptions.isNotEmpty
+        ? widget.roleOptions
+        : AppConstants.userRoles;
+    _role = roleSource.contains(widget.member.role)
         ? widget.member.role
-        : AppConstants.roleArtist;
+        : roleSource.first;
     _level = widget.member.level;
 
     final user = context.read<AuthController>().currentUser;
-    final departments = AppConstants.accessiblePipelineDepartments(
-      role: user?.role,
-      department: user?.department,
-    );
-    _accessibleDepartments = departments.isEmpty
-        ? AppConstants.pipelineDepartments
-        : departments;
+    final role = user?.role ?? '';
+    final userDept = user?.department ?? '';
+    final allDepartments = widget.departmentOptions.isNotEmpty
+        ? widget.departmentOptions
+        : AppConstants.pipelineDepartments;
+    if (AppConstants.broadAccessRoles.contains(role)) {
+      _accessibleDepartments = allDepartments;
+    } else if (allDepartments.contains(userDept)) {
+      _accessibleDepartments = [userDept];
+    } else {
+      _accessibleDepartments = allDepartments;
+    }
     _department = _accessibleDepartments.contains(widget.member.department)
         ? widget.member.department
         : _accessibleDepartments.first;
@@ -1079,7 +1113,9 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
               CustomDropdown(
                 labelText: 'Role',
                 value: _role,
-                items: AppConstants.userRoles,
+                items: widget.roleOptions.isNotEmpty
+                    ? widget.roleOptions
+                    : AppConstants.userRoles,
                 onChanged: (v) => setState(() => _role = v ?? _role),
                 itemToString: (v) => v,
               ),
@@ -1121,7 +1157,13 @@ class _EditMemberDialogState extends State<_EditMemberDialog> {
 
 class _MemberDialog extends StatefulWidget {
   final TeamController controller;
-  const _MemberDialog({required this.controller});
+  final List<String> roleOptions;
+  final List<String> departmentOptions;
+  const _MemberDialog({
+    required this.controller,
+    required this.roleOptions,
+    required this.departmentOptions,
+  });
 
   @override
   State<_MemberDialog> createState() => _MemberDialogState();
@@ -1141,14 +1183,22 @@ class _MemberDialogState extends State<_MemberDialog> {
   void initState() {
     super.initState();
     final user = context.read<AuthController>().currentUser;
-    final departments = AppConstants.accessiblePipelineDepartments(
-      role: user?.role,
-      department: user?.department,
-    );
-    _accessibleDepartments = departments.isEmpty
-        ? AppConstants.pipelineDepartments
-        : departments;
+    final role = user?.role ?? '';
+    final userDept = user?.department ?? '';
+    final allDepartments = widget.departmentOptions.isNotEmpty
+        ? widget.departmentOptions
+        : AppConstants.pipelineDepartments;
+    if (AppConstants.broadAccessRoles.contains(role)) {
+      _accessibleDepartments = allDepartments;
+    } else if (allDepartments.contains(userDept)) {
+      _accessibleDepartments = [userDept];
+    } else {
+      _accessibleDepartments = allDepartments;
+    }
     _department = _accessibleDepartments.first;
+    _role = widget.roleOptions.isNotEmpty
+        ? widget.roleOptions.first
+        : AppConstants.roleArtist;
   }
 
   @override
@@ -1263,7 +1313,10 @@ class _MemberDialogState extends State<_MemberDialog> {
               // ),
               CustomDropdown(
                 labelText: 'Role',
-                items: AppConstants.userRoles,
+                value: _role,
+                items: widget.roleOptions.isNotEmpty
+                    ? widget.roleOptions
+                    : AppConstants.userRoles,
                 onChanged: (v) => setState(() => _role = v ?? _role),
                 itemToString: (v) => v,
               ),

@@ -18,6 +18,7 @@ class AccessProvider extends ChangeNotifier {
     '/reports',
     '/teams',
     '/notifications',
+    '/user-register',
     '/access-provider',
     '/hrms',
     '/inventory',
@@ -34,6 +35,7 @@ class AccessProvider extends ChangeNotifier {
     '/reports',
     '/teams',
     '/notifications',
+    '/user-register',
     '/access-provider',
     '/hrms',
     '/inventory',
@@ -57,6 +59,7 @@ class AccessProvider extends ChangeNotifier {
     '/reports',
     '/teams',
     '/notifications',
+    '/user-register',
     '/hrms',
     '/inventory',
   };
@@ -142,6 +145,8 @@ class AccessProvider extends ChangeNotifier {
         return 'Teams';
       case '/notifications':
         return 'Notifications';
+      case '/user-register':
+        return 'Register';
       case '/access-provider':
         return 'Access Provider';
       case '/hrms':

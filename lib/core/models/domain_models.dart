@@ -89,6 +89,50 @@ class DashboardDepartment {
   }
 }
 
+class InventActiveShow {
+  final String showId;
+  final String showName;
+  final String clientId;
+  final String clientName;
+  final String status;
+  final int shotCount;
+  final double totalMandays;
+  final DateTime? minDueDate;
+  final DateTime? maxDueDate;
+  final List<String> departments;
+  final DateTime? lastUpdatedAt;
+
+  InventActiveShow({
+    required this.showId,
+    required this.showName,
+    required this.clientId,
+    required this.clientName,
+    required this.status,
+    required this.shotCount,
+    required this.totalMandays,
+    this.minDueDate,
+    this.maxDueDate,
+    required this.departments,
+    this.lastUpdatedAt,
+  });
+
+  factory InventActiveShow.fromJson(Map<String, dynamic> j) => InventActiveShow(
+    showId: j['showId'] ?? '',
+    showName: j['showName'] ?? '',
+    clientId: j['clientId'] ?? '',
+    clientName: j['clientName'] ?? '',
+    status: j['status'] ?? '',
+    shotCount: _toInt(j['shotCount']),
+    totalMandays: _toDouble(j['totalMandays']),
+    minDueDate: _parseDate(j['minDueDate']),
+    maxDueDate: _parseDate(j['maxDueDate']),
+    departments: ((j['departments'] as List<dynamic>?) ?? const [])
+        .map((e) => e.toString())
+        .toList(growable: false),
+    lastUpdatedAt: _parseDate(j['lastUpdatedAt']),
+  );
+}
+
 class TeamMember {
   final String userId;
   final String name;

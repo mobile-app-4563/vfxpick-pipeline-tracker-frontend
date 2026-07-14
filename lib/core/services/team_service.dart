@@ -5,6 +5,9 @@ import 'api_controller.dart';
 class TeamService {
   final ApiController _api = ApiController.instance;
 
+  Future<Map<String, dynamic>> getMemberOptions() =>
+      _api.get(ApiConstants.authOptions);
+
   Future<Map<String, dynamic>> getTeams({String? department}) => _api.get(
     ApiConstants.teams,
     queryParams: department != null ? {'department': department} : null,
