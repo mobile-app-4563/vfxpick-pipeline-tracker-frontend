@@ -30,13 +30,19 @@ class AppRoutes {
       refreshListenable: Listenable.merge([authController, accessProvider]),
       initialLocation: '/home',
       redirect: (BuildContext context, GoRouterState state) {
+        if (authController.isInitializing) return null;
+
         final isLoggedIn = authController.isAuthenticated;
         final role = authController.currentUser?.role ?? '';
         final path = state.uri.path;
-        final isGoingToAuth = path == '/login';
+        final isGoingToAuth = path == '/login' || path == '/register';
+
+        if (authController.hasToken && authController.hasExpiredToken) {
+          authController.expireSession();
+          return '/login';
+        }
 
         if (!isLoggedIn && !isGoingToAuth) return '/login';
-        if (!isLoggedIn && path == '/register') return '/login';
         if (isLoggedIn && isGoingToAuth) return '/home';
         if (isLoggedIn && !accessProvider.canAccessPath(role, path)) {
           return '/home';

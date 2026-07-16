@@ -573,6 +573,74 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
                                   label: 'Last Updated',
                                   value: _dateLabel(show.lastUpdatedAt),
                                 ),
+                                const SizedBox(height: 10),
+                                const Divider(height: 1),
+                                const SizedBox(height: 10),
+                                const Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Text(
+                                    'Shots',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                if (show.shots.isEmpty)
+                                  const Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'No shot rows in this status.',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  )
+                                else
+                                  ...show.shots.map((shot) {
+                                    return Padding(
+                                      padding: const EdgeInsets.all(8),
+                                      child: Align(
+                                        alignment: Alignment.centerLeft,
+                                        child: Container(
+                                          width: double.infinity,
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                            color: Colors.white.withValues(
+                                              alpha: 0.03,
+                                            ),
+                                            border: Border.all(
+                                              color: Colors.white12,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                shot.shotCode,
+                                                textAlign: TextAlign.start,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                '${shot.department} • ${shot.mandays.toStringAsFixed(1)} MD • Due ${_dateLabel(shot.dueDate)}',
+                                                textAlign: TextAlign.start,
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Artist: ${shot.artistName?.isNotEmpty == true ? shot.artistName : '-'}',
+                                                textAlign: TextAlign.start,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }),
                               ],
                             ),
                           );

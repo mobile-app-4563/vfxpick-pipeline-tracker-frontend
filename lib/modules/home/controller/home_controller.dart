@@ -48,7 +48,11 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final response = await _dashboardService.fetchTodaysPickouts();
+      final now = DateTime.now();
+      final today =
+          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+      final response = await _dashboardService.fetchTodaysPickouts(date: today);
       final pickoutsData = (response['pickouts'] as List<dynamic>?) ?? [];
 
       _todaysPickouts = pickoutsData.map((item) {

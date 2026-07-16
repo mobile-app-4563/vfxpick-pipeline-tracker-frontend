@@ -101,6 +101,7 @@ class InventActiveShow {
   final DateTime? maxDueDate;
   final List<String> departments;
   final DateTime? lastUpdatedAt;
+  final List<InventActiveShotDetail> shots;
 
   InventActiveShow({
     required this.showId,
@@ -114,6 +115,7 @@ class InventActiveShow {
     this.maxDueDate,
     required this.departments,
     this.lastUpdatedAt,
+    required this.shots,
   });
 
   factory InventActiveShow.fromJson(Map<String, dynamic> j) => InventActiveShow(
@@ -130,7 +132,42 @@ class InventActiveShow {
         .map((e) => e.toString())
         .toList(growable: false),
     lastUpdatedAt: _parseDate(j['lastUpdatedAt']),
+    shots: ((j['shots'] as List<dynamic>?) ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map(InventActiveShotDetail.fromJson)
+        .toList(growable: false),
   );
+}
+
+class InventActiveShotDetail {
+  final String shotId;
+  final String shotCode;
+  final String department;
+  final String status;
+  final String? artistName;
+  final double mandays;
+  final DateTime? dueDate;
+
+  InventActiveShotDetail({
+    required this.shotId,
+    required this.shotCode,
+    required this.department,
+    required this.status,
+    this.artistName,
+    required this.mandays,
+    this.dueDate,
+  });
+
+  factory InventActiveShotDetail.fromJson(Map<String, dynamic> j) =>
+      InventActiveShotDetail(
+        shotId: j['shotId'] ?? '',
+        shotCode: j['shotCode'] ?? '',
+        department: j['department'] ?? '',
+        status: j['status'] ?? '',
+        artistName: j['artistName'],
+        mandays: _toDouble(j['mandays']),
+        dueDate: _parseDate(j['dueDate']),
+      );
 }
 
 class TeamMember {

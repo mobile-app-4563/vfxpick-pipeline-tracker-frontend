@@ -16,8 +16,10 @@ class DashboardService {
     queryParams: department != null ? {'department': department} : null,
   );
 
-  Future<Map<String, dynamic>> fetchTodaysPickouts() =>
-      _api.get(ApiConstants.dashboardTodaysPickouts);
+  Future<Map<String, dynamic>> fetchTodaysPickouts({String? date}) => _api.get(
+    ApiConstants.dashboardTodaysPickouts,
+    queryParams: date != null ? {'date': date} : null,
+  );
 
   Future<Map<String, dynamic>> fetchArtistPerformance() =>
       _api.get(ApiConstants.dashboardArtistPerformance);

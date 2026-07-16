@@ -1,7 +1,7 @@
-/// Central API constants for all VfxPick backend endpoints.
-/// All endpoints are mounted under the `/api` prefix.
-///
-/// Domain hierarchy: Department -> Client -> Show -> Shots.
+// / Central API constants for all VfxPick backend endpoints.
+// / All endpoints are mounted under the `/api` prefix.
+// /
+// / Domain hierarchy: Department -> Client -> Show -> Shots.
 class ApiConstants {
   // ───────────────────────────────────────────────────────────────────────────
   // BASE CONFIGURATION
@@ -11,14 +11,16 @@ class ApiConstants {
   static const String baseUrlPersonalLaptop =
       'https://t06z0dmj-3000.inc1.devtunnels.ms/api';
   static const String baseUrlServer = 'http://192.168.1.15:3000/api';
-  static const String baseUrl = baseUrlServer;
+  static const String baseUrl = baseUrlPersonalLaptop;
 
-  // ───────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────
+  // ──────────────────────────────
   // AUTH (/api/auth) — unchanged
   // ───────────────────────────────────────────────────────────────────────────
   static const String login = '/auth/login';
   static const String register = '/auth/register';
   static const String logout = '/auth/logout';
+  static const String authMe = '/auth/me';
   static const String authOptions = '/auth/options';
 
   // ───────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:excel/excel.dart';
@@ -139,24 +140,37 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           : null,
       body: LayoutBuilder(
         builder: (context, constraints) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: const Text(
-                  'Select department and show to import.',
-                  style: TextStyle(fontSize: 16),
-                ),
+          final shotsHeight = _importDraftRows.isNotEmpty
+              ? constraints.maxHeight * 0.45
+              : constraints.maxHeight * 0.62;
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 90),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                    child: const Text(
+                      'Select department and show to import.',
+                      style: TextStyle(fontSize: 16),
+                    ),
+                  ),
+                  _filters(context, controller),
+                  if (_importDraftRows.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    _importPreviewTable(),
+                  ],
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: math.max(260, shotsHeight),
+                    child: _shots(context, controller),
+                  ),
+                ],
               ),
-              _filters(context, controller),
-              if (_importDraftRows.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                _importPreviewTable(),
-              ],
-              const SizedBox(height: 8),
-              Expanded(child: _shots(context, controller)),
-            ],
+            ),
           );
         },
       ),
@@ -508,149 +522,146 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         })
         .toList(growable: false);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Flexible(
-          child: GlassContainer(
-            child: DynamicDataTable(
-              columnSpacing: 10,
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              dataRowMinHeight: 48,
-              dataRowMaxHeight: 62,
-              fields: [
-                const DynamicTableField(
-                  key: 'sno',
-                  label: 'S.No',
-                  width: 40,
-                  filterRequired: false,
-                  numeric: true,
-                ),
-                const DynamicTableField(
-                  key: 'shotId',
-                  label: 'Shot ID',
-                  width: 140,
-                ),
-                const DynamicTableField(
-                  key: 'frameIn',
-                  label: 'Frame In',
-                  width: 120,
-                  numeric: true,
-                ),
-                const DynamicTableField(
-                  key: 'frameOut',
-                  label: 'Frame Out',
-                  width: 110,
-                  numeric: true,
-                ),
-                const DynamicTableField(
-                  key: 'supervisorBid',
-                  label: 'Supervisor Bid',
-                  width: 120,
-                  numeric: true,
-                ),
-                const DynamicTableField(
-                  key: 'clientBid',
-                  label: 'Client Bid',
-                  width: 120,
-                  numeric: true,
-                ),
-                const DynamicTableField(
-                  key: 'notes',
-                  label: 'Notes',
-                  width: 220,
-                ),
-                const DynamicTableField(key: 'task', label: 'Task', width: 240),
-                const DynamicTableField(
-                  key: 'clientEta',
-                  label: 'Client ETA',
-                  width: 130,
-                ),
-                DynamicTableField(
-                  key: 'status',
-                  label: 'Status',
-                  width: 150,
-                  builder: (context, value, row, rowIndex) {
-                    final shot = row['shot'] as ShotModel;
-                    return SingleChildScrollView(
-                      child: CustomDropdown<String>(
-                        compact: true,
-                        labelText: 'Status',
-                        value: AppConstants.shotStatuses.contains(value)
-                            ? value as String
-                            : null,
-                        items: AppConstants.shotStatuses,
-                        itemToString: (st) => st,
-                        onChanged: _isArtist
-                            ? null
-                            : (v) {
-                                if (v != null) {
-                                  controller.updateStatus(shot.shotId, v);
-                                }
-                              },
-                      ),
-                    );
-                  },
-                ),
-                DynamicTableField(
-                  key: 'actions',
-                  filterRequired: false,
-                  label: 'Actions',
-                  width: 90,
-                  builder: (context, value, row, rowIndex) {
-                    final shot = row['shot'] as ShotModel;
-                    return IconButton(
-                      tooltip: 'Edit shot',
-                      onPressed: _canCreateShot
-                          ? () =>
-                                _openShotDialog(context, controller, shot: shot)
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableHeight = constraints.maxHeight.isFinite
+            ? math.max(220.0, constraints.maxHeight - 8)
+            : 420.0;
+
+        return GlassContainer(
+          child: DynamicDataTable(
+            height: tableHeight,
+            columnSpacing: 10,
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            dataRowMinHeight: 48,
+            dataRowMaxHeight: 62,
+            fields: [
+              const DynamicTableField(
+                key: 'sno',
+                label: 'S.No',
+                width: 40,
+                filterRequired: false,
+                numeric: true,
+              ),
+              const DynamicTableField(
+                key: 'shotId',
+                label: 'Shot ID',
+                width: 140,
+              ),
+              const DynamicTableField(
+                key: 'frameIn',
+                label: 'Frame In',
+                width: 120,
+                numeric: true,
+              ),
+              const DynamicTableField(
+                key: 'frameOut',
+                label: 'Frame Out',
+                width: 110,
+                numeric: true,
+              ),
+              const DynamicTableField(
+                key: 'supervisorBid',
+                label: 'Supervisor Bid',
+                width: 120,
+                numeric: true,
+              ),
+              const DynamicTableField(
+                key: 'clientBid',
+                label: 'Client Bid',
+                width: 120,
+                numeric: true,
+              ),
+              const DynamicTableField(key: 'notes', label: 'Notes', width: 220),
+              const DynamicTableField(key: 'task', label: 'Task', width: 240),
+              const DynamicTableField(
+                key: 'clientEta',
+                label: 'Client ETA',
+                width: 130,
+              ),
+              DynamicTableField(
+                key: 'status',
+                label: 'Status',
+                width: 150,
+                builder: (context, value, row, rowIndex) {
+                  final shot = row['shot'] as ShotModel;
+                  return SingleChildScrollView(
+                    child: CustomDropdown<String>(
+                      compact: true,
+                      labelText: 'Status',
+                      value: AppConstants.shotStatuses.contains(value)
+                          ? value as String
                           : null,
-                      icon: const Icon(Icons.edit_outlined, size: 18),
-                    );
-                  },
-                ),
-              ],
-              rows: filteredRows,
-              onFilterChanged: (fieldKey, value) {
-                setState(() {
-                  final v = value is String ? value : value.toString();
-                  switch (fieldKey) {
-                    case 'shotId':
-                      _shotIdFilter = v;
-                      break;
-                    case 'frameIn':
-                      _frameInFilter = v;
-                      break;
-                    case 'frameOut':
-                      _frameOutFilter = v;
-                      break;
-                    case 'supervisorBid':
-                      _supervisorBidFilter = v;
-                      break;
-                    case 'clientBid':
-                      _clientBidFilter = v;
-                      break;
-                    case 'notes':
-                      _notesFilter = v;
-                      break;
-                    case 'task':
-                      _taskFilter = v;
-                      break;
-                    case 'clientEta':
-                      _etaFilter = v;
-                      break;
-                    case 'status':
-                      _statusFilter = v;
-                      break;
-                    default:
-                      break;
-                  }
-                });
-              },
-            ),
+                      items: AppConstants.shotStatuses,
+                      itemToString: (st) => st,
+                      onChanged: _isArtist
+                          ? null
+                          : (v) {
+                              if (v != null) {
+                                controller.updateStatus(shot.shotId, v);
+                              }
+                            },
+                    ),
+                  );
+                },
+              ),
+              DynamicTableField(
+                key: 'actions',
+                filterRequired: false,
+                label: 'Actions',
+                width: 90,
+                builder: (context, value, row, rowIndex) {
+                  final shot = row['shot'] as ShotModel;
+                  return IconButton(
+                    tooltip: 'Edit shot',
+                    onPressed: _canCreateShot
+                        ? () => _openShotDialog(context, controller, shot: shot)
+                        : null,
+                    icon: const Icon(Icons.edit_outlined, size: 18),
+                  );
+                },
+              ),
+            ],
+            rows: filteredRows,
+            onFilterChanged: (fieldKey, value) {
+              setState(() {
+                final v = value is String ? value : value.toString();
+                switch (fieldKey) {
+                  case 'shotId':
+                    _shotIdFilter = v;
+                    break;
+                  case 'frameIn':
+                    _frameInFilter = v;
+                    break;
+                  case 'frameOut':
+                    _frameOutFilter = v;
+                    break;
+                  case 'supervisorBid':
+                    _supervisorBidFilter = v;
+                    break;
+                  case 'clientBid':
+                    _clientBidFilter = v;
+                    break;
+                  case 'notes':
+                    _notesFilter = v;
+                    break;
+                  case 'task':
+                    _taskFilter = v;
+                    break;
+                  case 'clientEta':
+                    _etaFilter = v;
+                    break;
+                  case 'status':
+                    _statusFilter = v;
+                    break;
+                  default:
+                    break;
+                }
+              });
+            },
           ),
-        ),
-      ],
+        );
+      },
     );
   }
 

@@ -62,6 +62,7 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     final theme = context.watch<ThemeController>();
+    final authController = context.watch<AuthController>();
 
     return MaterialApp.router(
       title: 'VFXPICK Pipeline',
@@ -70,6 +71,48 @@ class _MyAppState extends State<MyApp> {
       darkTheme: AppTheme.darkTheme,
       themeMode: theme.themeMode,
       routerConfig: _router,
+      builder: (context, child) {
+        if (authController.isInitializing) {
+          return const _StartupLoadingScreen();
+        }
+        return child ?? const SizedBox.shrink();
+      },
+    );
+  }
+}
+
+class _StartupLoadingScreen extends StatelessWidget {
+  const _StartupLoadingScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF040814), Color(0xFF07142A), Color(0xFF0A1F3D)],
+          ),
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(strokeWidth: 3),
+              SizedBox(height: 16),
+              Text(
+                'Validating session...',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

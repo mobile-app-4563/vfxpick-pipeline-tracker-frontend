@@ -39,6 +39,7 @@ dependencies:
   fl_chart: ^1.2.0
   syncfusion_flutter_charts: ^30.2.7
   http: ^1.2.2
+  shared_preferences: ^2.5.3
   file_picker: ^11.0.2
   excel: ^4.0.6
   file_saver: ^0.4.0
