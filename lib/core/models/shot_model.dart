@@ -1,0 +1,96 @@
+/// Core shot entity shared across Dashboard, Projects and Tasks.
+class ShotModel {
+  final String shotId;
+  final String showId;
+  final String? showName;
+  final String? clientId;
+  final String? clientName;
+  final String department;
+  final String shotCode;
+  final int frameIn;
+  final int frameOut;
+  final double supervisorBid;
+  final double clientBid;
+  final DateTime? clientEta;
+  final String? notes;
+  final String status; // client-facing status
+  final String? artistId;
+  final String? artistName;
+  final double artistBid;
+  final DateTime? artistEta;
+  final String? description;
+  final String? supervisorStatus;
+  final String artistStatus;
+  final DateTime? allocatedDate;
+  final double mandays;
+  final DateTime? dueDate;
+  final String? clientFeedback;
+
+  ShotModel({
+    required this.shotId,
+    required this.showId,
+    this.showName,
+    this.clientId,
+    this.clientName,
+    required this.department,
+    required this.shotCode,
+    this.frameIn = 0,
+    this.frameOut = 0,
+    this.supervisorBid = 0,
+    this.clientBid = 0,
+    this.clientEta,
+    this.notes,
+    this.status = 'Awaiting Approval',
+    this.artistId,
+    this.artistName,
+    this.artistBid = 0,
+    this.artistEta,
+    this.description,
+    this.supervisorStatus,
+    this.artistStatus = 'YTS',
+    this.allocatedDate,
+    this.mandays = 0,
+    this.dueDate,
+    this.clientFeedback,
+  });
+
+  static DateTime? _date(dynamic v) =>
+      (v == null || v == '') ? null : DateTime.tryParse(v.toString());
+
+  static double _double(dynamic v) => v == null
+      ? 0.0
+      : (v is num ? v.toDouble() : double.tryParse(v.toString()) ?? 0.0);
+
+  static int _int(dynamic v) =>
+      v == null ? 0 : (v is num ? v.toInt() : int.tryParse(v.toString()) ?? 0);
+
+  factory ShotModel.fromJson(Map<String, dynamic> json) {
+    return ShotModel(
+      shotId: json['shotId'] ?? '',
+      showId: json['showId'] ?? '',
+      showName: json['showName'],
+      clientId: json['clientId'],
+      clientName: json['clientName'],
+      department: json['department'] ?? '',
+      shotCode: json['shotCode'] ?? '',
+      frameIn: _int(json['frameIn']),
+      frameOut: _int(json['frameOut']),
+      supervisorBid: _double(json['supervisorBid']),
+      clientBid: _double(json['clientBid']),
+      clientEta: _date(json['clientEta']),
+      notes: json['notes'],
+      status: json['status'] ?? 'Awaiting Approval',
+      artistId: json['artistId'],
+      artistName: json['artistName'],
+      artistBid: _double(json['artistBid']),
+      artistEta: _date(json['artistEta']),
+      description: json['description'],
+      supervisorStatus: json['supervisorStatus'],
+      artistStatus: json['artistStatus'] ?? 'YTS',
+      allocatedDate: _date(json['allocatedDate']),
+      mandays: _double(json['mandays']),
+      dueDate: _date(json['dueDate']),
+      clientFeedback: json['clientFeedback'],
+    );
+  }
+}
