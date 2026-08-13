@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 import 'glass_container.dart';
 
 class StatCard extends StatefulWidget {
@@ -36,31 +37,30 @@ class _StatCardState extends State<StatCard> {
       onExit: (_) => setState(() => _isHovered = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        transform: _isHovered ? (Matrix4.identity()..translate(0, -6, 0)) : Matrix4.identity(),
+        transform: _isHovered
+            ? (Matrix4.identity()..translate(0, -6, 0))
+            : Matrix4.identity(),
         child: GlassContainer(
-          padding: const EdgeInsets.all(20),
+          padding: SizeConfig.paddingAll(context, 20),
           child: Row(
             children: [
-              // Left: Icon Circle with glass container style
               Container(
-                padding: const EdgeInsets.all(12),
+                padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
                 decoration: BoxDecoration(
                   color: widget.iconColor.withOpacity(0.12),
                   shape: BoxShape.circle,
                   border: Border.all(
                     color: widget.iconColor.withOpacity(0.3),
-                    width: 1.5,
+                    width: SizeConfig.scaleWidth(context, 1.5),
                   ),
                 ),
                 child: Icon(
                   widget.icon,
                   color: widget.iconColor,
-                  size: 26,
+                  size: SizeConfig.iconSize(context, 26),
                 ),
               ),
-              const SizedBox(width: 18),
-              
-              // Right: Stats Values
+              SizeConfig.sizedBoxW(context, 18),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,38 +69,47 @@ class _StatCardState extends State<StatCard> {
                     Text(
                       widget.title,
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: SizeConfig.fontSize(context, 13),
                         fontWeight: FontWeight.w600,
-                        color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.lightTextSecondary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 6)),
                     Text(
                       widget.value,
                       style: TextStyle(
-                        fontSize: 26,
+                        fontSize: SizeConfig.fontSize(context, 26),
                         fontWeight: FontWeight.bold,
-                        color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.lightTextPrimary,
                         letterSpacing: -0.5,
                       ),
                     ),
                     if (widget.trend != null) ...[
-                      const SizedBox(height: 4),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 4)),
                       Row(
                         children: [
                           Icon(
-                            widget.isTrendPositive ? Icons.trending_up : Icons.trending_down,
-                            size: 14,
-                            color: widget.isTrendPositive ? Colors.green : Colors.red,
+                            widget.isTrendPositive
+                                ? Icons.trending_up
+                                : Icons.trending_down,
+                            size: SizeConfig.iconSize(context, 14),
+                            color: widget.isTrendPositive
+                                ? Colors.green
+                                : Colors.red,
                           ),
-                          const SizedBox(width: 4),
+                          SizeConfig.sizedBoxW(context, 4),
                           Text(
                             widget.trend!,
                             style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: widget.isTrendPositive ? Colors.green : Colors.red,
+                              fontSize: SizeConfig.fontSize(context, 12),
+                              color: isDark
+                                  ? AppColors.darkTextSecondary
+                                  : AppColors.lightTextSecondary,
                             ),
                           ),
                         ],

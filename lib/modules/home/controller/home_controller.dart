@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
@@ -61,12 +63,11 @@ class HomeController extends ChangeNotifier {
         );
       }).toList();
 
-      // Sort by priority rank (1 = highest first)
       _todaysPickouts.sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
-
       _errorMessage = null;
-      await fetchInsights();
-      await fetchInventActiveShows();
+
+      // ── Fire insights + invent-active in PARALLEL (not sequentially) ───
+      await Future.wait([fetchInsights(), fetchInventActiveShows()]);
     } catch (e) {
       _errorMessage = 'Failed to load today\'s pickouts: $e';
       _todaysPickouts = [];
@@ -123,43 +124,56 @@ class HomeController extends ChangeNotifier {
     final reviews = <String, double>{};
 
     try {
-      for (final dept in AppConstants.pipelineDepartments) {
-        try {
-          final reportResp = await _reportService.getReport(
-            department: dept,
-            month: now.month,
-            year: now.year,
-          );
-          final items = (reportResp['items'] as List<dynamic>?) ?? const [];
-          final mandays = items.fold<double>(
-            0,
-            (sum, item) =>
-                sum +
-                ((item as Map<String, dynamic>)['mandays'] as num? ?? 0)
-                    .toDouble(),
-          );
-          reports[dept] = mandays;
-        } catch (_) {
-          reports[dept] = 0;
-        }
+      // ── Fire ALL department API calls in parallel ─────────────────
+      final depts = AppConstants.pipelineDepartments;
+      final futures = <Future<void>>[];
 
-        try {
-          final reviewResp = await _reviewService.getDepartmentReview(
-            department: dept,
-            month: now.month,
-            year: now.year,
-          );
-          reviews[dept] = (reviewResp['totalMandays'] as num? ?? 0).toDouble();
-        } catch (_) {
-          reviews[dept] = 0;
-        }
+      for (final dept in depts) {
+        futures.add(
+          _reportService
+              .getReport(department: dept, month: now.month, year: now.year)
+              .then((resp) {
+                final items = (resp['items'] as List<dynamic>?) ?? const [];
+                reports[dept] = items.fold<double>(
+                  0,
+                  (sum, item) =>
+                      sum +
+                      ((item as Map<String, dynamic>)['mandays'] as num? ?? 0)
+                          .toDouble(),
+                );
+              })
+              .catchError((_) {
+                reports[dept] = 0;
+              }),
+        );
+
+        futures.add(
+          _reviewService
+              .getDepartmentReview(
+                department: dept,
+                month: now.month,
+                year: now.year,
+              )
+              .then((resp) {
+                reviews[dept] = (resp['totalMandays'] as num? ?? 0).toDouble();
+              })
+              .catchError((_) {
+                reviews[dept] = 0;
+              }),
+        );
       }
 
-      final performanceResp = await _dashboardService.fetchArtistPerformance();
-      _artistPerformance =
-          ((performanceResp['performers'] as List<dynamic>?) ?? const [])
-              .map((e) => e as Map<String, dynamic>)
-              .toList(growable: false);
+      // Wait for ALL department calls + artist performance concurrently
+      futures.add(
+        _dashboardService.fetchArtistPerformance().then((resp) {
+          _artistPerformance =
+              ((resp['performers'] as List<dynamic>?) ?? const [])
+                  .map((e) => e as Map<String, dynamic>)
+                  .toList(growable: false);
+        }),
+      );
+
+      await Future.wait(futures);
 
       _reportMandaysByDepartment = reports;
       _reviewMandaysByDepartment = reviews;

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
@@ -102,21 +103,23 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final controller = context.watch<ReportController>();
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 980),
+        constraints: BoxConstraints(
+          maxWidth: SizeConfig.scaleWidth(context, 980),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _filters(controller),
-            const SizedBox(height: 16),
+            _filters(context, controller),
+            SizedBox(height: SizeConfig.scaleHeight(context, 16)),
             if (controller.isLoading)
               const Expanded(child: LoadingWidget())
             else
               Expanded(
                 child: ListView(
                   children: [
-                    _summary(controller),
-                    const SizedBox(height: 16),
-                    _table(controller),
+                    _summary(context, controller),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                    _table(context, controller),
                   ],
                 ),
               ),
@@ -126,16 +129,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _filters(ReportController controller) {
+  Widget _filters(BuildContext context, ReportController controller) {
     return GlassContainer(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
       child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
+        spacing: SizeConfig.scaleWidth(context, 12),
+        runSpacing: SizeConfig.scaleHeight(context, 12),
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: 160,
+            width: SizeConfig.scaleWidth(context, 160),
             child: DropdownButtonFormField<String>(
               initialValue: _department,
               decoration: const InputDecoration(labelText: 'Department'),
@@ -151,26 +154,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
           ),
           SizedBox(
-            width: 180,
-            height: 35,
+            width: SizeConfig.scaleWidth(context, 180),
+            height: SizeConfig.scaleHeight(context, 35),
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 8),
+                  ),
                 ),
               ),
               onPressed: () => _pickDate(isStart: true),
-              icon: const Icon(Icons.date_range_outlined, size: 18),
+              icon: Icon(
+                Icons.date_range_outlined,
+                size: SizeConfig.iconSize(context, 18),
+              ),
               label: Text(
                 _startDate == null ? 'Start Date' : _fmt(_startDate!),
               ),
             ),
           ),
           SizedBox(
-            width: 170,
+            width: SizeConfig.scaleWidth(context, 170),
             child: OutlinedButton.icon(
               onPressed: () => _pickDate(isStart: false),
-              icon: const Icon(Icons.event_outlined, size: 18),
+              icon: Icon(
+                Icons.event_outlined,
+                size: SizeConfig.iconSize(context, 18),
+              ),
               label: Text(_endDate == null ? 'End Date' : _fmt(_endDate!)),
             ),
           ),
@@ -190,23 +201,26 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _summary(ReportController controller) {
+  Widget _summary(BuildContext context, ReportController controller) {
     final totalMandays = controller.items.fold<double>(
       0,
       (sum, r) => sum + r.mandays,
     );
     final uniqueShows = controller.items.map((r) => r.show).toSet().length;
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Report Summary',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: SizeConfig.fontSize(context, 16),
+                  ),
                 ),
               ),
               ElevatedButton.icon(
@@ -216,27 +230,30 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 ),
                 onPressed: _exporting ? null : _export,
                 icon: _exporting
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
+                    ? SizedBox(
+                        width: SizeConfig.scaleWidth(context, 16),
+                        height: SizeConfig.scaleHeight(context, 16),
                         child: CircularProgressIndicator(
-                          strokeWidth: 2,
+                          strokeWidth: SizeConfig.scaleWidth(context, 2),
                           color: Colors.white,
                         ),
                       )
-                    : const Icon(Icons.download, size: 18),
+                    : Icon(
+                        Icons.download,
+                        size: SizeConfig.iconSize(context, 18),
+                      ),
                 label: const Text('Export XLSX'),
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           Wrap(
-            spacing: 24,
-            runSpacing: 10,
+            spacing: SizeConfig.scaleWidth(context, 24),
+            runSpacing: SizeConfig.scaleHeight(context, 10),
             children: [
-              _stat('Rows', '${controller.items.length}'),
-              _stat('Shows', '$uniqueShows'),
-              _stat('Mandays', totalMandays.toStringAsFixed(1)),
+              _stat(context, 'Rows', '${controller.items.length}'),
+              _stat(context, 'Shows', '$uniqueShows'),
+              _stat(context, 'Mandays', totalMandays.toStringAsFixed(1)),
             ],
           ),
         ],
@@ -244,7 +261,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _table(ReportController controller) {
+  Widget _table(BuildContext context, ReportController controller) {
     if (controller.items.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.analytics_outlined,
@@ -285,31 +302,43 @@ class _ReportsScreenState extends State<ReportsScreen> {
         .toList(growable: false);
 
     return GlassContainer(
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 10),
+          SizedBox(height: SizeConfig.scaleHeight(context, 10)),
           DynamicDataTable(
-            fields: const [
+            fields: [
               DynamicTableField(
                 key: 'clientNo',
                 label: 'Client No',
-                width: 120,
+                width: SizeConfig.scaleWidth(context, 120),
               ),
-              DynamicTableField(key: 'show', label: 'Show', width: 160),
-              DynamicTableField(key: 'shot', label: 'Shot', width: 120),
-              DynamicTableField(key: 'date', label: 'Date', width: 120),
+              DynamicTableField(
+                key: 'show',
+                label: 'Show',
+                width: SizeConfig.scaleWidth(context, 160),
+              ),
+              DynamicTableField(
+                key: 'shot',
+                label: 'Shot',
+                width: SizeConfig.scaleWidth(context, 120),
+              ),
+              DynamicTableField(
+                key: 'date',
+                label: 'Date',
+                width: SizeConfig.scaleWidth(context, 120),
+              ),
               DynamicTableField(
                 key: 'mandays',
                 label: 'Mandays',
-                width: 110,
+                width: SizeConfig.scaleWidth(context, 110),
                 numeric: true,
               ),
               DynamicTableField(
                 key: 'feedback',
                 label: 'Client Feedback',
-                width: 220,
+                width: SizeConfig.scaleWidth(context, 220),
               ),
             ],
             rows: filteredRows,
@@ -375,19 +404,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _stat(String label, String value) {
+  Widget _stat(BuildContext context, String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.brandGreen,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: SizeConfig.fontSize(context, 20),
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(
+          label,
+          style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
+        ),
       ],
     );
   }

@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 import '../../../shared/widgets/glass_container.dart';
+import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../controller/auth_controller.dart';
 
@@ -295,16 +297,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
       builder: (BuildContext context) {
         return AlertDialog(
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(
+              SizeConfig.scaleWidth(context, 16),
+            ),
           ),
-          title: const Wrap(
+          title: Wrap(
             crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 10,
+            spacing: SizeConfig.scaleWidth(context, 10),
             children: [
               Icon(
                 Icons.check_circle,
                 color: AppColors.statusCompleted,
-                size: 28,
+                size: SizeConfig.iconSize(context, 28),
               ),
               Text('Registration Successful'),
             ],
@@ -341,17 +345,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 14)),
       decoration: BoxDecoration(
         color: isDark
             ? Colors.white.withValues(alpha: 0.04)
             : Colors.black.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.16)
-              : Colors.black.withValues(alpha: 0.09),
-        ),
+        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 14)),
+        border: GradientBoxBorder(gradient: AppColors.brandGradient, width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,7 +359,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Text(
             title,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: SizeConfig.fontSize(context, 11),
               letterSpacing: 1.1,
               fontWeight: FontWeight.w700,
               color: isDark
@@ -367,9 +367,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   : Colors.black.withValues(alpha: 0.72),
             ),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: SizeConfig.scaleHeight(context, 10)),
           child,
-          if (footer != null) ...[const SizedBox(height: 10), footer],
+          if (footer != null) ...[
+            SizedBox(height: SizeConfig.scaleHeight(context, 10)),
+            footer,
+          ],
         ],
       ),
     );
@@ -396,11 +399,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         child: Center(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 24)),
               child: GlassContainer(
                 width: cardWidth,
-                borderRadius: 20,
-                padding: EdgeInsets.all(isDesktop ? 40.0 : 24.0),
+                borderRadius: SizeConfig.scaleWidth(context, 20),
+                padding: EdgeInsets.all(
+                  isDesktop
+                      ? SizeConfig.scaleWidth(context, 40)
+                      : SizeConfig.scaleWidth(context, 24),
+                ),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -414,23 +421,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   icon: const Icon(Icons.arrow_back),
                                   onPressed: () => context.go('/login'),
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(
+                                  width: SizeConfig.scaleWidth(context, 8),
+                                ),
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       'Create Studio Account',
                                       style: TextStyle(
-                                        fontSize: 24,
+                                        fontSize: SizeConfig.fontSize(
+                                          context,
+                                          24,
+                                        ),
                                         fontWeight: FontWeight.bold,
                                         color: Theme.of(
                                           context,
                                         ).colorScheme.onSurface,
                                       ),
                                     ),
-                                    const Text(
+                                    Text(
                                       'Join the production tracking matrix',
-                                      style: TextStyle(fontSize: 13),
+                                      style: TextStyle(
+                                        fontSize: SizeConfig.fontSize(
+                                          context,
+                                          13,
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -445,25 +462,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                   icon: const Icon(Icons.arrow_back),
                                   onPressed: () => context.go('/login'),
                                 ),
-                                const SizedBox(height: 12),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 12),
+                                ),
                                 Text(
                                   'Create Studio Account',
                                   style: TextStyle(
-                                    fontSize: 22,
+                                    fontSize: SizeConfig.fontSize(context, 22),
                                     fontWeight: FontWeight.bold,
                                     color: Theme.of(
                                       context,
                                     ).colorScheme.onSurface,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
-                                const Text(
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 2),
+                                ),
+                                Text(
                                   'Join the production tracking matrix',
-                                  style: TextStyle(fontSize: 13),
+                                  style: TextStyle(
+                                    fontSize: SizeConfig.fontSize(context, 13),
+                                  ),
                                 ),
                               ],
                             ),
-                      const SizedBox(height: 30),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 30)),
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final hasTwoColumns = constraints.maxWidth >= 760;
@@ -472,8 +495,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               : constraints.maxWidth;
 
                           return Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
+                            spacing: SizeConfig.scaleWidth(context, 16),
+                            runSpacing: SizeConfig.scaleHeight(context, 16),
                             children: [
                               SizedBox(
                                 width: tileWidth,
@@ -598,7 +621,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         : null,
                                   ),
                                   footer: ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
+                                    borderRadius: BorderRadius.circular(
+                                      SizeConfig.scaleWidth(context, 4),
+                                    ),
                                     child: LinearProgressIndicator(
                                       value: _passwordStrength,
                                       backgroundColor: Colors.grey.withValues(
@@ -613,7 +638,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             ? Colors.amber
                                             : Colors.green,
                                       ),
-                                      minHeight: 4,
+                                      minHeight: SizeConfig.scaleHeight(
+                                        context,
+                                        4,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -640,7 +668,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           );
                         },
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 24)),
 
                       // Terms Agreement
                       Row(
@@ -651,15 +679,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 setState(() => _acceptTerms = val ?? false),
                             activeColor: AppColors.brandGreen,
                           ),
-                          const Expanded(
+                          Expanded(
                             child: Text(
                               'I accept the VFXPICK Production Terms of Service & Privacy Policy',
-                              style: TextStyle(fontSize: 13),
+                              style: TextStyle(
+                                fontSize: SizeConfig.fontSize(context, 13),
+                              ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 24)),
 
                       // Sign Up Button
                       GradientButton(
@@ -668,23 +698,25 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         isLoading: authController.isLoading,
                         onPressed: _handleRegister,
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 16)),
 
                       // Toggle Login
                       Wrap(
                         alignment: WrapAlignment.center,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          const Text(
+                          Text(
                             'Already have a user account?',
-                            style: TextStyle(fontSize: 13),
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 13),
+                            ),
                           ),
                           TextButton(
                             onPressed: () => context.go('/login'),
-                            child: const Text(
+                            child: Text(
                               'Sign In',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: SizeConfig.fontSize(context, 13),
                                 color: AppColors.brandGreen,
                                 fontWeight: FontWeight.bold,
                               ),

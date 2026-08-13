@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
@@ -164,21 +165,23 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 720),
+        constraints: BoxConstraints(
+          maxWidth: SizeConfig.scaleWidth(context, 720),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _filters(context, controller),
-            const SizedBox(height: 16),
+            SizedBox(height: SizeConfig.scaleHeight(context, 16)),
             if (controller.isLoading)
               const Expanded(child: LoadingWidget())
             else
               Expanded(
                 child: ListView(
                   children: [
-                    _deptReview(controller),
-                    const SizedBox(height: 16),
-                    _individualReview(controller),
+                    _deptReview(context, controller),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                    _individualReview(context, controller),
                   ],
                 ),
               ),
@@ -190,14 +193,14 @@ class _ReviewScreenState extends State<ReviewScreen> {
 
   Widget _filters(BuildContext context, ReviewController controller) {
     return GlassContainer(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
       child: Wrap(
-        spacing: 12,
-        runSpacing: 12,
+        spacing: SizeConfig.scaleWidth(context, 12),
+        runSpacing: SizeConfig.scaleHeight(context, 12),
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
           SizedBox(
-            width: 160,
+            width: SizeConfig.scaleWidth(context, 160),
             child: DropdownButtonFormField<String>(
               initialValue: _department,
               decoration: const InputDecoration(labelText: 'Department'),
@@ -213,34 +216,44 @@ class _ReviewScreenState extends State<ReviewScreen> {
             ),
           ),
           SizedBox(
-            width: 180,
-            height: 40,
+            width: SizeConfig.scaleWidth(context, 180),
+            height: SizeConfig.scaleHeight(context, 40),
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 8),
+                  ),
                 ),
               ),
               iconAlignment: IconAlignment.start,
               onPressed: () => _pickDate(isStart: true),
-              icon: const Icon(Icons.date_range_outlined, size: 18),
+              icon: Icon(
+                Icons.date_range_outlined,
+                size: SizeConfig.iconSize(context, 18),
+              ),
               label: Text(
                 _startDate == null ? 'Start Date' : _fmt(_startDate!),
               ),
             ),
           ),
           SizedBox(
-            width: 170,
-            height: 40,
+            width: SizeConfig.scaleWidth(context, 170),
+            height: SizeConfig.scaleHeight(context, 40),
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 8),
+                  ),
                 ),
               ),
               iconAlignment: IconAlignment.start,
               onPressed: () => _pickDate(isStart: false),
-              icon: const Icon(Icons.event_outlined, size: 18),
+              icon: Icon(
+                Icons.event_outlined,
+                size: SizeConfig.iconSize(context, 18),
+              ),
               label: Text(_endDate == null ? 'End Date' : _fmt(_endDate!)),
             ),
           ),
@@ -260,10 +273,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _deptReview(ReviewController controller) {
+  Widget _deptReview(BuildContext context, ReviewController controller) {
     final r = controller.departmentReview;
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -274,44 +287,50 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   onTap: () {
                     setState(() => _expandDepartment = !_expandDepartment);
                   },
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 8),
+                  ),
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'Department Review',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: SizeConfig.fontSize(context, 16),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: SizeConfig.scaleWidth(context, 8)),
                       AnimatedRotation(
                         turns: _expandDepartment ? 0.5 : 0,
                         duration: const Duration(milliseconds: 220),
                         curve: Curves.easeInOut,
-                        child: const Icon(Icons.keyboard_arrow_down, size: 20),
+                        child: Icon(
+                          Icons.keyboard_arrow_down,
+                          size: SizeConfig.iconSize(context, 20),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
               _exportButton(
+                context,
                 busy: _exportingDept,
                 onPressed: r == null ? null : _exportDept,
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           if (r == null)
             const Text('No data')
           else ...[
             Wrap(
-              spacing: 24,
-              runSpacing: 12,
+              spacing: SizeConfig.scaleWidth(context, 24),
+              runSpacing: SizeConfig.scaleHeight(context, 12),
               children: [
-                _stat('Shows', '${r.totalShows}'),
-                _stat('Shots', '${r.totalShots}'),
-                _stat('Mandays', r.totalMandays.toStringAsFixed(1)),
+                _stat(context, 'Shows', '${r.totalShows}'),
+                _stat(context, 'Shots', '${r.totalShots}'),
+                _stat(context, 'Mandays', r.totalMandays.toStringAsFixed(1)),
               ],
             ),
             AnimatedSize(
@@ -322,55 +341,55 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 12),
+                        SizedBox(height: SizeConfig.scaleHeight(context, 12)),
                         const Text(
                           'Mandays Details',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: SizeConfig.scaleHeight(context, 8)),
                         DynamicDataTable(
-                          fields: const [
+                          fields: [
                             DynamicTableField(
                               key: 'clientNo',
                               label: 'Client No',
-                              width: 110,
+                              width: SizeConfig.scaleWidth(context, 110),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'show',
                               label: 'Show',
-                              width: 160,
+                              width: SizeConfig.scaleWidth(context, 160),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'shot',
                               label: 'Shot',
-                              width: 130,
+                              width: SizeConfig.scaleWidth(context, 130),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'date',
                               label: 'Date',
-                              width: 110,
+                              width: SizeConfig.scaleWidth(context, 110),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'mandays',
                               label: 'Mandays',
-                              width: 100,
+                              width: SizeConfig.scaleWidth(context, 100),
                               numeric: true,
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'artist',
                               label: 'Artist',
-                              width: 120,
+                              width: SizeConfig.scaleWidth(context, 120),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'clientFeedback',
                               label: 'Client Feedback',
-                              width: 220,
+                              width: SizeConfig.scaleWidth(context, 220),
                               filterRequired: false,
                             ),
                           ],
@@ -387,8 +406,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                 },
                               )
                               .toList(growable: false),
-                          empty: const Padding(
-                            padding: EdgeInsets.all(12),
+                          empty: Padding(
+                            padding: EdgeInsets.all(
+                              SizeConfig.scaleWidth(context, 12),
+                            ),
                             child: Text('No detail rows for selected range.'),
                           ),
                         ),
@@ -402,10 +423,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _individualReview(ReviewController controller) {
+  Widget _individualReview(BuildContext context, ReviewController controller) {
     final r = controller.individualReview;
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -418,41 +439,49 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   },
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'My Review',
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                          fontSize: SizeConfig.fontSize(context, 16),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      SizedBox(width: SizeConfig.scaleWidth(context, 8)),
                       AnimatedRotation(
                         turns: _expandIndividual ? 0.5 : 0,
                         duration: const Duration(milliseconds: 220),
                         curve: Curves.easeInOut,
-                        child: const Icon(Icons.keyboard_arrow_down, size: 20),
+                        child: Icon(
+                          Icons.keyboard_arrow_down,
+                          size: SizeConfig.iconSize(context, 20),
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
               _exportButton(
+                context,
                 busy: _exportingIndividual,
                 onPressed: r == null ? null : _exportIndividual,
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           if (r == null)
             const Text('No data')
           else ...[
             Wrap(
-              spacing: 24,
-              runSpacing: 12,
+              spacing: SizeConfig.scaleWidth(context, 24),
+              runSpacing: SizeConfig.scaleHeight(context, 12),
               children: [
-                _stat('Name', r.name),
-                _stat('Shots worked', '${r.shotsWorked}'),
-                _stat('Mandays', r.mandaysDelivered.toStringAsFixed(1)),
+                _stat(context, 'Name', r.name),
+                _stat(context, 'Shots worked', '${r.shotsWorked}'),
+                _stat(
+                  context,
+                  'Mandays',
+                  r.mandaysDelivered.toStringAsFixed(1),
+                ),
               ],
             ),
             AnimatedSize(
@@ -463,55 +492,55 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   ? Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const SizedBox(height: 12),
+                        SizedBox(height: SizeConfig.scaleHeight(context, 12)),
                         const Text(
                           'Mandays Details',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        const SizedBox(height: 8),
+                        SizedBox(height: SizeConfig.scaleHeight(context, 8)),
                         DynamicDataTable(
-                          fields: const [
+                          fields: [
                             DynamicTableField(
                               key: 'clientNo',
                               label: 'Client No',
-                              width: 110,
+                              width: SizeConfig.scaleWidth(context, 110),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'show',
                               label: 'Show',
-                              width: 160,
+                              width: SizeConfig.scaleWidth(context, 160),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'shot',
                               label: 'Shot',
-                              width: 130,
+                              width: SizeConfig.scaleWidth(context, 130),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'date',
                               label: 'Date',
-                              width: 110,
+                              width: SizeConfig.scaleWidth(context, 110),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'mandays',
                               label: 'Mandays',
-                              width: 100,
+                              width: SizeConfig.scaleWidth(context, 100),
                               numeric: true,
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'artistStatus',
                               label: 'Artist Status',
-                              width: 130,
+                              width: SizeConfig.scaleWidth(context, 130),
                               filterRequired: false,
                             ),
                             DynamicTableField(
                               key: 'clientFeedback',
                               label: 'Client Feedback',
-                              width: 220,
+                              width: SizeConfig.scaleWidth(context, 220),
                               filterRequired: false,
                             ),
                           ],
@@ -528,8 +557,10 @@ class _ReviewScreenState extends State<ReviewScreen> {
                                 },
                               )
                               .toList(growable: false),
-                          empty: const Padding(
-                            padding: EdgeInsets.all(12),
+                          empty: Padding(
+                            padding: EdgeInsets.all(
+                              SizeConfig.scaleWidth(context, 12),
+                            ),
                             child: Text('No detail rows for selected range.'),
                           ),
                         ),
@@ -543,7 +574,11 @@ class _ReviewScreenState extends State<ReviewScreen> {
     );
   }
 
-  Widget _exportButton({required bool busy, VoidCallback? onPressed}) {
+  Widget _exportButton(
+    BuildContext context, {
+    required bool busy,
+    VoidCallback? onPressed,
+  }) {
     return ElevatedButton.icon(
       style: ElevatedButton.styleFrom(
         backgroundColor: AppColors.brandGreen,
@@ -551,32 +586,35 @@ class _ReviewScreenState extends State<ReviewScreen> {
       ),
       onPressed: busy ? null : onPressed,
       icon: busy
-          ? const SizedBox(
-              width: 16,
-              height: 16,
+          ? SizedBox(
+              width: SizeConfig.scaleWidth(context, 16),
+              height: SizeConfig.scaleHeight(context, 16),
               child: CircularProgressIndicator(
-                strokeWidth: 2,
+                strokeWidth: SizeConfig.scaleWidth(context, 2),
                 color: Colors.white,
               ),
             )
-          : const Icon(Icons.download, size: 18),
+          : Icon(Icons.download, size: SizeConfig.iconSize(context, 18)),
       label: const Text('Export XLSX'),
     );
   }
 
-  Widget _stat(String label, String value) {
+  Widget _stat(BuildContext context, String label, String value) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             color: AppColors.brandGreen,
             fontWeight: FontWeight.bold,
-            fontSize: 20,
+            fontSize: SizeConfig.fontSize(context, 20),
           ),
         ),
-        Text(label, style: const TextStyle(fontSize: 12)),
+        Text(
+          label,
+          style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
+        ),
       ],
     );
   }

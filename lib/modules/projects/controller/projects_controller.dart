@@ -30,8 +30,9 @@ class ProjectController extends ChangeNotifier {
   Future<void> init() async {
     _isLoading = true;
     _error = null;
-    selectedClientId = null;
-    selectedShowId = null;
+    selectedDepartment = allOption;
+    selectedClientId = allOption;
+    selectedShowId = allOption;
     _shows = [];
     _shots = [];
     notifyListeners();
@@ -43,6 +44,22 @@ class ProjectController extends ChangeNotifier {
       _clients = ((clientResp['clients'] as List<dynamic>?) ?? const [])
           .map((e) => ClientModel.fromJson(e as Map<String, dynamic>))
           .toList();
+      // Load all shows initially so "All" shows dropdown has content
+      final allShows = <ShowModel>[];
+      for (final client in _clients) {
+        try {
+          final resp = await _service.getShows(client.clientId);
+          final shows = ((resp['shows'] as List<dynamic>?) ?? const []).map(
+            (e) => ShowModel.fromJson(e as Map<String, dynamic>),
+          );
+          allShows.addAll(shows);
+        } catch (_) {
+          // skip clients that fail
+        }
+      }
+      _shows = allShows;
+      // Load all shots
+      await loadShots();
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -51,29 +68,49 @@ class ProjectController extends ChangeNotifier {
     }
   }
 
-  void selectDepartment(String department) {
+  /// "All" sentinel value for dropdowns.
+  static const String allOption = 'All';
+
+  void selectDepartment(String? department) {
     selectedDepartment = department;
     notifyListeners();
   }
 
-  Future<void> selectClient(String clientId) async {
+  Future<void> selectClient(String? clientId) async {
     selectedClientId = clientId;
-    selectedShowId = null;
+    selectedShowId = allOption;
     _shows = [];
     _shots = [];
     notifyListeners();
-    try {
-      final resp = await _service.getShows(clientId);
-      _shows = ((resp['shows'] as List<dynamic>?) ?? const [])
-          .map((e) => ShowModel.fromJson(e as Map<String, dynamic>))
-          .toList();
+    if (clientId != null && clientId != allOption) {
+      try {
+        final resp = await _service.getShows(clientId);
+        _shows = ((resp['shows'] as List<dynamic>?) ?? const [])
+            .map((e) => ShowModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+        notifyListeners();
+      } catch (e) {
+        debugPrint('ProjectController.selectClient error: $e');
+      }
+    } else {
+      // "All" selected — reload all shows
+      final allShows = <ShowModel>[];
+      for (final client in _clients) {
+        try {
+          final resp = await _service.getShows(client.clientId);
+          final shows = ((resp['shows'] as List<dynamic>?) ?? const []).map(
+            (e) => ShowModel.fromJson(e as Map<String, dynamic>),
+          );
+          allShows.addAll(shows);
+        } catch (_) {}
+      }
+      _shows = allShows;
       notifyListeners();
-    } catch (e) {
-      debugPrint('ProjectController.selectClient error: $e');
     }
+    await loadShots();
   }
 
-  Future<void> selectShow(String showId) async {
+  Future<void> selectShow(String? showId) async {
     selectedShowId = showId;
     notifyListeners();
     await loadShots();
@@ -86,9 +123,9 @@ class ProjectController extends ChangeNotifier {
     notifyListeners();
     try {
       final resp = await _service.getShots(
-        department: selectedDepartment,
-        clientId: selectedClientId,
-        showId: selectedShowId,
+        department: selectedDepartment == allOption ? null : selectedDepartment,
+        clientId: selectedClientId == allOption ? null : selectedClientId,
+        showId: selectedShowId == allOption ? null : selectedShowId,
       );
       _shots = ((resp['shots'] as List<dynamic>?) ?? const [])
           .map((e) => ShotModel.fromJson(e as Map<String, dynamic>))
@@ -163,12 +200,21 @@ class ProjectController extends ChangeNotifier {
     }
   }
 
+  /// Bulk-upserts [rows] to the API.
+  ///
+  /// [reload] defaults to `true` and refetches the whole shot list afterwards.
+  /// Pass `reload: false` when saving many chunks in a loop — each call would
+  /// otherwise trigger a full network refetch + grid rebuild (major UI jank).
+  /// The caller should then call [loadShots] ONCE after the loop finishes.
   Future<Map<String, dynamic>?> bulkUpsertShots(
-    List<Map<String, dynamic>> rows,
-  ) async {
+    List<Map<String, dynamic>> rows, {
+    bool reload = true,
+  }) async {
     try {
       final resp = await _service.bulkUpsertShots(rows);
-      await loadShots();
+      if (reload) {
+        await loadShots();
+      }
       return resp;
     } on ApiException catch (e) {
       _error = e.message;
@@ -187,6 +233,30 @@ class ProjectController extends ChangeNotifier {
       await loadShots();
     } catch (e) {
       debugPrint('ProjectController.updateStatus error: $e');
+    }
+  }
+
+  Future<String?> deleteShot(String shotId) async {
+    try {
+      await _service.deleteShot(shotId);
+      await loadShots();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
+  Future<String?> bulkDeleteShots(List<String> shotIds) async {
+    try {
+      await _service.bulkDeleteShots(shotIds);
+      await loadShots();
+      return null;
+    } on ApiException catch (e) {
+      return e.message;
+    } catch (e) {
+      return e.toString();
     }
   }
 }

@@ -12,6 +12,7 @@ class AccessProvider extends ChangeNotifier {
     '/dashboard',
     '/bidding',
     '/projects',
+    '/production-management',
     '/assets',
     '/tasks',
     '/review',
@@ -30,6 +31,7 @@ class AccessProvider extends ChangeNotifier {
     '/dashboard',
     '/bidding',
     '/projects',
+    '/production-management',
     '/assets',
     '/tasks',
     '/review',
@@ -55,6 +57,7 @@ class AccessProvider extends ChangeNotifier {
     '/dashboard',
     '/bidding',
     '/projects',
+    '/production-management',
     '/assets',
     '/tasks',
     '/review',
@@ -167,6 +170,8 @@ class AccessProvider extends ChangeNotifier {
         return 'Bidding';
       case '/projects':
         return 'Projects';
+      case '/production-management':
+        return 'Production Management';
       case '/assets':
         return 'Assets';
       case '/tasks':

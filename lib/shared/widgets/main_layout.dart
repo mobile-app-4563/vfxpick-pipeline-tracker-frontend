@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/controllers/theme_controller.dart';
+import '../../core/utils/size_config.dart';
 import '../../modules/auth/controller/auth_controller.dart';
 import '../../modules/notifications/controller/notification_controller.dart';
 import 'custom_sidebar.dart';
@@ -34,6 +35,7 @@ class _MainLayoutState extends State<MainLayout> {
     if (path.contains('/home')) return 'Home';
     if (path.contains('/dashboard')) return 'Dashboard';
     if (path.contains('/projects')) return 'Projects';
+    if (path.contains('/production-management')) return 'Production Management';
     if (path.contains('/assets')) return 'Assets';
     if (path.contains('/tasks')) return 'Tasks';
     if (path.contains('/review')) return 'Review';
@@ -50,8 +52,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isMobile = screenWidth < 900;
+    final isMobile = SizeConfig.isMobile(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authController = Provider.of<AuthController>(context);
     final themeController = Provider.of<ThemeController>(context);
@@ -72,15 +73,16 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       ),
       appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(60),
-
+        preferredSize: Size.fromHeight(SizeConfig.scaleHeight(context, 90)),
         child: PointerInterceptor(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4.0),
+            padding: EdgeInsets.symmetric(
+              vertical: SizeConfig.scaleHeight(context, 4),
+            ),
             child: AppBar(
               shadowColor: Colors.transparent,
               surfaceTintColor: Colors.transparent,
-              toolbarHeight: 60,
+              toolbarHeight: SizeConfig.scaleHeight(context, 60),
               elevation: 0,
               backgroundColor: Colors.transparent,
               leading: IconButton(
@@ -97,7 +99,11 @@ class _MainLayoutState extends State<MainLayout> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: isMobile ? 16 : 18,
+                  fontSize: SizeConfig.deviceValue(
+                    context,
+                    mobile: 16.0,
+                    desktop: 18.0,
+                  ),
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                   color: isDark
@@ -113,7 +119,7 @@ class _MainLayoutState extends State<MainLayout> {
                           IconButton(
                             icon: Icon(
                               Icons.notifications_none,
-                              size: 22,
+                              size: SizeConfig.iconSize(context, 22),
                               color: isDark
                                   ? AppColors.darkTextPrimary
                                   : AppColors.lightTextPrimary,
@@ -122,24 +128,26 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                           if (notificationController.unreadCount > 0)
                             Positioned(
-                              right: 6,
-                              top: 6,
+                              right: SizeConfig.scaleWidth(context, 6),
+                              top: SizeConfig.scaleHeight(context, 6),
                               child: Container(
-                                padding: const EdgeInsets.all(4),
+                                padding: EdgeInsets.all(
+                                  SizeConfig.scaleWidth(context, 4),
+                                ),
                                 decoration: const BoxDecoration(
                                   color: AppColors.priorityHigh,
                                   shape: BoxShape.circle,
                                 ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
+                                constraints: BoxConstraints(
+                                  minWidth: SizeConfig.scaleWidth(context, 16),
+                                  minHeight: SizeConfig.scaleWidth(context, 16),
                                 ),
                                 child: Text(
                                   '${notificationController.unreadCount}',
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 9,
+                                    fontSize: SizeConfig.fontSize(context, 9),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -150,15 +158,15 @@ class _MainLayoutState extends State<MainLayout> {
                       PopupMenuButton<String>(
                         tooltip: 'Quick actions',
                         icon: CircleAvatar(
-                          radius: 14,
+                          radius: SizeConfig.scaleWidth(context, 14),
                           backgroundColor: AppColors.brandGreen,
                           child: Text(
                             (user?.avatar.isNotEmpty ?? false)
                                 ? user!.avatar
                                 : 'U',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: Colors.white,
-                              fontSize: 11,
+                              fontSize: SizeConfig.fontSize(context, 11),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -185,10 +193,14 @@ class _MainLayoutState extends State<MainLayout> {
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                                const SizedBox(height: 2),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 2),
+                                ),
                                 Text(
-                                  '${user?.role ?? ''} • ${user?.department ?? ''}',
-                                  style: const TextStyle(fontSize: 12),
+                                  '${user?.role ?? ''} â€¢ ${user?.department ?? ''}',
+                                  style: TextStyle(
+                                    fontSize: SizeConfig.fontSize(context, 12),
+                                  ),
                                 ),
                               ],
                             ),
@@ -198,11 +210,11 @@ class _MainLayoutState extends State<MainLayout> {
                             value: 'theme',
                             child: Row(
                               children: [
-                                const Icon(
+                                Icon(
                                   Icons.brightness_6_outlined,
-                                  size: 18,
+                                  size: SizeConfig.iconSize(context, 18),
                                 ),
-                                const SizedBox(width: 8),
+                                SizeConfig.sizedBoxW(context, 8),
                                 Text(
                                   themeController.isDarkMode
                                       ? 'Switch to Light'
@@ -211,23 +223,26 @@ class _MainLayoutState extends State<MainLayout> {
                               ],
                             ),
                           ),
-                          const PopupMenuItem<String>(
+                          PopupMenuItem<String>(
                             value: 'notifications',
                             child: Row(
                               children: [
-                                Icon(Icons.notifications_none, size: 18),
-                                SizedBox(width: 8),
+                                Icon(
+                                  Icons.notifications_none,
+                                  size: SizeConfig.iconSize(context, 18),
+                                ),
+                                SizeConfig.sizedBoxW(context, 8),
                                 Text('Notifications'),
                               ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(width: 6),
+                      SizeConfig.sizedBoxW(context, 6),
                     ]
                   : [
                       SizedBox(
-                        height: 40,
+                        height: SizeConfig.scaleHeight(context, 40),
                         child: VerticalDivider(
                           thickness: 1,
                           color: isDark
@@ -235,13 +250,13 @@ class _MainLayoutState extends State<MainLayout> {
                               : AppColors.lightCardBorder,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizeConfig.sizedBoxW(context, 12),
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(
                             Icons.light_mode,
-                            size: 16,
+                            size: SizeConfig.iconSize(context, 16),
                             color: isDark
                                 ? AppColors.darkTextSecondary
                                 : AppColors.brandGreen,
@@ -253,21 +268,21 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                           Icon(
                             Icons.dark_mode,
-                            size: 16,
+                            size: SizeConfig.iconSize(context, 16),
                             color: isDark
                                 ? AppColors.brandGreen
                                 : AppColors.lightTextSecondary,
                           ),
                         ],
                       ),
-                      const SizedBox(width: 8),
+                      SizeConfig.sizedBoxW(context, 8),
                       Stack(
                         clipBehavior: Clip.none,
                         children: [
                           IconButton(
                             icon: Icon(
                               Icons.notifications_none,
-                              size: 24,
+                              size: SizeConfig.iconSize(context, 24),
                               color: isDark
                                   ? AppColors.darkTextPrimary
                                   : AppColors.lightTextPrimary,
@@ -276,24 +291,26 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                           if (notificationController.unreadCount > 0)
                             Positioned(
-                              right: 6,
-                              top: 6,
+                              right: SizeConfig.scaleWidth(context, 6),
+                              top: SizeConfig.scaleHeight(context, 6),
                               child: Container(
-                                padding: const EdgeInsets.all(4),
+                                padding: EdgeInsets.all(
+                                  SizeConfig.scaleWidth(context, 4),
+                                ),
                                 decoration: const BoxDecoration(
                                   color: AppColors.priorityHigh,
                                   shape: BoxShape.circle,
                                 ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
+                                constraints: BoxConstraints(
+                                  minWidth: SizeConfig.scaleWidth(context, 16),
+                                  minHeight: SizeConfig.scaleWidth(context, 16),
                                 ),
                                 child: Text(
                                   '${notificationController.unreadCount}',
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 9,
+                                    fontSize: SizeConfig.fontSize(context, 9),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -301,9 +318,10 @@ class _MainLayoutState extends State<MainLayout> {
                             ),
                         ],
                       ),
-                      const SizedBox(width: 8),
+                      SizeConfig.sizedBoxW(context, 8),
                       Padding(
-                        padding: const EdgeInsets.symmetric(
+                        padding: SizeConfig.paddingSymmetric(
+                          context,
                           horizontal: 12,
                           vertical: 8,
                         ),
@@ -311,20 +329,20 @@ class _MainLayoutState extends State<MainLayout> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             CircleAvatar(
-                              radius: 16,
+                              radius: SizeConfig.scaleWidth(context, 16),
                               backgroundColor: AppColors.brandGreen,
                               child: Text(
                                 (user?.avatar.isNotEmpty ?? false)
                                     ? user!.avatar
                                     : 'U',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.white,
-                                  fontSize: 12,
+                                  fontSize: SizeConfig.fontSize(context, 12),
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            SizeConfig.sizedBoxW(context, 8),
                             Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,7 +351,7 @@ class _MainLayoutState extends State<MainLayout> {
                                   user?.name ?? 'Guest User',
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 13,
+                                    fontSize: SizeConfig.fontSize(context, 13),
                                     fontWeight: FontWeight.bold,
                                     color: isDark
                                         ? AppColors.darkTextPrimary
@@ -341,10 +359,10 @@ class _MainLayoutState extends State<MainLayout> {
                                   ),
                                 ),
                                 Text(
-                                  '${user?.role ?? ''}  •  ${user?.department ?? ''}',
+                                  '${user?.role ?? ''}  â€¢  ${user?.department ?? ''}',
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: SizeConfig.fontSize(context, 10),
                                     color: isDark
                                         ? AppColors.darkTextSecondary
                                         : AppColors.lightTextSecondary,
@@ -355,15 +373,17 @@ class _MainLayoutState extends State<MainLayout> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizeConfig.sizedBoxW(context, 12),
                     ],
             ),
           ),
         ),
       ),
       body: Padding(
-        padding: EdgeInsets.symmetric(horizontal: isMobile ? 10 : 20),
-        child: Transform.scale(scale: 0.97, child: widget.child),
+        padding: EdgeInsets.symmetric(
+          horizontal: SizeConfig.scaleWidth(context, isMobile ? 10 : 20),
+        ),
+        child: widget.child,
       ),
     );
   }

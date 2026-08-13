@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 import '../../core/models/todays_pickout_model.dart';
+import 'gradient_box_border.dart';
 import 'shot_chat_dialog.dart';
 
 /// TodaysPickoutWidget displays a shot card with priority highlighting.
@@ -54,32 +56,32 @@ class TodaysPickoutWidget extends StatelessWidget {
     final priorityColor = _getPriorityColor();
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      margin: SizeConfig.paddingSymmetric(context, horizontal: 16, vertical: 8),
       elevation: 0,
       color: isDark ? AppColors.darkCardFill : AppColors.lightCardFill,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(
-          color: isDark ? AppColors.darkCardBorder : AppColors.lightCardBorder,
-          width: 1,
-        ),
+      shape: GradientBoxBorder(
+        gradient: AppColors.brandGradient,
+        width: SizeConfig.scaleWidth(context, 1),
+        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 8)),
       ),
       child: GestureDetector(
         onTap: onTap ?? () => _showChatDialog(context),
         child: Container(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
           child: Row(
             children: [
               // Priority badge
               Container(
-                width: 4,
-                height: 60,
+                width: SizeConfig.scaleWidth(context, 4),
+                height: SizeConfig.scaleHeight(context, 60),
                 decoration: BoxDecoration(
                   color: priorityColor,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 2),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
+              SizeConfig.sizedBoxW(context, 12),
               // Shot details
               Expanded(
                 child: Column(
@@ -93,7 +95,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                           child: Text(
                             pickout.shot.shotCode,
                             style: TextStyle(
-                              fontSize: 14,
+                              fontSize: SizeConfig.fontSize(context, 14),
                               fontWeight: FontWeight.bold,
                               color: isDark
                                   ? AppColors.darkTextPrimary
@@ -103,22 +105,25 @@ class TodaysPickoutWidget extends StatelessWidget {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(
+                          padding: SizeConfig.paddingSymmetric(
+                            context,
                             horizontal: 8,
                             vertical: 4,
                           ),
                           decoration: BoxDecoration(
                             color: priorityColor.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(4),
+                            borderRadius: BorderRadius.circular(
+                              SizeConfig.scaleWidth(context, 4),
+                            ),
                             border: Border.all(
                               color: priorityColor,
-                              width: 0.5,
+                              width: SizeConfig.scaleWidth(context, 0.5),
                             ),
                           ),
                           child: Text(
                             pickout.priorityLabel,
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: SizeConfig.fontSize(context, 10),
                               fontWeight: FontWeight.bold,
                               color: priorityColor,
                             ),
@@ -126,7 +131,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 4)),
                     // Row 2: Show + Department
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -135,7 +140,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                           child: Text(
                             pickout.shot.showName ?? 'N/A',
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: SizeConfig.fontSize(context, 12),
                               color: isDark
                                   ? AppColors.darkTextSecondary
                                   : AppColors.lightTextSecondary,
@@ -143,20 +148,23 @@ class TodaysPickoutWidget extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizeConfig.sizedBoxW(context, 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(
+                          padding: SizeConfig.paddingSymmetric(
+                            context,
                             horizontal: 6,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
                             color: AppColors.brandGreen.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(3),
+                            borderRadius: BorderRadius.circular(
+                              SizeConfig.scaleWidth(context, 3),
+                            ),
                           ),
                           child: Text(
                             pickout.shot.department,
-                            style: const TextStyle(
-                              fontSize: 10,
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 10),
                               fontWeight: FontWeight.w500,
                               color: AppColors.brandGreen,
                             ),
@@ -164,7 +172,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 4)),
                     // Row 3: Priority reason + Due Date
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -172,7 +180,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                         Text(
                           pickout.priorityReason,
                           style: TextStyle(
-                            fontSize: 11,
+                            fontSize: SizeConfig.fontSize(context, 11),
                             color: priorityColor,
                             fontStyle: FontStyle.italic,
                           ),
@@ -180,7 +188,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                         Text(
                           'Due: ${_formatDate(pickout.shot.dueDate)}',
                           style: TextStyle(
-                            fontSize: 10,
+                            fontSize: SizeConfig.fontSize(context, 10),
                             color: isDark
                                 ? AppColors.darkTextSecondary
                                 : AppColors.lightTextSecondary,
@@ -191,13 +199,13 @@ class TodaysPickoutWidget extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 12),
+              SizeConfig.sizedBoxW(context, 12),
               // Chat icon
               GestureDetector(
                 onTap: () => _showChatDialog(context),
                 child: Icon(
                   Icons.chat_bubble_outline,
-                  size: 20,
+                  size: SizeConfig.iconSize(context, 20),
                   color: isDark
                       ? AppColors.darkTextSecondary
                       : AppColors.lightTextSecondary,

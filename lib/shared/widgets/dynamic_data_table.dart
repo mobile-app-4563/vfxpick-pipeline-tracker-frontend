@@ -1,7 +1,6 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
-import 'package:vfxpick_pipeline/shared/widgets/filter_icon.dart';
+import '../../core/utils/size_config.dart';
+import 'filter_icon.dart';
 
 typedef DynamicFieldBuilder =
     Widget Function(
@@ -20,7 +19,7 @@ class DynamicTableField {
   final List<FilterOption>? filterOptions;
   final bool? filterRequired;
 
-  const DynamicTableField({
+  DynamicTableField({
     required this.key,
     required this.label,
     this.width,
@@ -31,7 +30,7 @@ class DynamicTableField {
   });
 }
 
-class DynamicDataTable extends StatelessWidget {
+class DynamicDataTable extends StatefulWidget {
   final List<DynamicTableField> fields;
   final List<Map<String, dynamic>> rows;
   final double? width;
@@ -46,6 +45,10 @@ class DynamicDataTable extends StatelessWidget {
   final void Function(String fieldKey, dynamic value)? onFilterChanged;
   final bool enableMobileFilterFab;
   final double mobileBreakpoint;
+  final int frozenColumnCount;
+  final int rowsPerPage;
+  final int? currentPage;
+  final ValueChanged<int>? onPageChanged;
 
   const DynamicDataTable({
     super.key,
@@ -63,20 +66,99 @@ class DynamicDataTable extends StatelessWidget {
     this.onFilterChanged,
     this.enableMobileFilterFab = true,
     this.mobileBreakpoint = 900,
+    this.frozenColumnCount = 0,
+    this.rowsPerPage = 50,
+    this.currentPage,
+    this.onPageChanged,
   });
 
-  double _estimatedWidth() {
-    var total = 0.0;
-    for (final field in fields) {
-      total += field.width ?? _autoWidthForLabel(field.label);
-    }
-    total += math.max(0, fields.length - 1) * columnSpacing;
-    return total + 32;
+  @override
+  State<DynamicDataTable> createState() => _DynamicDataTableState();
+}
+
+class _DynamicDataTableState extends State<DynamicDataTable> {
+  int _internalPage = 0;
+
+  final ScrollController _hScrollController = ScrollController();
+  bool _isDragging = false;
+  bool _hasOverflow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hScrollController.addListener(_onScrollChanged);
   }
 
-  double _autoWidthForLabel(String label) {
-    final estimated = (label.length * 9) + 40;
-    return math.max(minColumnWidth, estimated.toDouble());
+  @override
+  void dispose() {
+    _hScrollController.removeListener(_onScrollChanged);
+    _hScrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScrollChanged() {
+    // maxScrollExtent is only valid after layout and the listener can fire
+    // during layout — defer the check so setState is never called mid-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_hScrollController.hasClients) return;
+      final has = _hScrollController.position.maxScrollExtent > 0;
+      if (has != _hasOverflow) setState(() => _hasOverflow = has);
+    });
+  }
+
+  void _panTable(double dx) {
+    if (!_hScrollController.hasClients) return;
+    final pos = _hScrollController.position;
+    if (pos.maxScrollExtent <= 0) return;
+    _hScrollController.jumpTo(
+      (pos.pixels - dx).clamp(0.0, pos.maxScrollExtent),
+    );
+  }
+
+  void _setDragging(bool value) {
+    if (_isDragging == value || !mounted) return;
+    setState(() => _isDragging = value);
+  }
+
+  int get _effectivePage {
+    if (widget.currentPage != null && widget.onPageChanged != null) {
+      return widget.currentPage!;
+    }
+    return _internalPage;
+  }
+
+  int get _totalPages => widget.rowsPerPage > 0
+      ? (widget.rows.length / widget.rowsPerPage).ceil()
+      : 1;
+
+  List<Map<String, dynamic>> get _visibleRows {
+    final page = _effectivePage;
+    if (widget.rowsPerPage <= 0 || widget.rows.length <= widget.rowsPerPage) {
+      return widget.rows;
+    }
+    final start = page * widget.rowsPerPage;
+    final end = (start + widget.rowsPerPage).clamp(0, widget.rows.length);
+    if (start >= widget.rows.length) {
+      if (widget.currentPage != null && widget.onPageChanged != null) {
+        widget.onPageChanged!(0);
+        return widget.rows.take(widget.rowsPerPage).toList();
+      }
+      _internalPage = 0;
+      return widget.rows.take(widget.rowsPerPage).toList();
+    }
+    return widget.rows.sublist(start, end);
+  }
+
+  @override
+  void didUpdateWidget(covariant DynamicDataTable oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final externalControl =
+        widget.currentPage != null && widget.onPageChanged != null;
+    if (!externalControl &&
+        oldWidget.rows.length != widget.rows.length &&
+        _internalPage >= _totalPages) {
+      _internalPage = (_totalPages - 1).clamp(0, _totalPages);
+    }
   }
 
   String _initialFilterValueForField(DynamicTableField field) {
@@ -88,6 +170,137 @@ class DynamicDataTable extends StatelessWidget {
       return '';
     }
     return selected.first.value.toString();
+  }
+
+  Widget _buildDataTableForFields(
+    BuildContext context,
+    List<DynamicTableField> tableFields,
+    bool isMobile,
+    List<Map<String, dynamic>> tableRows, {
+    bool enableSwipe = true,
+  }) {
+    final table = SingleChildScrollView(
+      controller: enableSwipe ? _hScrollController : null,
+      scrollDirection: Axis.horizontal,
+      child: DataTable(
+        headingRowHeight: widget.headingRowHeight,
+        dataRowMinHeight: widget.dataRowMinHeight,
+        dataRowMaxHeight: widget.dataRowMaxHeight,
+        columnSpacing: widget.columnSpacing,
+        columns: tableFields.map((field) {
+          return DataColumn(
+            numeric: field.numeric,
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    field.label,
+                    textAlign: TextAlign.center,
+                    softWrap: false,
+                    overflow: TextOverflow.visible,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+        rows: List<DataRow>.generate(tableRows.length, (index) {
+          final row = tableRows[index];
+          return DataRow(
+            cells: tableFields.map((field) {
+              final value = row[field.key];
+              Widget child;
+              if (field.builder != null) {
+                child = field.builder!(context, value, row, index);
+              } else {
+                final displayText =
+                    (value == null || value.toString().trim().isEmpty)
+                    ? '-'
+                    : value.toString();
+                child = Text(
+                  displayText,
+                  textAlign: TextAlign.center,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                );
+              }
+              return DataCell(child);
+            }).toList(),
+          );
+        }),
+      ),
+    );
+
+    if (!enableSwipe) return table;
+
+    return MouseRegion(
+      cursor: _isDragging
+          ? SystemMouseCursors.grabbing
+          : (_hasOverflow ? SystemMouseCursors.grab : SystemMouseCursors.basic),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: (_) => _setDragging(true),
+        onHorizontalDragUpdate: (details) => _panTable(details.delta.dx),
+        onHorizontalDragEnd: (_) => _setDragging(false),
+        onHorizontalDragCancel: () => _setDragging(false),
+        child: table,
+      ),
+    );
+  }
+
+  /// Hand-icon dragger pill pinned under the table. Dragging it (or dragging
+  /// anywhere on the table with the mouse) pans wide tables horizontally.
+  Widget _buildSwipeHandle(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(top: SizeConfig.scaleHeight(context, 4)),
+      child: Center(
+        child: MouseRegion(
+          cursor: _isDragging
+              ? SystemMouseCursors.grabbing
+              : SystemMouseCursors.grab,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onHorizontalDragStart: (_) => _setDragging(true),
+            onHorizontalDragUpdate: (details) => _panTable(details.delta.dx),
+            onHorizontalDragEnd: (_) => _setDragging(false),
+            onHorizontalDragCancel: () => _setDragging(false),
+            child: Container(
+              padding: EdgeInsets.symmetric(
+                horizontal: SizeConfig.scaleWidth(context, 12),
+                vertical: SizeConfig.scaleHeight(context, 4),
+              ),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerHighest.withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: scheme.outlineVariant.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.back_hand,
+                    size: SizeConfig.iconSize(context, 14),
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  SizedBox(width: SizeConfig.scaleWidth(context, 5)),
+                  Text(
+                    'Swipe',
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 11),
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _showMobileFilters(
@@ -108,20 +321,25 @@ class DynamicDataTable extends StatelessWidget {
             final bottomInset = MediaQuery.of(context).viewInsets.bottom;
             return SafeArea(
               child: Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+                padding: EdgeInsets.fromLTRB(
+                  SizeConfig.scaleWidth(context, 16),
+                  SizeConfig.scaleHeight(context, 16),
+                  SizeConfig.scaleWidth(context, 16),
+                  SizeConfig.scaleHeight(context, 16) + bottomInset,
+                ),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
+                      Text(
                         'Filters',
                         style: TextStyle(
-                          fontSize: 18,
+                          fontSize: SizeConfig.fontSize(context, 18),
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 12)),
                       ...filterableFields.map((field) {
                         final options = field.filterOptions ?? const [];
                         final typedOptions = options
@@ -138,7 +356,9 @@ class DynamicDataTable extends StatelessWidget {
                               ? currentValue
                               : null;
                           return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
+                            padding: EdgeInsets.only(
+                              bottom: SizeConfig.scaleHeight(context, 10),
+                            ),
                             child: DropdownButtonFormField<String>(
                               initialValue: validCurrent,
                               decoration: InputDecoration(
@@ -164,7 +384,9 @@ class DynamicDataTable extends StatelessWidget {
                         }
 
                         return Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
+                          padding: EdgeInsets.only(
+                            bottom: SizeConfig.scaleHeight(context, 10),
+                          ),
                           child: TextFormField(
                             initialValue: draft[field.key] ?? '',
                             decoration: InputDecoration(
@@ -178,7 +400,7 @@ class DynamicDataTable extends StatelessWidget {
                           ),
                         );
                       }),
-                      const SizedBox(height: 8),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 8)),
                       Row(
                         children: [
                           Expanded(
@@ -186,19 +408,19 @@ class DynamicDataTable extends StatelessWidget {
                               onPressed: () {
                                 for (final field in filterableFields) {
                                   draft[field.key] = '';
-                                  onFilterChanged?.call(field.key, '');
+                                  widget.onFilterChanged?.call(field.key, '');
                                 }
                                 Navigator.of(sheetContext).pop();
                               },
                               child: const Text('Clear'),
                             ),
                           ),
-                          const SizedBox(width: 10),
+                          SizedBox(width: SizeConfig.scaleWidth(context, 10)),
                           Expanded(
                             child: ElevatedButton(
                               onPressed: () {
                                 for (final field in filterableFields) {
-                                  onFilterChanged?.call(
+                                  widget.onFilterChanged?.call(
                                     field.key,
                                     draft[field.key] ?? '',
                                   );
@@ -223,125 +445,106 @@ class DynamicDataTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (fields.isEmpty) {
+    if (widget.fields.isEmpty) {
       return const SizedBox.shrink();
     }
-    if (rows.isEmpty && empty != null) {
-      return empty!;
+    if (widget.rows.isEmpty && widget.empty != null) {
+      return widget.empty!;
     }
+
+    final visibleRows = _visibleRows;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < mobileBreakpoint;
-        final filterableFields = fields
+        final isMobile = constraints.maxWidth < widget.mobileBreakpoint;
+        final filterableFields = widget.fields
             .where((field) => field.filterRequired != false)
             .toList(growable: false);
-        final estimatedWidth = width ?? _estimatedWidth();
-        final viewportWidth = constraints.maxWidth.isFinite
-            ? constraints.maxWidth
-            : estimatedWidth;
-        final minWidth = math.max(viewportWidth, estimatedWidth);
-
-        final table = DataTable(
-          headingRowHeight: headingRowHeight,
-          dataRowMinHeight: dataRowMinHeight,
-          dataRowMaxHeight: dataRowMaxHeight,
-          columnSpacing: columnSpacing,
-          columns: fields
-              .map(
-                (field) => DataColumn(
-                  numeric: field.numeric,
-                  label: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      minWidth: field.width ?? _autoWidthForLabel(field.label),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Text(field.label, textAlign: TextAlign.left),
-                        if (!isMobile && field.filterRequired != false)
-                          FilterIcon(
-                            label: field.label,
-                            options:
-                                field.filterOptions != null &&
-                                    field.filterOptions!.isNotEmpty
-                                ? field.filterOptions!
-                                : [
-                                    FilterOption(
-                                      label: 'Custom...',
-                                      value: '__custom__',
-                                      needsQuery: true,
-                                    ),
-                                  ],
-                            onFilterChanged: (v) {
-                              if (onFilterChanged != null) {
-                                onFilterChanged!(field.key, v);
-                              }
-                            },
-                            onClear: () {
-                              if (onFilterChanged != null) {
-                                onFilterChanged!(field.key, '');
-                              }
-                            },
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              )
-              .toList(),
-          rows: List<DataRow>.generate(rows.length, (index) {
-            final row = rows[index];
-            return DataRow(
-              cells: fields.map((field) {
-                final value = row[field.key];
-                Widget child;
-                if (field.builder != null) {
-                  child = field.builder!(context, value, row, index);
-                } else {
-                  child = Text(
-                    (value ?? '—').toString(),
-                    textAlign: field.numeric
-                        ? TextAlign.center
-                        : TextAlign.start,
-                  );
-                }
-
-                child = ConstrainedBox(
-                  constraints: BoxConstraints(
-                    minWidth: field.width ?? _autoWidthForLabel(field.label),
-                  ),
-                  child: child,
-                );
-                return DataCell(child);
-              }).toList(),
-            );
-          }),
-        );
-
-        final horizontal = SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minWidth: minWidth),
-            child: table,
-          ),
-        );
-
-        final content = Padding(padding: padding, child: horizontal);
         final shouldShowMobileFilterFab =
             isMobile &&
-            enableMobileFilterFab &&
-            onFilterChanged != null &&
+            widget.enableMobileFilterFab &&
+            widget.onFilterChanged != null &&
             filterableFields.isNotEmpty;
+
+        Widget buildContent() {
+          // ── Frozen columns mode ──────────────────────────────────
+          if (widget.frozenColumnCount > 0 &&
+              widget.frozenColumnCount < widget.fields.length) {
+            final frozenFieldsList = widget.fields
+                .take(widget.frozenColumnCount)
+                .toList();
+            final scrollableFieldsList = widget.fields
+                .skip(widget.frozenColumnCount)
+                .toList();
+
+            final frozenTable = _buildDataTableForFields(
+              context,
+              frozenFieldsList,
+              isMobile,
+              visibleRows,
+              enableSwipe: false,
+            );
+            final scrollableTable = _buildDataTableForFields(
+              context,
+              scrollableFieldsList,
+              isMobile,
+              visibleRows,
+            );
+
+            return LayoutBuilder(
+              builder: (ctx, outerConstraints) {
+                final availableWidth = outerConstraints.maxWidth.isFinite
+                    ? outerConstraints.maxWidth
+                    : 800.0;
+                final frozenW = availableWidth * 0.40;
+
+                return SizedBox(
+                  width: availableWidth,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: frozenW,
+                        child: Column(
+                          children: [
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).cardColor,
+                              ),
+                              child: frozenTable,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const VerticalDivider(width: 1),
+                      Expanded(child: ClipRect(child: scrollableTable)),
+                    ],
+                  ),
+                );
+              },
+            );
+          }
+
+          // ── Standard (no frozen columns) ─────────────────────────
+          final table = _buildDataTableForFields(
+            context,
+            widget.fields,
+            isMobile,
+            visibleRows,
+          );
+          return ClipRect(child: table);
+        }
+
+        final content = Padding(padding: widget.padding, child: buildContent());
 
         final tableWithMobileFilters = Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (shouldShowMobileFilterFab)
               Padding(
-                padding: const EdgeInsets.only(bottom: 8),
+                padding: EdgeInsets.only(
+                  bottom: SizeConfig.scaleHeight(context, 8),
+                ),
                 child: Align(
                   alignment: Alignment.centerRight,
                   child: FloatingActionButton.small(
@@ -352,14 +555,22 @@ class DynamicDataTable extends StatelessWidget {
                   ),
                 ),
               ),
+
             content,
+            // if (_hasOverflow) _buildSwipeHandle(context),
           ],
         );
 
-        if (height != null) {
+        if (widget.height != null) {
           return SizedBox(
-            height: height,
-            child: SingleChildScrollView(child: tableWithMobileFilters),
+            height: widget.height,
+            child: Column(
+              children: [
+                Flexible(
+                  child: SingleChildScrollView(child: tableWithMobileFilters),
+                ),
+              ],
+            ),
           );
         }
         return tableWithMobileFilters;

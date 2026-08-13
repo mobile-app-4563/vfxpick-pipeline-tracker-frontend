@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../core/models/shot_model.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
@@ -48,13 +49,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     super.dispose();
   }
 
-  InputDecoration _inputDecoration({
+  InputDecoration _inputDecoration(
+    BuildContext context, {
     String? hintText,
     String? labelText,
     Widget? prefixIcon,
   }) {
     final baseBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 6)),
       borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
     );
 
@@ -63,7 +65,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       labelText: labelText,
       prefixIcon: prefixIcon,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      contentPadding: EdgeInsets.symmetric(
+        vertical: SizeConfig.scaleHeight(context, 14),
+        horizontal: SizeConfig.scaleWidth(context, 14),
+      ),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.04),
       hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
@@ -73,7 +78,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       focusedBorder: baseBorder.copyWith(
         borderSide: BorderSide(
           color: AppColors.brandGreen.withValues(alpha: 0.7),
-          width: 1.2,
+          width: SizeConfig.scaleWidth(context, 1.2),
         ),
       ),
     );
@@ -90,16 +95,19 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Client feedback linked to project shot status',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: SizeConfig.fontSize(context, 14),
+              ),
             ),
-            const SizedBox(height: 12),
-            _buildFilters(controller),
-            const SizedBox(height: 12),
-            _buildLegend(),
-            const SizedBox(height: 12),
-            Expanded(child: _buildBody(controller)),
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            _buildFilters(context, controller),
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            _buildLegend(context),
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            Expanded(child: _buildBody(context, controller)),
           ],
         ),
       ),
@@ -111,7 +119,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 
-  Widget _buildFilters(FeedbackController controller) {
+  Widget _buildFilters(BuildContext context, FeedbackController controller) {
     final departmentItems = <String?>[null, ...controller.departments];
     final clientItems = <String?>[
       null,
@@ -121,18 +129,21 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     final statusItems = <String?>[null, ...AppConstants.shotStatuses];
 
     return GlassContainer(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
       child: Column(
         children: [
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: SizeConfig.scaleWidth(context, 10),
+            runSpacing: SizeConfig.scaleHeight(context, 10),
             children: [
               SizedBox(
-                width: 180,
+                width: SizeConfig.scaleWidth(context, 180),
                 child: DropdownButtonFormField<String?>(
                   value: controller.selectedDepartment,
-                  decoration: _inputDecoration(labelText: 'Department'),
+                  decoration: _inputDecoration(
+                    context,
+                    labelText: 'Department',
+                  ),
                   items: departmentItems
                       .map(
                         (d) => DropdownMenuItem<String?>(
@@ -148,10 +159,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 ),
               ),
               SizedBox(
-                width: 180,
+                width: SizeConfig.scaleWidth(context, 180),
                 child: DropdownButtonFormField<String?>(
                   value: controller.selectedClientId,
-                  decoration: _inputDecoration(labelText: 'Client'),
+                  decoration: _inputDecoration(context, labelText: 'Client'),
                   items: clientItems
                       .map(
                         (id) => DropdownMenuItem<String?>(
@@ -173,10 +184,10 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 ),
               ),
               SizedBox(
-                width: 180,
+                width: SizeConfig.scaleWidth(context, 180),
                 child: DropdownButtonFormField<String?>(
                   value: controller.selectedShowId,
-                  decoration: _inputDecoration(labelText: 'Show'),
+                  decoration: _inputDecoration(context, labelText: 'Show'),
                   items: showItems
                       .map(
                         (id) => DropdownMenuItem<String?>(
@@ -198,10 +209,13 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 ),
               ),
               SizedBox(
-                width: 190,
+                width: SizeConfig.scaleWidth(context, 190),
                 child: DropdownButtonFormField<String?>(
                   value: controller.selectedStatus,
-                  decoration: _inputDecoration(labelText: 'Shot Status'),
+                  decoration: _inputDecoration(
+                    context,
+                    labelText: 'Shot Status',
+                  ),
                   items: statusItems
                       .map(
                         (status) => DropdownMenuItem<String?>(
@@ -217,12 +231,16 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                 ),
               ),
               SizedBox(
-                width: 250,
+                width: SizeConfig.scaleWidth(context, 250),
                 child: TextField(
                   controller: _searchController,
                   decoration: _inputDecoration(
+                    context,
                     hintText: 'Search shot / show / client / feedback',
-                    prefixIcon: const Icon(Icons.search),
+                    prefixIcon: Icon(
+                      Icons.search,
+                      size: SizeConfig.iconSize(context, 18),
+                    ),
                   ),
                   onChanged: (value) {
                     setState(() => _searchQuery = value);
@@ -236,21 +254,24 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 
-  Widget _buildLegend() {
+  Widget _buildLegend(BuildContext context) {
     return GlassContainer(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.scaleWidth(context, 12),
+        vertical: SizeConfig.scaleHeight(context, 10),
+      ),
       child: Row(
         children: [
           Icon(
             Icons.info_outline,
-            size: 16,
+            size: SizeConfig.iconSize(context, 16),
             color: AppColors.statusInProgress.withValues(alpha: 0.9),
           ),
-          const SizedBox(width: 8),
-          const Expanded(
+          SizedBox(width: SizeConfig.scaleWidth(context, 8)),
+          Expanded(
             child: Text(
               'Updating shot status from this module notifies the concerned team automatically.',
-              style: TextStyle(fontSize: 12),
+              style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
             ),
           ),
         ],
@@ -258,7 +279,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 
-  Widget _buildBody(FeedbackController controller) {
+  Widget _buildBody(BuildContext context, FeedbackController controller) {
     if (controller.isLoading && controller.feedbackShots.isEmpty) {
       return const LoadingWidget(message: 'Loading client feedback...');
     }
@@ -281,38 +302,44 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     }
 
     return GlassContainer(
-      padding: const EdgeInsets.all(8),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
       child: DynamicDataTable(
-        headingRowHeight: 42,
-        dataRowMinHeight: 44,
-        dataRowMaxHeight: 56,
+        headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
+        dataRowMinHeight: MediaQuery.of(context).size.height * 44 / 768,
+        dataRowMaxHeight: MediaQuery.of(context).size.height * 56 / 768,
         fields: [
-          const DynamicTableField(
+          DynamicTableField(
             key: 'sno',
             label: 'S.No',
-            width: 55,
+            width: SizeConfig.scaleWidth(context, 55),
             numeric: true,
             filterRequired: false,
           ),
-          const DynamicTableField(
+          DynamicTableField(
             key: 'shotId',
             label: 'Shot ID',
-            width: 120,
+            width: SizeConfig.scaleWidth(context, 120),
             filterRequired: false,
           ),
           // ── Actions column positioned early so it is always visible ──
           DynamicTableField(
             key: 'actions',
             label: 'Actions',
-            width: 90,
+            width: SizeConfig.scaleWidth(context, 90),
             filterRequired: false,
             builder: (context, value, row, rowIndex) {
               final shot = row['shot'] as ShotModel;
               return IconButton(
                 tooltip: 'Update feedback',
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                constraints: BoxConstraints(
+                  minWidth: SizeConfig.scaleWidth(context, 36),
+                  minHeight: SizeConfig.scaleHeight(context, 36),
+                ),
                 padding: EdgeInsets.zero,
-                icon: const Icon(Icons.edit_outlined, size: 18),
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: SizeConfig.iconSize(context, 18),
+                ),
                 onPressed: controller.isSaving
                     ? null
                     : () => _openUpdateDialog(shot, controller),
@@ -322,7 +349,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           DynamicTableField(
             key: 'department',
             label: 'Department',
-            width: 120,
+            width: SizeConfig.scaleWidth(context, 120),
             filterOptions: _buildOptions(
               controller.departments,
               _departmentFilter,
@@ -331,7 +358,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           DynamicTableField(
             key: 'status',
             label: 'Status',
-            width: 130,
+            width: SizeConfig.scaleWidth(context, 130),
             filterOptions: _buildOptions(
               AppConstants.shotStatuses,
               _statusFilter,
@@ -340,15 +367,20 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               final status = (value ?? '—').toString();
               final color = _statusColor(status);
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: EdgeInsets.symmetric(
+                  horizontal: SizeConfig.scaleWidth(context, 8),
+                  vertical: SizeConfig.scaleHeight(context, 4),
+                ),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(100),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 100),
+                  ),
                   color: color.withValues(alpha: 0.15),
                 ),
                 child: Text(
                   status,
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: SizeConfig.fontSize(context, 11),
                     fontWeight: FontWeight.w600,
                     color: color,
                   ),
@@ -356,29 +388,29 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
               );
             },
           ),
-          const DynamicTableField(
+          DynamicTableField(
             key: 'artist',
             label: 'Artist',
-            width: 140,
+            width: SizeConfig.scaleWidth(context, 140),
             filterRequired: false,
           ),
-          const DynamicTableField(
+          DynamicTableField(
             key: 'artistBid',
             label: 'Artist Bid',
-            width: 90,
+            width: SizeConfig.scaleWidth(context, 90),
             numeric: true,
             filterRequired: false,
           ),
-          const DynamicTableField(
+          DynamicTableField(
             key: 'artistEta',
             label: 'Artist ETA',
-            width: 110,
+            width: SizeConfig.scaleWidth(context, 110),
             filterRequired: false,
           ),
           DynamicTableField(
             key: 'supervisorStatus',
             label: 'Supervisor Status',
-            width: 145,
+            width: SizeConfig.scaleWidth(context, 145),
             filterOptions: _buildOptions(
               AppConstants.supervisorStatuses,
               _supervisorStatusFilter,
@@ -387,7 +419,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           DynamicTableField(
             key: 'artistStatus',
             label: 'Artist Status',
-            width: 130,
+            width: SizeConfig.scaleWidth(context, 130),
             filterOptions: _buildOptions(
               AppConstants.artistStatuses,
               _artistStatusFilter,
@@ -396,14 +428,14 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           DynamicTableField(
             key: 'feedback',
             label: 'Client Feedback',
-            width: 230,
+            width: SizeConfig.scaleWidth(context, 230),
             filterRequired: false,
             builder: (context, value, row, rowIndex) {
               final feedback = (value ?? '—').toString();
               return Tooltip(
                 message: feedback,
                 child: SizedBox(
-                  width: 220,
+                  width: SizeConfig.scaleWidth(context, 220),
                   child: Text(
                     feedback,
                     maxLines: 2,
@@ -564,13 +596,13 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         return AlertDialog(
           title: const Text('Update Client Feedback'),
           content: SizedBox(
-            width: 420,
+            width: SizeConfig.scaleWidth(context, 420),
             child: ValueListenableBuilder<String>(
               valueListenable: status,
               builder: (context, currentStatus, child) {
                 return Column(
                   mainAxisSize: MainAxisSize.min,
-                  spacing: 12,
+                  spacing: SizeConfig.scaleHeight(context, 12),
                   children: [
                     CustomDropdown<String>(
                       labelText: 'Shot Status',
@@ -657,21 +689,21 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setState) {
+        builder: (dialogContext2, setState) {
           return AlertDialog(
             title: const Text('Create Client Feedback'),
             content: SizedBox(
-              width: 500,
+              width: SizeConfig.scaleWidth(context, 500),
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Client',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: SizeConfig.scaleHeight(dialogContext2, 6)),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: selectedClientId,
@@ -702,13 +734,12 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
-
-                    const Text(
-                      'Show',
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                    SizedBox(
+                      height: SizeConfig.scaleHeight(dialogContext2, 12),
                     ),
-                    const SizedBox(height: 6),
+
+                    Text('Show', style: TextStyle(fontWeight: FontWeight.bold)),
+                    SizedBox(height: SizeConfig.scaleHeight(dialogContext2, 6)),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: selectedShowId,
@@ -732,13 +763,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: SizeConfig.scaleHeight(dialogContext2, 12),
+                    ),
 
-                    const Text(
+                    Text(
                       'Department',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: SizeConfig.scaleHeight(dialogContext2, 6)),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: selectedDepartment,
@@ -760,13 +793,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: SizeConfig.scaleHeight(dialogContext2, 12),
+                    ),
 
-                    const Text(
+                    Text(
                       'Shot ID',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: SizeConfig.scaleHeight(dialogContext2, 6)),
                     TextField(
                       controller: shotIdController,
                       decoration: const InputDecoration(
@@ -774,13 +809,15 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         hintText: 'Enter Shot ID (e.g. S01_shot10)',
                       ),
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: SizeConfig.scaleHeight(dialogContext2, 12),
+                    ),
 
-                    const Text(
+                    Text(
                       'Status',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: SizeConfig.scaleHeight(dialogContext2, 6)),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       value: selectedStatus,
@@ -802,20 +839,26 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                         });
                       },
                     ),
-                    const SizedBox(height: 12),
+                    SizedBox(
+                      height: SizeConfig.scaleHeight(dialogContext2, 12),
+                    ),
 
-                    const Text(
+                    Text(
                       'Client Feedback',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 6),
+                    SizedBox(height: SizeConfig.scaleHeight(dialogContext2, 6)),
                     TextField(
                       controller: feedbackController,
                       minLines: 3,
                       maxLines: 5,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.all(Radius.circular(2)),
+                          borderRadius: BorderRadius.all(
+                            Radius.circular(
+                              SizeConfig.scaleWidth(dialogContext2, 2),
+                            ),
+                          ),
                         ),
                         hintText: 'Enter client feedback...',
                       ),

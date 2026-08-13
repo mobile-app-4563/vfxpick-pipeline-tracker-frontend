@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/models/domain_models.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
@@ -96,40 +97,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           GlassContainer(
             child: DynamicDataTable(
-              dataRowMinHeight: 46,
-              dataRowMaxHeight: 60,
+              dataRowMinHeight: MediaQuery.of(context).size.height * 46 / 768,
+              dataRowMaxHeight: MediaQuery.of(context).size.height * 60 / 768,
               fields: [
-                const DynamicTableField(
+                DynamicTableField(
                   key: 'department',
                   label: 'Department',
-                  width: 140,
+                  width: SizeConfig.scaleWidth(context, 140),
                 ),
-                const DynamicTableField(
+                DynamicTableField(
                   key: 'client',
                   label: 'Client',
-                  width: 120,
+                  width: SizeConfig.scaleWidth(context, 120),
                 ),
-                const DynamicTableField(key: 'show', label: 'Show', width: 170),
-                const DynamicTableField(
+                DynamicTableField(
+                  key: 'show',
+                  label: 'Show',
+                  width: SizeConfig.scaleWidth(context, 170),
+                ),
+                DynamicTableField(
                   key: 'shots',
                   label: 'Shots',
-                  width: 110,
+                  width: SizeConfig.scaleWidth(context, 110),
                 ),
-                const DynamicTableField(
+                DynamicTableField(
                   key: 'mandays',
                   label: 'Mandays',
-                  width: 130,
+                  width: SizeConfig.scaleWidth(context, 130),
                 ),
-                const DynamicTableField(
+                DynamicTableField(
                   key: 'due',
                   label: 'Due Date',
-                  width: 130,
+                  width: SizeConfig.scaleWidth(context, 130),
                 ),
                 DynamicTableField(
                   key: 'actions',
                   label: 'Actions',
                   filterRequired: false,
-                  width: 220,
+                  width: SizeConfig.scaleWidth(context, 220),
                   builder: (context, value, row, rowIndex) {
                     final info = row['row'] as DashboardRow;
                     final department = (row['department'] ?? '').toString();
@@ -137,9 +142,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       children: [
                         IconButton(
                           tooltip: 'Open Projects',
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.folder_open_outlined,
-                            size: 18,
+                            size: SizeConfig.iconSize(context, 18),
                           ),
                           onPressed: () => _openConcernPage('/projects', {
                             'department': department,
@@ -149,7 +154,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         IconButton(
                           tooltip: 'Open Tasks',
-                          icon: const Icon(Icons.task_alt_outlined, size: 18),
+                          icon: Icon(
+                            Icons.task_alt_outlined,
+                            size: SizeConfig.iconSize(context, 18),
+                          ),
                           onPressed: () => _openConcernPage('/tasks', {
                             'department': department,
                             'showId': info.showId,
@@ -157,9 +165,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         IconButton(
                           tooltip: 'Open Review',
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.rate_review_outlined,
-                            size: 18,
+                            size: SizeConfig.iconSize(context, 18),
                           ),
                           onPressed: () => _openConcernPage('/review', {
                             'department': department,
@@ -167,7 +175,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         IconButton(
                           tooltip: 'Open Reports',
-                          icon: const Icon(Icons.analytics_outlined, size: 18),
+                          icon: Icon(
+                            Icons.analytics_outlined,
+                            size: SizeConfig.iconSize(context, 18),
+                          ),
                           onPressed: () => _openConcernPage('/reports', {
                             'department': department,
                           }),

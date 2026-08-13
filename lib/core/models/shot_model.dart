@@ -9,6 +9,7 @@ class ShotModel {
   final String shotCode;
   final int frameIn;
   final int frameOut;
+  final int totalFrames;
   final double supervisorBid;
   final double clientBid;
   final DateTime? clientEta;
@@ -25,6 +26,24 @@ class ShotModel {
   final double mandays;
   final DateTime? dueDate;
   final String? clientFeedback;
+  // New Excel-header fields
+  final String? coordinator;
+  final String? levelOfShot;
+  final DateTime? allocationDate;
+  final DateTime? allocationEta;
+  final DateTime? startingDate;
+  final DateTime? completeDate;
+  final double dailyWip;
+  final double consumedMandays;
+  final double savedMandays;
+  final String? approvedVersion;
+  final String? approvedBy;
+  final String? comments;
+  final String? complexity;
+  final String? fromRoto;
+  final String? fromPaint;
+  final String? fromMm;
+  final String? fromComp;
 
   ShotModel({
     required this.shotId,
@@ -36,6 +55,7 @@ class ShotModel {
     required this.shotCode,
     this.frameIn = 0,
     this.frameOut = 0,
+    this.totalFrames = 0,
     this.supervisorBid = 0,
     this.clientBid = 0,
     this.clientEta,
@@ -52,6 +72,23 @@ class ShotModel {
     this.mandays = 0,
     this.dueDate,
     this.clientFeedback,
+    this.coordinator,
+    this.levelOfShot,
+    this.allocationDate,
+    this.allocationEta,
+    this.startingDate,
+    this.completeDate,
+    this.dailyWip = 0,
+    this.consumedMandays = 0,
+    this.savedMandays = 0,
+    this.approvedVersion,
+    this.approvedBy,
+    this.comments,
+    this.complexity,
+    this.fromRoto,
+    this.fromPaint,
+    this.fromMm,
+    this.fromComp,
   });
 
   static DateTime? _date(dynamic v) =>
@@ -75,6 +112,7 @@ class ShotModel {
       shotCode: json['shotCode'] ?? '',
       frameIn: _int(json['frameIn']),
       frameOut: _int(json['frameOut']),
+      totalFrames: _int(json['totalFrames']),
       supervisorBid: _double(json['supervisorBid']),
       clientBid: _double(json['clientBid']),
       clientEta: _date(json['clientEta']),
@@ -91,6 +129,23 @@ class ShotModel {
       mandays: _double(json['mandays']),
       dueDate: _date(json['dueDate']),
       clientFeedback: json['clientFeedback'],
+      coordinator: json['coordinator'],
+      levelOfShot: json['levelOfShot'],
+      allocationDate: _date(json['allocationDate']),
+      allocationEta: _date(json['allocationEta']),
+      startingDate: _date(json['startingDate']),
+      completeDate: _date(json['completeDate']),
+      dailyWip: _double(json['dailyWip']),
+      consumedMandays: _double(json['consumedMandays']),
+      savedMandays: _double(json['savedMandays']),
+      approvedVersion: json['approvedVersion'],
+      approvedBy: json['approvedBy'],
+      comments: json['comments'],
+      complexity: json['complexity'],
+      fromRoto: json['fromRoto'],
+      fromPaint: json['fromPaint'],
+      fromMm: json['fromMm'],
+      fromComp: json['fromComp'],
     );
   }
 }

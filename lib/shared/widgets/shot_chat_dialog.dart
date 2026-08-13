@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/models/domain_models.dart';
 import '../../core/services/chat_service.dart';
+import '../../core/utils/size_config.dart';
 
 /// A dialog showing the per-shot conversation with attachment support.
 class ShotChatDialog extends StatefulWidget {
@@ -104,14 +105,18 @@ class _ShotChatDialogState extends State<ShotChatDialog> {
                   : _messages.isEmpty
                   ? const Center(child: Text('No messages yet'))
                   : ListView.builder(
-                      padding: const EdgeInsets.all(12),
+                      padding: EdgeInsets.all(
+                        SizeConfig.scaleWidth(context, 12),
+                      ),
                       itemCount: _messages.length,
                       itemBuilder: (_, i) => _bubble(_messages[i]),
                     ),
             ),
             if (_showAttach)
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: EdgeInsets.symmetric(
+                  horizontal: SizeConfig.scaleWidth(context, 12),
+                ),
                 child: Column(
                   children: [
                     TextField(
@@ -132,7 +137,7 @@ class _ShotChatDialogState extends State<ShotChatDialog> {
                 ),
               ),
             Padding(
-              padding: const EdgeInsets.all(8),
+              padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
               child: Row(
                 children: [
                   IconButton(
@@ -175,39 +180,53 @@ class _ShotChatDialogState extends State<ShotChatDialog> {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(10),
+        margin: EdgeInsets.only(bottom: SizeConfig.scaleHeight(context, 10)),
+        padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 10)),
         decoration: BoxDecoration(
           color: AppColors.brandGreen.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(
+            SizeConfig.scaleWidth(context, 10),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               m.senderName ?? 'Unknown',
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontSize: SizeConfig.fontSize(context, 12),
                 color: AppColors.brandGreen,
               ),
             ),
             if (m.message.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(m.message, style: const TextStyle(fontSize: 13)),
+                padding: EdgeInsets.only(
+                  top: SizeConfig.scaleHeight(context, 2),
+                ),
+                child: Text(
+                  m.message,
+                  style: TextStyle(fontSize: SizeConfig.fontSize(context, 13)),
+                ),
               ),
             if (m.attachmentName != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4),
+                padding: EdgeInsets.only(
+                  top: SizeConfig.scaleHeight(context, 4),
+                ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.insert_drive_file, size: 14),
-                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.insert_drive_file,
+                      size: SizeConfig.iconSize(context, 14),
+                    ),
+                    SizedBox(width: SizeConfig.scaleWidth(context, 4)),
                     Text(
                       m.attachmentName!,
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(
+                        fontSize: SizeConfig.fontSize(context, 12),
+                      ),
                     ),
                   ],
                 ),

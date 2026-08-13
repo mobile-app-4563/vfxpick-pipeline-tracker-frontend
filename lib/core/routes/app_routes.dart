@@ -14,6 +14,7 @@ import '../../modules/feedback/view/feedback_screen.dart';
 import '../../modules/home/view/home_screen.dart';
 import '../../modules/notifications/view/notifications_screen.dart';
 import '../../modules/projects/view/projects_screen.dart';
+import '../../modules/production_management/view/production_management_screen.dart';
 import '../../modules/reports/view/reports_screen.dart';
 import '../../modules/review/view/review_screen.dart';
 import '../../modules/tasks/view/tasks_screen.dart';
@@ -78,6 +79,10 @@ class AppRoutes {
             GoRoute(
               path: '/projects',
               builder: (context, state) => const ProjectsScreen(),
+            ),
+            GoRoute(
+              path: '/production-management',
+              builder: (context, state) => const ProductionManagementScreen(),
             ),
             GoRoute(
               path: '/assets',

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 
 class LoadingWidget extends StatefulWidget {
   final String? message;
@@ -62,21 +63,36 @@ class _LoadingWidgetState extends State<LoadingWidget>
                 },
                 child: Column(
                   children: [
-                    _bar(width: 220, height: 14, color: baseColor),
-                    const SizedBox(height: 10),
-                    _bar(width: 170, height: 14, color: baseColor),
-                    const SizedBox(height: 10),
-                    _bar(width: 250, height: 14, color: baseColor),
+                    _bar(
+                      context: context,
+                      width: 220,
+                      height: 14,
+                      color: baseColor,
+                    ),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 10)),
+                    _bar(
+                      context: context,
+                      width: 170,
+                      height: 14,
+                      color: baseColor,
+                    ),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 10)),
+                    _bar(
+                      context: context,
+                      width: 250,
+                      height: 14,
+                      color: baseColor,
+                    ),
                   ],
                 ),
               ),
               if (widget.message != null) ...[
-                const SizedBox(height: 16),
+                SizedBox(height: SizeConfig.scaleHeight(context, 16)),
                 Text(
                   widget.message!,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 14,
+                  style: TextStyle(
+                    fontSize: SizeConfig.fontSize(context, 14),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -89,18 +105,21 @@ class _LoadingWidgetState extends State<LoadingWidget>
   }
 
   Widget _bar({
+    required BuildContext context,
     required double width,
     required double height,
     required Color color,
   }) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 6)),
       child: Container(
-        width: width,
-        height: height,
+        width: SizeConfig.scaleWidth(context, width),
+        height: SizeConfig.scaleHeight(context, height),
         decoration: BoxDecoration(
           color: color,
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(
+            SizeConfig.scaleWidth(context, 6),
+          ),
         ),
       ),
     );

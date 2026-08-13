@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 
 class GradientButton extends StatefulWidget {
   final String text;
@@ -38,13 +39,17 @@ class _GradientButtonState extends State<GradientButton> {
       cursor: isDisabled ? SystemMouseCursors.basic : SystemMouseCursors.click,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        width: widget.width,
-        height: widget.height,
+        width: widget.width != null
+            ? SizeConfig.scaleWidth(context, widget.width!)
+            : null,
+        height: SizeConfig.scaleHeight(context, widget.height),
         transform: _isHovered && !isDisabled
             ? (Matrix4.identity()..scale(1.03))
             : Matrix4.identity(),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(widget.borderRadius),
+          borderRadius: BorderRadius.circular(
+            SizeConfig.scaleWidth(context, widget.borderRadius),
+          ),
           gradient: isDisabled
               ? LinearGradient(
                   colors: [
@@ -57,8 +62,8 @@ class _GradientButtonState extends State<GradientButton> {
               ? [
                   BoxShadow(
                     color: AppColors.brandGreen.withOpacity(0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    blurRadius: SizeConfig.scaleWidth(context, 12),
+                    offset: Offset(0, SizeConfig.scaleHeight(context, 4)),
                   ),
                 ]
               : [],
@@ -69,33 +74,34 @@ class _GradientButtonState extends State<GradientButton> {
             backgroundColor: Colors.transparent,
             shadowColor: Colors.transparent,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(widget.borderRadius),
+              borderRadius: BorderRadius.circular(
+                SizeConfig.scaleWidth(context, widget.borderRadius),
+              ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding: EdgeInsets.symmetric(
+              horizontal: SizeConfig.scaleWidth(context, 16),
+            ),
           ),
           child: widget.isLoading
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
+              ? SizeConfig.loadingIndicator(size: 20, stroke: 2)
               : Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (widget.icon != null) ...[
-                      Icon(widget.icon, color: Colors.white, size: 18),
-                      const SizedBox(width: 8),
+                      Icon(
+                        widget.icon,
+                        color: Colors.white,
+                        size: SizeConfig.iconSize(context, 18),
+                      ),
+                      SizeConfig.sizedBoxW(context, 8),
                     ],
                     Text(
                       widget.text,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: SizeConfig.fontSize(context, 15),
                         letterSpacing: 0.5,
                       ),
                     ),

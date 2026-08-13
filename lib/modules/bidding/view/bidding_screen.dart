@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/size_config.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../controller/bidding_controller.dart';
 
@@ -55,7 +56,10 @@ class _BiddingScreenState extends State<BiddingScreen> {
           child: Center(
             child: Text(
               "Coming Soon!",
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: SizeConfig.fontSize(context, 24),
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
         );

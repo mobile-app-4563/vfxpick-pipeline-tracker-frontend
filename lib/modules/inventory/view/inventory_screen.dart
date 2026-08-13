@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/services/inventory_service.dart';
+import '../../../core/utils/size_config.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
@@ -169,13 +170,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
   }
 
-  InputDecoration _filterInputDecoration({
+  InputDecoration _filterInputDecoration(
+    BuildContext context, {
     String? hintText,
     String? labelText,
     Widget? prefixIcon,
   }) {
     final baseBorder = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 6)),
       borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
     );
 
@@ -184,7 +186,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
       labelText: labelText,
       prefixIcon: prefixIcon,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 14),
+      contentPadding: EdgeInsets.symmetric(
+        vertical: SizeConfig.scaleHeight(context, 14),
+        horizontal: SizeConfig.scaleWidth(context, 14),
+      ),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.04),
       hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.72)),
@@ -194,7 +199,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
       focusedBorder: baseBorder.copyWith(
         borderSide: BorderSide(
           color: AppColors.brandGreen.withValues(alpha: 0.7),
-          width: 1.2,
+          width: SizeConfig.scaleWidth(context, 1.2),
         ),
       ),
     );
@@ -229,17 +234,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Studio Hardware, Workstations, Wacom Tablets & Software Licenses',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: SizeConfig.fontSize(context, 14),
+              ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: SizeConfig.scaleHeight(context, 16)),
             if (!_loading && _error == null) ...[
               _buildStatsDashboard(isMobile),
-              const SizedBox(height: 16),
+              SizedBox(height: SizeConfig.scaleHeight(context, 16)),
             ],
             _buildFilters(isMobile),
-            const SizedBox(height: 16),
+            SizedBox(height: SizeConfig.scaleHeight(context, 16)),
             Expanded(child: _buildBody(canEdit)),
           ],
         ),
@@ -284,13 +292,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     if (isMobile) {
       return SizedBox(
-        height: 85,
+        height: SizeConfig.scaleHeight(context, 85),
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           itemCount: stats.length,
-          separatorBuilder: (context, index) => const SizedBox(width: 8),
-          itemBuilder: (ctx, idx) =>
-              SizedBox(width: 140, child: _buildStatCard(stats[idx])),
+          separatorBuilder: (ctx, index) =>
+              SizedBox(width: SizeConfig.scaleWidth(context, 8)),
+          itemBuilder: (ctx, idx) => SizedBox(
+            width: SizeConfig.scaleWidth(context, 140),
+            child: _buildStatCard(stats[idx]),
+          ),
         ),
       );
     }
@@ -300,7 +311,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
           .map(
             (s) => Expanded(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4.0),
+                padding: EdgeInsets.symmetric(
+                  horizontal: SizeConfig.scaleWidth(context, 4),
+                ),
                 child: _buildStatCard(s),
               ),
             ),
@@ -311,15 +324,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Widget _buildStatCard(_StatItem s) {
     return GlassContainer(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.scaleWidth(context, 12),
+        vertical: SizeConfig.scaleHeight(context, 8),
+      ),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 18,
+            radius: SizeConfig.scaleWidth(context, 18),
             backgroundColor: s.color.withValues(alpha: 0.15),
-            child: Icon(s.icon, color: s.color, size: 18),
+            child: Icon(
+              s.icon,
+              color: s.color,
+              size: SizeConfig.iconSize(context, 18),
+            ),
           ),
-          const SizedBox(width: 10),
+          SizedBox(width: SizeConfig.scaleWidth(context, 10)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,8 +347,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
               children: [
                 Text(
                   s.title,
-                  style: const TextStyle(
-                    fontSize: 10,
+                  style: TextStyle(
+                    fontSize: SizeConfig.fontSize(context, 10),
                     fontWeight: FontWeight.w500,
                     color: Colors.grey,
                   ),
@@ -336,8 +356,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 ),
                 Text(
                   s.value,
-                  style: const TextStyle(
-                    fontSize: 18,
+                  style: TextStyle(
+                    fontSize: SizeConfig.fontSize(context, 18),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -357,8 +377,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
       flex: isMobile ? 0 : 2,
       child: TextField(
         decoration: _filterInputDecoration(
+          context,
           hintText: 'Search items or serial...',
-          prefixIcon: const Icon(Icons.search, size: 20),
+          prefixIcon: Icon(
+            Icons.search,
+            size: SizeConfig.iconSize(context, 20),
+          ),
         ),
         onChanged: (val) {
           setState(() {
@@ -370,14 +394,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     final catDropdown = DropdownButtonFormField<String>(
       value: _selectedCategoryFilter,
-      decoration: _filterInputDecoration(labelText: 'Category'),
+      decoration: _filterInputDecoration(context, labelText: 'Category'),
       dropdownColor: const Color(0xFF0B1224),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 6)),
       items: catOptions
           .map(
             (c) => DropdownMenuItem(
               value: c,
-              child: Text(c, style: const TextStyle(fontSize: 13)),
+              child: Text(
+                c,
+                style: TextStyle(fontSize: SizeConfig.fontSize(context, 13)),
+              ),
             ),
           )
           .toList(),
@@ -392,14 +419,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     final statusDropdown = DropdownButtonFormField<String>(
       value: _selectedStatusFilter,
-      decoration: _filterInputDecoration(labelText: 'Status'),
+      decoration: _filterInputDecoration(context, labelText: 'Status'),
       dropdownColor: const Color(0xFF0B1224),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 6)),
       items: statusOptions
           .map(
             (s) => DropdownMenuItem(
               value: s,
-              child: Text(s, style: const TextStyle(fontSize: 13)),
+              child: Text(
+                s,
+                style: TextStyle(fontSize: SizeConfig.fontSize(context, 13)),
+              ),
             ),
           )
           .toList(),
@@ -414,11 +444,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     if (isMobile) {
       return Column(
-        spacing: 10,
+        spacing: SizeConfig.scaleHeight(context, 10),
         children: [
           Row(children: [searchField]),
           Row(
-            spacing: 8,
+            spacing: SizeConfig.scaleWidth(context, 8),
             children: [
               Expanded(child: catDropdown),
               Expanded(child: statusDropdown),
@@ -429,11 +459,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
     }
 
     return Row(
-      spacing: 12,
+      spacing: SizeConfig.scaleWidth(context, 12),
       children: [
         searchField,
-        SizedBox(width: 180, child: catDropdown),
-        SizedBox(width: 150, child: statusDropdown),
+        SizedBox(
+          width: SizeConfig.scaleWidth(context, 180),
+          child: catDropdown,
+        ),
+        SizedBox(
+          width: SizeConfig.scaleWidth(context, 150),
+          child: statusDropdown,
+        ),
       ],
     );
   }
@@ -461,7 +497,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     return ListView.separated(
       itemCount: filtered.length,
-      separatorBuilder: (context, index) => const SizedBox(height: 8),
+      separatorBuilder: (ctx, index) =>
+          SizedBox(height: SizeConfig.scaleHeight(context, 8)),
       itemBuilder: (ctx, idx) {
         final item = filtered[idx];
         final id = item['id'] as int;
@@ -474,7 +511,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
         final notes = (item['notes'] ?? '').toString();
 
         return GlassContainer(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          padding: EdgeInsets.symmetric(
+            horizontal: SizeConfig.scaleWidth(context, 16),
+            vertical: SizeConfig.scaleHeight(context, 8),
+          ),
           child: ListTile(
             contentPadding: EdgeInsets.zero,
             leading: Icon(
@@ -482,38 +522,40 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ? Icons.key_outlined
                   : Icons.computer_outlined,
               color: AppColors.brandGreen,
-              size: 24,
+              size: SizeConfig.iconSize(context, 24),
             ),
             title: Row(
               children: [
                 Expanded(
                   child: Text(
                     name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontSize: SizeConfig.fontSize(context, 14),
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SizeConfig.scaleWidth(context, 8),
+                    vertical: SizeConfig.scaleHeight(context, 3),
                   ),
                   decoration: BoxDecoration(
                     color: _statusColor(status).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(
+                      SizeConfig.scaleWidth(context, 6),
+                    ),
                     border: Border.all(
                       color: _statusColor(status).withValues(alpha: 0.3),
-                      width: 1,
+                      width: SizeConfig.scaleWidth(context, 1),
                     ),
                   ),
                   child: Text(
                     status,
                     style: TextStyle(
                       color: _statusColor(status),
-                      fontSize: 10,
+                      fontSize: SizeConfig.fontSize(context, 10),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -523,15 +565,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
             subtitle: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const SizedBox(height: 4),
+                SizedBox(height: SizeConfig.scaleHeight(context, 4)),
                 Text(
                   'Category: $category  \u2022  Serial: $serial',
-                  style: const TextStyle(fontSize: 12),
+                  style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
                 ),
                 Text(
                   'Assigned to: $assignedName',
                   style: TextStyle(
-                    fontSize: 11,
+                    fontSize: SizeConfig.fontSize(context, 11),
                     fontWeight: FontWeight.w500,
                     color: assignedName == 'Unassigned'
                         ? Colors.grey
@@ -539,13 +581,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   ),
                 ),
                 if (notes.isNotEmpty) ...[
-                  const SizedBox(height: 4),
+                  SizedBox(height: SizeConfig.scaleHeight(context, 4)),
                   Text(
                     'Notes: $notes',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 11,
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 11),
                       fontStyle: FontStyle.italic,
                       color: Colors.grey,
                     ),
@@ -558,14 +600,17 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          size: SizeConfig.iconSize(context, 18),
+                        ),
                         onPressed: () => _addOrEdit(item),
                         tooltip: 'Edit item',
                       ),
                       IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.delete_outline,
-                          size: 18,
+                          size: SizeConfig.iconSize(context, 18),
                           color: AppColors.priorityHigh,
                         ),
                         onPressed: () => _delete(id),
@@ -653,30 +698,41 @@ class _InventoryDialogState extends State<_InventoryDialog> {
     return AlertDialog(
       title: Text(isEdit ? 'Edit Inventory Item' : 'Add Inventory Item'),
       content: SizedBox(
-        width: 420,
+        width: SizeConfig.scaleWidth(context, 420),
         child: SingleChildScrollView(
           child: Form(
             key: _formKey,
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              spacing: 12,
+              spacing: SizeConfig.scaleHeight(context, 12),
               children: [
                 if (_error != null)
                   Text(
                     _error!,
-                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontSize: SizeConfig.fontSize(context, 12),
+                    ),
                   ),
                 TextFormField(
                   controller: _nameCtrl,
-                  decoration: _dialogInputDecoration(labelText: 'Item Name*'),
+                  decoration: _dialogInputDecoration(
+                    context,
+                    labelText: 'Item Name*',
+                  ),
                   validator: (v) => (v == null || v.trim().isEmpty)
                       ? 'Name is required'
                       : null,
                 ),
                 DropdownButtonFormField<String>(
                   value: _selectedCategory,
-                  decoration: _dialogInputDecoration(labelText: 'Category*'),
-                  borderRadius: BorderRadius.circular(6),
+                  decoration: _dialogInputDecoration(
+                    context,
+                    labelText: 'Category*',
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 6),
+                  ),
                   items: widget.categories
                       .map((c) => DropdownMenuItem(value: c, child: Text(c)))
                       .toList(),
@@ -686,13 +742,19 @@ class _InventoryDialogState extends State<_InventoryDialog> {
                 TextFormField(
                   controller: _serialCtrl,
                   decoration: _dialogInputDecoration(
+                    context,
                     labelText: 'Serial Number / License Key',
                   ),
                 ),
                 DropdownButtonFormField<String>(
                   value: _selectedStatus,
-                  decoration: _dialogInputDecoration(labelText: 'Status*'),
-                  borderRadius: BorderRadius.circular(6),
+                  decoration: _dialogInputDecoration(
+                    context,
+                    labelText: 'Status*',
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 6),
+                  ),
                   items: widget.statuses
                       .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                       .toList(),
@@ -710,9 +772,12 @@ class _InventoryDialogState extends State<_InventoryDialog> {
                   DropdownButtonFormField<String>(
                     value: _selectedUserId,
                     decoration: _dialogInputDecoration(
+                      context,
                       labelText: 'Assign To User',
                     ),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(
+                      SizeConfig.scaleWidth(context, 6),
+                    ),
                     items: [
                       const DropdownMenuItem<String>(
                         value: null,
@@ -730,7 +795,10 @@ class _InventoryDialogState extends State<_InventoryDialog> {
                 TextFormField(
                   controller: _notesCtrl,
                   maxLines: 3,
-                  decoration: _dialogInputDecoration(labelText: 'Notes'),
+                  decoration: _dialogInputDecoration(
+                    context,
+                    labelText: 'Notes',
+                  ),
                 ),
               ],
             ),
@@ -748,10 +816,10 @@ class _InventoryDialogState extends State<_InventoryDialog> {
             backgroundColor: AppColors.brandGreen,
           ),
           child: _saving
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(
+              ? SizedBox(
+                  height: SizeConfig.scaleHeight(context, 18),
+                  width: SizeConfig.scaleWidth(context, 18),
+                  child: const CircularProgressIndicator(
                     strokeWidth: 2,
                     color: Colors.white,
                   ),
@@ -762,16 +830,22 @@ class _InventoryDialogState extends State<_InventoryDialog> {
     );
   }
 
-  InputDecoration _dialogInputDecoration({required String labelText}) {
+  InputDecoration _dialogInputDecoration(
+    BuildContext context, {
+    required String labelText,
+  }) {
     final border = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 6)),
       borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
     );
 
     return InputDecoration(
       labelText: labelText,
       isDense: true,
-      contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+      contentPadding: EdgeInsets.symmetric(
+        vertical: SizeConfig.scaleHeight(context, 12),
+        horizontal: SizeConfig.scaleWidth(context, 12),
+      ),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.03),
       enabledBorder: border,
@@ -779,7 +853,7 @@ class _InventoryDialogState extends State<_InventoryDialog> {
       focusedBorder: border.copyWith(
         borderSide: BorderSide(
           color: AppColors.brandGreen.withValues(alpha: 0.7),
-          width: 1.2,
+          width: SizeConfig.scaleWidth(context, 1.2),
         ),
       ),
     );

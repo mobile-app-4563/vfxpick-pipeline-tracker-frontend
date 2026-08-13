@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
@@ -42,19 +43,25 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               onPressed: controller.notifications.isEmpty
                   ? null
                   : controller.markAllAsRead,
-              icon: const Icon(Icons.done_all, size: 18),
+              icon: Icon(
+                Icons.done_all,
+                size: SizeConfig.iconSize(context, 18),
+              ),
               label: const Text('Mark all read'),
             ),
             TextButton.icon(
               onPressed: controller.notifications.isEmpty
                   ? null
                   : controller.clearAll,
-              icon: const Icon(Icons.delete_outline, size: 18),
+              icon: Icon(
+                Icons.delete_outline,
+                size: SizeConfig.iconSize(context, 18),
+              ),
               label: const Text('Clear all'),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: SizeConfig.scaleHeight(context, 8)),
         Expanded(child: _body(controller)),
       ],
     );
@@ -75,7 +82,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       onRefresh: controller.loadNotifications,
       child: ListView.separated(
         itemCount: controller.notifications.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) =>
+            SizedBox(height: SizeConfig.scaleHeight(context, 8)),
         itemBuilder: (_, i) => _tile(controller, controller.notifications[i]),
       ),
     );
@@ -83,7 +91,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Widget _tile(NotificationController controller, NotificationModel n) {
     return GlassContainer(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.scaleWidth(context, 12),
+        vertical: SizeConfig.scaleHeight(context, 4),
+      ),
       child: ListTile(
         leading: CircleAvatar(
           backgroundColor: n.isRead
@@ -92,24 +103,24 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           child: Icon(
             Icons.notifications,
             color: n.isRead ? Colors.grey : AppColors.brandGreen,
-            size: 18,
+            size: SizeConfig.iconSize(context, 18),
           ),
         ),
         title: Text(
           n.message,
           style: TextStyle(
             fontWeight: n.isRead ? FontWeight.normal : FontWeight.bold,
-            fontSize: 13,
+            fontSize: SizeConfig.fontSize(context, 13),
           ),
         ),
         subtitle: Text(
           '${n.type}  \u2022  ${_fmt(n.timestamp)}',
-          style: const TextStyle(fontSize: 11),
+          style: TextStyle(fontSize: SizeConfig.fontSize(context, 11)),
         ),
         trailing: n.isRead
             ? null
             : IconButton(
-                icon: const Icon(Icons.check, size: 18),
+                icon: Icon(Icons.check, size: SizeConfig.iconSize(context, 18)),
                 onPressed: () => controller.markAsRead(n.id),
               ),
       ),

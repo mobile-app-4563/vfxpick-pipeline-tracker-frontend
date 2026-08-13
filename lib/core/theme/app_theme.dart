@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../constants/app_colors.dart';
+import '../../shared/widgets/gradient_box_border.dart';
 
 class AppTheme {
   static ThemeData get darkTheme {
@@ -167,14 +168,14 @@ class AppTheme {
     required bool isDark,
     double borderRadius = 12.0,
     double blur = 20.0,
+    BoxBorder? border,
   }) {
     return BoxDecoration(
       color: isDark ? AppColors.darkCardFill : AppColors.lightCardFill,
       borderRadius: BorderRadius.circular(borderRadius),
-      border: Border.all(
-        color: isDark ? AppColors.darkCardBorder : AppColors.lightCardBorder,
-        width: 1.5,
-      ),
+      border:
+          border ??
+          GradientBoxBorder(gradient: AppColors.brandGradient, width: 1.5),
       boxShadow: [
         BoxShadow(
           color: isDark

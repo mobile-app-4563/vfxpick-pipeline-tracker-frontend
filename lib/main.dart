@@ -6,6 +6,7 @@ import 'core/providers/access_provider.dart';
 import 'core/controllers/theme_controller.dart';
 import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
+import 'core/utils/size_config.dart';
 import 'modules/auth/controller/auth_controller.dart';
 import 'modules/bidding/controller/bidding_controller.dart';
 import 'modules/dashboard/controller/dashboard_controller.dart';
@@ -95,17 +96,19 @@ class _StartupLoadingScreen extends StatelessWidget {
             colors: [Color(0xFF040814), Color(0xFF07142A), Color(0xFF0A1F3D)],
           ),
         ),
-        child: const Center(
+        child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(strokeWidth: 3),
-              SizedBox(height: 16),
+              CircularProgressIndicator(
+                strokeWidth: SizeConfig.scaleWidth(context, 3),
+              ),
+              SizedBox(height: SizeConfig.scaleHeight(context, 16)),
               Text(
                 'Validating session...',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize: 16,
+                  fontSize: SizeConfig.fontSize(context, 16),
                   fontWeight: FontWeight.w600,
                 ),
               ),

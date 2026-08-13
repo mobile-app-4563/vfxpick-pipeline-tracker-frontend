@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
+import 'gradient_box_border.dart';
 
 /// DateRangePicker provides a user-friendly interface for selecting date ranges.
 /// Wraps Flutter's showDateRangePicker and provides styling consistent with the app theme.
@@ -97,11 +99,13 @@ class _DateRangePickerState extends State<DateRangePicker> {
         children: [
           if (widget.labelText != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8.0),
+              padding: EdgeInsets.only(
+                bottom: SizeConfig.scaleHeight(context, 8),
+              ),
               child: Text(
                 widget.labelText!,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: SizeConfig.fontSize(context, 14),
                   fontWeight: FontWeight.w500,
                   color: isDark
                       ? AppColors.darkTextPrimary
@@ -112,15 +116,19 @@ class _DateRangePickerState extends State<DateRangePicker> {
           GestureDetector(
             onTap: _selectDateRange,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: SizeConfig.paddingSymmetric(
+                context,
+                horizontal: 16,
+                vertical: 12,
+              ),
               decoration: BoxDecoration(
-                border: Border.all(
-                  color: isDark
-                      ? AppColors.darkCardBorder
-                      : AppColors.lightCardBorder,
-                  width: 1,
+                border: GradientBoxBorder(
+                  gradient: AppColors.brandGradient,
+                  width: SizeConfig.scaleWidth(context, 1),
                 ),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 8),
+                ),
                 color: isDark
                     ? AppColors.darkCardFill
                     : AppColors.lightCardFill,
@@ -132,7 +140,7 @@ class _DateRangePickerState extends State<DateRangePicker> {
                     child: Text(
                       _formatDateRange(_selectedDateRange),
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: SizeConfig.fontSize(context, 13),
                         color: _selectedDateRange != null
                             ? (isDark
                                   ? AppColors.darkTextPrimary
@@ -144,10 +152,10 @@ class _DateRangePickerState extends State<DateRangePicker> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  SizeConfig.sizedBoxW(context, 8),
                   Icon(
                     Icons.calendar_today,
-                    size: 18,
+                    size: SizeConfig.iconSize(context, 18),
                     color: AppColors.brandGreen,
                   ),
                 ],
@@ -156,19 +164,22 @@ class _DateRangePickerState extends State<DateRangePicker> {
           ),
           if (_selectedDateRange != null)
             Padding(
-              padding: const EdgeInsets.only(top: 8.0),
+              padding: EdgeInsets.only(top: SizeConfig.scaleHeight(context, 8)),
               child: Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: _clearDateRange,
                   icon: Icon(
                     Icons.clear,
-                    size: 16,
+                    size: SizeConfig.iconSize(context, 16),
                     color: AppColors.brandGreen,
                   ),
                   label: Text(
                     'Clear',
-                    style: TextStyle(fontSize: 12, color: AppColors.brandGreen),
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 12),
+                      color: AppColors.brandGreen,
+                    ),
                   ),
                 ),
               ),

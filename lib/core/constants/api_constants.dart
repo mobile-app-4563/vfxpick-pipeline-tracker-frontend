@@ -6,15 +6,12 @@ class ApiConstants {
   // ───────────────────────────────────────────────────────────────────────────
   // BASE CONFIGURATION
   // ───────────────────────────────────────────────────────────────────────────
-  static const String baseUrlOfficeLaptop =
-      'https://zr855qq4-3000.inc1.devtunnels.ms/api';
   static const String baseUrlPersonalLaptop =
       'https://t06z0dmj-3000.inc1.devtunnels.ms/api';
   static const String baseUrlServer = 'http://192.168.1.15:3000/api';
   static const String baseUrl = baseUrlServer;
 
   // ─────────────────────────────────────────────
-  // ──────────────────────────────
   // AUTH (/api/auth) — unchanged
   // ───────────────────────────────────────────────────────────────────────────
   static const String login = '/auth/login';
@@ -44,6 +41,7 @@ class ApiConstants {
       '/projects/clients/$clientId/shows';
   static const String projectShots = '/projects/shots';
   static const String projectShotsBulkUpsert = '/projects/shots/bulk-upsert';
+  static const String projectShotsBulkDelete = '/projects/shots/bulk-delete';
   static String projectShot(String shotId) => '/projects/shots/$shotId';
   static String projectShotStatus(String shotId) =>
       '/projects/shots/$shotId/status';

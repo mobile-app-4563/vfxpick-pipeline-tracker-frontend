@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 
 /// FilterOption represents a single filterable item in the dropdown
 class FilterOption {
@@ -47,17 +48,112 @@ class FilterIcon extends StatefulWidget {
 class _FilterIconState extends State<FilterIcon> {
   final GlobalKey<State<Tooltip>> _tooltipKey = GlobalKey<State<Tooltip>>();
 
-  Future<void> _showFilterDropdown() async {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final position = renderBox.localToGlobal(Offset.zero);
+  List<FilterOption> get _dedupedOptions {
+    final seen = <String>{};
+    final unique = <FilterOption>[];
+    for (final option in widget.options) {
+      final key = option.value?.toString() ?? '';
+      if (key.isEmpty || seen.add(key)) {
+        unique.add(option);
+      }
+    }
+    return unique;
+  }
 
-    // Directly prompt when there is only a custom query filter option.
-    if (widget.options.length == 1 && widget.options.first.needsQuery) {
-      final TextEditingController inputController = TextEditingController();
-      final result = await showDialog<String>(
+  Future<void> _showFilterDropdown() async {
+    final options = _dedupedOptions;
+
+    if (options.isEmpty) {
+      await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
+          title: const Text('No filter values'),
+          content: const Text('There are no values to filter by yet.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    final shouldShowCustom = options.any((option) => option.needsQuery);
+
+    final result = await showDialog<dynamic>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(widget.label),
+        content: SizedBox(
+          width: SizeConfig.scaleWidth(context, 320),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (shouldShowCustom)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: SizeConfig.scaleHeight(context, 10),
+                    ),
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop('__custom__');
+                      },
+                      icon: const Icon(Icons.search),
+                      label: const Text('Custom query'),
+                    ),
+                  ),
+                if (options.isNotEmpty)
+                  Wrap(
+                    spacing: SizeConfig.scaleWidth(context, 8),
+                    runSpacing: SizeConfig.scaleHeight(context, 8),
+                    children: options
+                        .map((option) {
+                          final isSelected = option.isSelected;
+                          return FilterChip(
+                            label: Text(option.label),
+                            selected: isSelected,
+                            onSelected: (_) {
+                              Navigator.of(ctx).pop(option.value);
+                            },
+                          );
+                        })
+                        .toList(growable: false),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          if (widget.options.any((opt) => opt.isSelected))
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop('__clear__');
+              },
+              child: const Text('Clear'),
+            ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+
+    if (!mounted) return;
+    if (result == null) return;
+    if (result == '__clear__') {
+      widget.onClear?.call();
+      return;
+    }
+    if (result == '__custom__') {
+      final TextEditingController inputController = TextEditingController();
+      final customResult = await showDialog<String>(
+        context: context,
+        builder: (customCtx) => AlertDialog(
           title: const Text('Enter query'),
           content: TextField(
             controller: inputController,
@@ -66,122 +162,55 @@ class _FilterIconState extends State<FilterIcon> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
+              onPressed: () => Navigator.of(customCtx).pop(),
               child: const Text('Cancel'),
             ),
             TextButton(
               onPressed: () =>
-                  Navigator.of(ctx).pop(inputController.text.trim()),
+                  Navigator.of(customCtx).pop(inputController.text.trim()),
               child: const Text('OK'),
             ),
           ],
         ),
       );
       if (!mounted) return;
-      if (result != null && result.isNotEmpty) {
-        widget.onFilterChanged(result);
+      if (customResult != null && customResult.isNotEmpty) {
+        widget.onFilterChanged(customResult);
       }
       return;
     }
 
-    // Create dropdown items
-    List<PopupMenuEntry<dynamic>> menuItems = [
-      // Clear button if any option is selected
-      if (widget.options.any((opt) => opt.isSelected))
-        PopupMenuItem(
-          value: '__clear__',
-          child: Row(
-            children: [
-              Icon(Icons.clear, size: 18, color: AppColors.brandGreen),
-              const SizedBox(width: 12),
-              const Text('Clear Filter', style: TextStyle(fontSize: 12)),
-            ],
+    final idx = options.indexWhere((o) => o.value == result);
+    if (idx != -1 && options[idx].needsQuery) {
+      final TextEditingController inputController = TextEditingController();
+      final customResult = await showDialog<String>(
+        context: context,
+        builder: (customCtx) => AlertDialog(
+          title: const Text('Enter query'),
+          content: TextField(
+            controller: inputController,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Type filter query'),
           ),
-        ),
-      // Divider if there are selected items
-      if (widget.options.any((opt) => opt.isSelected)) const PopupMenuDivider(),
-      // Filter options
-      ...widget.options.map(
-        (option) => PopupMenuItem(
-          value: option.value,
-          child: Row(
-            children: [
-              if (option.isSelected)
-                Icon(Icons.check, size: 18, color: AppColors.brandGreen)
-              else
-                const SizedBox(width: 18),
-              const SizedBox(width: 12),
-              Text(
-                option.label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: option.isSelected
-                      ? FontWeight.bold
-                      : FontWeight.normal,
-                  color: option.isSelected
-                      ? AppColors.brandGreen
-                      : (isDark
-                            ? AppColors.darkTextPrimary
-                            : AppColors.lightTextPrimary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    ];
-
-    final value = await showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(
-        position.dx + renderBox.size.width - 200,
-        position.dy + renderBox.size.height + 8,
-        position.dx + 20,
-        0,
-      ),
-      items: menuItems,
-    );
-    if (!mounted) return;
-    if (value != null) {
-      if (value == '__clear__') {
-        widget.onClear?.call();
-      } else {
-        final idx = widget.options.indexWhere((o) => o.value == value);
-        if (idx != -1 && widget.options[idx].needsQuery) {
-          final TextEditingController inputController =
-              TextEditingController();
-          final result = await showDialog<String>(
-            context: context,
-            builder: (ctx) => AlertDialog(
-              title: const Text('Enter query'),
-              content: TextField(
-                controller: inputController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'Type filter query',
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                TextButton(
-                  onPressed: () =>
-                      Navigator.of(ctx).pop(inputController.text.trim()),
-                  child: const Text('OK'),
-                ),
-              ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(customCtx).pop(),
+              child: const Text('Cancel'),
             ),
-          );
-          if (!mounted) return;
-          if (result != null && result.isNotEmpty) {
-            widget.onFilterChanged(result);
-          }
-        } else {
-          widget.onFilterChanged(value);
-        }
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(customCtx).pop(inputController.text.trim()),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      if (customResult != null && customResult.isNotEmpty) {
+        widget.onFilterChanged(customResult);
       }
+    } else {
+      widget.onFilterChanged(result);
     }
   }
 
@@ -205,7 +234,7 @@ class _FilterIconState extends State<FilterIcon> {
                 : (isDark
                       ? AppColors.darkTextSecondary
                       : AppColors.lightTextSecondary),
-            size: 20,
+            size: SizeConfig.iconSize(context, 20),
           ),
           onPressed: () {
             _showFilterDropdown();

@@ -1,9 +1,10 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/providers/access_provider.dart';
+import '../../core/utils/size_config.dart';
 import '../../modules/auth/controller/auth_controller.dart';
 import 'glass_container.dart';
 
@@ -46,6 +47,8 @@ class _CustomSidebarState extends State<CustomSidebar> {
         return Icons.sync_alt_outlined;
       case '/projects':
         return Icons.movie_outlined;
+      case '/production-management':
+        return Icons.precision_manufacturing_outlined;
       case '/assets':
         return Icons.folder_outlined;
       case '/tasks':
@@ -102,31 +105,37 @@ class _CustomSidebarState extends State<CustomSidebar> {
       borderRadius: 0,
       blur: 15.0,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16.0),
+        padding: EdgeInsets.symmetric(
+          vertical: SizeConfig.scaleHeight(context, 16),
+        ),
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              padding: EdgeInsets.symmetric(
+                horizontal: SizeConfig.scaleWidth(context, 12),
+              ),
               child: Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
                     decoration: BoxDecoration(
                       gradient: AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(
+                        SizeConfig.scaleWidth(context, 10),
+                      ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.movie_filter,
                       color: Colors.white,
-                      size: 24,
+                      size: SizeConfig.iconSize(context, 24),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  const Expanded(
+                  SizeConfig.sizedBoxW(context, 12),
+                  Expanded(
                     child: Text(
                       'VFXPICK',
                       style: TextStyle(
-                        fontSize: 20,
+                        fontSize: SizeConfig.fontSize(context, 20),
                         fontWeight: FontWeight.w900,
                         letterSpacing: 1.5,
                         color: AppColors.brandGreen,
@@ -137,7 +146,7 @@ class _CustomSidebarState extends State<CustomSidebar> {
                 ],
               ),
             ),
-            const SizedBox(height: 30),
+            SizedBox(height: SizeConfig.scaleHeight(context, 30)),
             Expanded(
               child: ListView.builder(
                 itemCount: items.length,
@@ -145,23 +154,29 @@ class _CustomSidebarState extends State<CustomSidebar> {
                   final item = items[index];
                   final isActive = currentRoute == item.route;
                   return Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12.0,
-                      vertical: 4.0,
+                    padding: SizeConfig.paddingSymmetric(
+                      context,
+                      horizontal: 12,
+                      vertical: 4,
                     ),
                     child: InkWell(
                       onTap: () {
                         widget.scaffoldKey.currentState?.closeDrawer();
                         context.go(item.route);
                       },
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(
+                        SizeConfig.scaleWidth(context, 8),
+                      ),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: SizeConfig.paddingSymmetric(
+                          context,
                           horizontal: 16,
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(
+                            SizeConfig.scaleWidth(context, 8),
+                          ),
                           gradient: isActive ? AppColors.brandGradient : null,
                         ),
                         child: Row(
@@ -173,9 +188,9 @@ class _CustomSidebarState extends State<CustomSidebar> {
                                   : (isDark
                                         ? AppColors.darkTextSecondary
                                         : AppColors.lightTextSecondary),
-                              size: 22,
+                              size: SizeConfig.iconSize(context, 22),
                             ),
-                            const SizedBox(width: 16),
+                            SizeConfig.sizedBoxW(context, 16),
                             Expanded(
                               child: Text(
                                 item.title,
@@ -190,7 +205,7 @@ class _CustomSidebarState extends State<CustomSidebar> {
                                   fontWeight: isActive
                                       ? FontWeight.bold
                                       : FontWeight.w500,
-                                  fontSize: 14,
+                                  fontSize: SizeConfig.fontSize(context, 14),
                                 ),
                               ),
                             ),
@@ -203,14 +218,19 @@ class _CustomSidebarState extends State<CustomSidebar> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12.0),
+              padding: EdgeInsets.symmetric(
+                horizontal: SizeConfig.scaleWidth(context, 12),
+              ),
               child: Column(
                 children: [
-                  const Divider(height: 24, color: AppColors.darkCardBorder),
+                  Divider(
+                    height: SizeConfig.scaleHeight(context, 24),
+                    color: AppColors.darkCardBorder,
+                  ),
                   Row(
                     children: [
                       CircleAvatar(
-                        radius: 18,
+                        radius: SizeConfig.scaleWidth(context, 18),
                         backgroundColor: AppColors.brandGreen.withValues(
                           alpha: 0.2,
                         ),
@@ -218,8 +238,8 @@ class _CustomSidebarState extends State<CustomSidebar> {
                           (user?.avatar.isNotEmpty ?? false)
                               ? user!.avatar
                               : 'U',
-                          style: const TextStyle(
-                            fontSize: 13,
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 13),
                             fontWeight: FontWeight.bold,
                             color: AppColors.brandGreen,
                           ),
@@ -227,7 +247,7 @@ class _CustomSidebarState extends State<CustomSidebar> {
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      SizeConfig.sizedBoxW(context, 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -235,7 +255,7 @@ class _CustomSidebarState extends State<CustomSidebar> {
                             Text(
                               user?.name ?? 'Guest User',
                               style: TextStyle(
-                                fontSize: 13,
+                                fontSize: SizeConfig.fontSize(context, 13),
                                 fontWeight: FontWeight.bold,
                                 color: isDark
                                     ? AppColors.darkTextPrimary
@@ -244,9 +264,9 @@ class _CustomSidebarState extends State<CustomSidebar> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              '${user?.role ?? 'Artist'}  •  ${user?.department ?? ''}',
+                              '${user?.role ?? 'Artist'}  â€¢  ${user?.department ?? ''}',
                               style: TextStyle(
-                                fontSize: 11,
+                                fontSize: SizeConfig.fontSize(context, 11),
                                 color: isDark
                                     ? AppColors.darkTextSecondary
                                     : AppColors.lightTextSecondary,
@@ -261,10 +281,10 @@ class _CustomSidebarState extends State<CustomSidebar> {
                           authController.logout();
                           context.go('/login');
                         },
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.logout,
                           color: AppColors.priorityHigh,
-                          size: 20,
+                          size: SizeConfig.iconSize(context, 20),
                         ),
                       ),
                     ],

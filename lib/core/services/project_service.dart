@@ -27,12 +27,16 @@ class ProjectService {
     String? clientId,
     String? showId,
     String? status,
+    int? limit,
+    int? offset,
   }) {
     final params = <String, String>{};
     if (department != null) params['department'] = department;
     if (clientId != null) params['clientId'] = clientId;
     if (showId != null) params['showId'] = showId;
     if (status != null) params['status'] = status;
+    if (limit != null) params['limit'] = limit.toString();
+    if (offset != null) params['offset'] = offset.toString();
     return _api.get(ApiConstants.projectShots, queryParams: params);
   }
 
@@ -56,4 +60,7 @@ class ProjectService {
 
   Future<Map<String, dynamic>> deleteShot(String shotId) =>
       _api.delete(ApiConstants.projectShot(shotId));
+
+  Future<Map<String, dynamic>> bulkDeleteShots(List<String> shotIds) =>
+      _api.post(ApiConstants.projectShotsBulkDelete, {'shotIds': shotIds});
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../core/services/asset_service.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
@@ -78,7 +79,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
             'Shared documents & supporting material',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           Expanded(child: _body()),
         ],
       ),
@@ -107,11 +108,15 @@ class _AssetsScreenState extends State<AssetsScreen> {
       onRefresh: _load,
       child: ListView.separated(
         itemCount: _assets.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) =>
+            SizedBox(height: SizeConfig.scaleHeight(context, 8)),
         itemBuilder: (_, i) {
           final a = _assets[i];
           return GlassContainer(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: SizeConfig.scaleWidth(context, 12),
+              vertical: SizeConfig.scaleHeight(context, 4),
+            ),
             child: ListTile(
               leading: const Icon(
                 Icons.insert_drive_file_outlined,
@@ -119,18 +124,21 @@ class _AssetsScreenState extends State<AssetsScreen> {
               ),
               title: Text(
                 a.fileName,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w600,
-                  fontSize: 13,
+                  fontSize: SizeConfig.fontSize(context, 13),
                 ),
               ),
               subtitle: Text(
                 '${a.uploaderName ?? 'Unknown'}  \u2022  ${a.fileType ?? 'file'}'
                 '${a.shotId != null ? '  \u2022  ${a.shotId}' : ''}',
-                style: const TextStyle(fontSize: 11),
+                style: TextStyle(fontSize: SizeConfig.fontSize(context, 11)),
               ),
               trailing: IconButton(
-                icon: const Icon(Icons.delete_outline, size: 18),
+                icon: Icon(
+                  Icons.delete_outline,
+                  size: SizeConfig.iconSize(context, 18),
+                ),
                 onPressed: () => _delete(a),
               ),
             ),
@@ -172,7 +180,7 @@ class _AssetDialogState extends State<_AssetDialog> {
     return AlertDialog(
       title: const Text('Add Asset'),
       content: SizedBox(
-        width: 380,
+        width: SizeConfig.scaleWidth(context, 380),
         child: Form(
           key: _formKey,
           child: Column(
@@ -215,10 +223,12 @@ class _AssetDialogState extends State<_AssetDialog> {
         ElevatedButton(
           onPressed: _saving ? null : _save,
           child: _saving
-              ? const SizedBox(
-                  height: 18,
-                  width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+              ? SizedBox(
+                  height: SizeConfig.iconSize(context, 18),
+                  width: SizeConfig.iconSize(context, 18),
+                  child: CircularProgressIndicator(
+                    strokeWidth: SizeConfig.scaleWidth(context, 2),
+                  ),
                 )
               : const Text('Save'),
         ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 
 class CustomTextField extends StatefulWidget {
   final TextEditingController? controller;
@@ -51,14 +52,14 @@ class _CustomTextFieldState extends State<CustomTextField> {
         Text(
           widget.labelText,
           style: TextStyle(
-            fontSize: 13,
+            fontSize: SizeConfig.fontSize(context, 13),
             fontWeight: FontWeight.bold,
             color: isDark
                 ? AppColors.darkTextSecondary
                 : AppColors.lightTextSecondary,
           ),
         ),
-        const SizedBox(height: 6),
+        SizedBox(height: SizeConfig.scaleHeight(context, 6)),
         TextFormField(
           controller: widget.controller,
           obscureText: widget.isPassword && _obscureText,
@@ -71,7 +72,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
             color: isDark
                 ? AppColors.darkTextPrimary
                 : AppColors.lightTextPrimary,
-            fontSize: 14,
+            fontSize: SizeConfig.fontSize(context, 14),
           ),
           decoration: InputDecoration(
             hintText: widget.hintText,
@@ -79,9 +80,10 @@ class _CustomTextFieldState extends State<CustomTextField> {
               color: isDark
                   ? AppColors.darkTextSecondary.withOpacity(0.5)
                   : AppColors.lightTextSecondary.withOpacity(0.5),
-              fontSize: 14,
+              fontSize: SizeConfig.fontSize(context, 14),
             ),
-            contentPadding: const EdgeInsets.symmetric(
+            contentPadding: SizeConfig.paddingSymmetric(
+              context,
               horizontal: 16,
               vertical: 15,
             ),
@@ -91,17 +93,16 @@ class _CustomTextFieldState extends State<CustomTextField> {
                     color: isDark
                         ? AppColors.darkTextSecondary
                         : AppColors.lightTextSecondary,
-                    size: 20,
+                    size: SizeConfig.iconSize(context, 20),
                   )
                 : null,
-
             suffixIcon: widget.suffixIcon != null
                 ? Icon(
                     widget.suffixIcon,
                     color: isDark
                         ? AppColors.darkTextSecondary
                         : AppColors.lightTextSecondary,
-                    size: 20,
+                    size: SizeConfig.iconSize(context, 20),
                   )
                 : widget.isPassword
                 ? IconButton(
@@ -110,7 +111,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
                       color: isDark
                           ? AppColors.darkTextSecondary
                           : AppColors.lightTextSecondary,
-                      size: 20,
+                      size: SizeConfig.iconSize(context, 20),
                     ),
                     onPressed: () {
                       setState(() {
@@ -125,29 +126,32 @@ class _CustomTextFieldState extends State<CustomTextField> {
                       color: isDark
                           ? AppColors.darkTextSecondary
                           : AppColors.lightTextSecondary,
-                      size: 20,
+                      size: SizeConfig.iconSize(context, 20),
                     ),
                     onPressed: widget.onDateTap != null
                         ? () => widget.onDateTap!(context)
                         : null,
                   )
                 : null,
-
             filled: true,
             fillColor: isDark
                 ? Colors.white.withOpacity(0.03)
                 : Colors.black.withOpacity(0.02),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: BorderRadius.circular(
+                SizeConfig.scaleWidth(context, 3),
+              ),
               borderSide: BorderSide(
                 color: isDark
                     ? AppColors.darkCardBorder
                     : AppColors.lightCardBorder,
-                width: 1,
+                width: SizeConfig.scaleWidth(context, 1),
               ),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(
+                SizeConfig.scaleWidth(context, 8),
+              ),
               borderSide: const BorderSide(
                 color: AppColors.brandGreen,
                 width: 1.5,

@@ -4,8 +4,10 @@ import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
+import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../../../shared/widgets/todays_pickout_widget.dart';
 import '../controller/home_controller.dart';
@@ -30,7 +32,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Consumer<HomeController>(
       builder: (context, controller, child) {
         final pickoutsCard = _AnimatedEntry(
@@ -59,7 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
           onRefresh: () => controller.fetchTodaysPickouts(),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
             children: [
               LayoutBuilder(
                 builder: (context, constraints) {
@@ -73,9 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           SizedBox(width: width * 0.35, child: chartCard),
-                          const SizedBox(width: 16),
+                          SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: pickoutsCard),
-                          const SizedBox(width: 16),
+                          SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: inventCard),
                         ],
                       ),
@@ -91,9 +92,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     itemCount: cards.length,
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 16,
-                      mainAxisSpacing: 16,
-                      mainAxisExtent: 390,
+                      crossAxisSpacing: SizeConfig.scaleWidth(context, 16),
+                      mainAxisSpacing: SizeConfig.scaleHeight(context, 16),
+                      mainAxisExtent: SizeConfig.scaleHeight(context, 390),
                     ),
                     itemBuilder: (context, index) => cards[index],
                   );
@@ -108,21 +109,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildPickoutsCard(HomeController controller, bool isDark) {
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             "Today's Pickouts",
             style: TextStyle(
-              fontSize: 18,
+              fontSize: SizeConfig.fontSize(context, 18),
               fontWeight: FontWeight.bold,
               color: isDark
                   ? AppColors.darkTextPrimary
                   : AppColors.lightTextPrimary,
             ),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: SizeConfig.scaleHeight(context, 14)),
           Expanded(
             child: Builder(
               builder: (_) {
@@ -172,17 +173,20 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool isLoading,
   }) {
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 4),
+          SizedBox(height: SizeConfig.scaleHeight(context, 4)),
           Text(
             title,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 16),
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 24),
+          SizedBox(height: SizeConfig.scaleHeight(context, 24)),
           Expanded(
             child: isLoading
                 ? const Center(child: LoadingWidget())
@@ -300,27 +304,33 @@ class _DepartmentRadialChart extends StatelessWidget {
             children: radialData
                 .map((item) {
                   return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
+                    padding: EdgeInsets.only(
+                      bottom: SizeConfig.scaleHeight(context, 8),
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(top: 3),
+                          width: SizeConfig.scaleWidth(context, 8),
+                          height: SizeConfig.scaleHeight(context, 8),
+                          margin: EdgeInsets.only(
+                            top: SizeConfig.scaleHeight(context, 3),
+                          ),
                           decoration: BoxDecoration(
                             color: item.color,
-                            borderRadius: BorderRadius.circular(2),
+                            borderRadius: BorderRadius.circular(
+                              SizeConfig.scaleWidth(context, 2),
+                            ),
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        SizedBox(width: SizeConfig.scaleWidth(context, 8)),
                         Expanded(
                           child: RichText(
                             text: TextSpan(
                               style: TextStyle(
                                 color: textColor,
-                                fontSize: 14,
+                                fontSize: SizeConfig.fontSize(context, 14),
                                 fontWeight: FontWeight.w500,
                               ),
                               children: [
@@ -342,14 +352,14 @@ class _DepartmentRadialChart extends StatelessWidget {
                 })
                 .toList(growable: false),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           Expanded(
             flex: 5,
             child: Align(
               alignment: Alignment.center,
               child: SizedBox(
-                width: 455,
-                height: 455,
+                width: SizeConfig.scaleWidth(context, 455),
+                height: SizeConfig.scaleHeight(context, 455),
                 child: SfCircularChart(
                   margin: EdgeInsets.zero,
                   series: List.generate(radialData.length, (index) {
@@ -471,15 +481,18 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
   @override
   Widget build(BuildContext context) {
     return GlassContainer(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'InventActive Shows',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 16),
+              fontWeight: FontWeight.bold,
+            ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           TabBar(
             controller: _tabController,
             tabs: _statuses.map((s) => Tab(text: s)).toList(growable: false),
@@ -488,12 +501,14 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
             tabAlignment: TabAlignment.start,
             unselectedLabelColor: Colors.grey,
             indicatorColor: AppColors.brandGreen,
-            labelPadding: const EdgeInsets.symmetric(horizontal: 15),
+            labelPadding: EdgeInsets.symmetric(
+              horizontal: SizeConfig.scaleWidth(context, 15),
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 0),
             indicatorPadding: const EdgeInsets.symmetric(horizontal: 0),
             indicatorSize: TabBarIndicatorSize.tab,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
           if (widget.isLoading)
             const Expanded(child: Center(child: LoadingWidget()))
           else if (widget.errorMessage != null)
@@ -523,23 +538,30 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
 
                       return ListView.separated(
                         itemCount: items.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 8),
+                        separatorBuilder: (_, _) => SizedBox(
+                          height: SizeConfig.scaleHeight(context, 8),
+                        ),
                         itemBuilder: (context, index) {
                           final show = items[index];
                           return Container(
                             decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(color: Colors.white24),
+                              borderRadius: BorderRadius.circular(
+                                SizeConfig.scaleWidth(context, 10),
+                              ),
+                              border: GradientBoxBorder(
+                                gradient: AppColors.brandGradient,
+                                width: 1,
+                              ),
                             ),
                             child: ExpansionTile(
-                              tilePadding: const EdgeInsets.symmetric(
-                                horizontal: 12,
+                              tilePadding: EdgeInsets.symmetric(
+                                horizontal: SizeConfig.scaleWidth(context, 12),
                               ),
-                              childrenPadding: const EdgeInsets.fromLTRB(
-                                12,
+                              childrenPadding: EdgeInsets.fromLTRB(
+                                SizeConfig.scaleWidth(context, 12),
                                 0,
-                                12,
-                                12,
+                                SizeConfig.scaleWidth(context, 12),
+                                SizeConfig.scaleHeight(context, 12),
                               ),
                               title: Text(
                                 show.showName,
@@ -573,9 +595,13 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
                                   label: 'Last Updated',
                                   value: _dateLabel(show.lastUpdatedAt),
                                 ),
-                                const SizedBox(height: 10),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 10),
+                                ),
                                 const Divider(height: 1),
-                                const SizedBox(height: 10),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 10),
+                                ),
                                 const Align(
                                   alignment: Alignment.centerLeft,
                                   child: Text(
@@ -585,7 +611,9 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 6),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 6),
+                                ),
                                 if (show.shots.isEmpty)
                                   const Align(
                                     alignment: Alignment.centerLeft,
@@ -597,21 +625,26 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
                                 else
                                   ...show.shots.map((shot) {
                                     return Padding(
-                                      padding: const EdgeInsets.all(8),
+                                      padding: EdgeInsets.all(
+                                        SizeConfig.scaleWidth(context, 8),
+                                      ),
                                       child: Align(
                                         alignment: Alignment.centerLeft,
                                         child: Container(
                                           width: double.infinity,
-                                          padding: const EdgeInsets.all(10),
+                                          padding: EdgeInsets.all(
+                                            SizeConfig.scaleWidth(context, 10),
+                                          ),
                                           decoration: BoxDecoration(
                                             borderRadius: BorderRadius.circular(
-                                              8,
+                                              SizeConfig.scaleWidth(context, 8),
                                             ),
                                             color: Colors.white.withValues(
                                               alpha: 0.03,
                                             ),
-                                            border: Border.all(
-                                              color: Colors.white12,
+                                            border: GradientBoxBorder(
+                                              gradient: AppColors.brandGradient,
+                                              width: 1,
                                             ),
                                           ),
                                           child: Column(
@@ -625,12 +658,22 @@ class _InventActiveShowsCardState extends State<_InventActiveShowsCard>
                                                   fontWeight: FontWeight.w700,
                                                 ),
                                               ),
-                                              const SizedBox(height: 4),
+                                              SizedBox(
+                                                height: SizeConfig.scaleHeight(
+                                                  context,
+                                                  4,
+                                                ),
+                                              ),
                                               Text(
                                                 '${shot.department} • ${shot.mandays.toStringAsFixed(1)} MD • Due ${_dateLabel(shot.dueDate)}',
                                                 textAlign: TextAlign.start,
                                               ),
-                                              const SizedBox(height: 2),
+                                              SizedBox(
+                                                height: SizeConfig.scaleHeight(
+                                                  context,
+                                                  2,
+                                                ),
+                                              ),
                                               Text(
                                                 'Artist: ${shot.artistName?.isNotEmpty == true ? shot.artistName : '-'}',
                                                 textAlign: TextAlign.start,
@@ -664,11 +707,11 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(top: 8),
+      padding: EdgeInsets.only(top: SizeConfig.scaleHeight(context, 8)),
       child: Row(
         children: [
           SizedBox(
-            width: 110,
+            width: SizeConfig.scaleWidth(context, 110),
             child: Text(
               label,
               style: const TextStyle(fontWeight: FontWeight.w600),

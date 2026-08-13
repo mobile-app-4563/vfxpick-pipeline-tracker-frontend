@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/gradient_button.dart';
@@ -71,10 +72,10 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Center(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(24.0),
+              padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 24)),
               child: GlassContainer(
                 width: cardWidth,
-                borderRadius: 20,
+                borderRadius: SizeConfig.scaleWidth(context, 20),
                 child: IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -86,40 +87,50 @@ class _LoginScreenState extends State<LoginScreen> {
                             decoration: const BoxDecoration(
                               gradient: AppColors.brandGradient,
                             ),
-                            padding: const EdgeInsets.all(40),
+                            padding: EdgeInsets.all(
+                              SizeConfig.scaleWidth(context, 40),
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: EdgeInsets.all(
+                                    SizeConfig.scaleWidth(context, 12),
+                                  ),
                                   decoration: BoxDecoration(
                                     color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(16),
+                                    borderRadius: BorderRadius.circular(
+                                      SizeConfig.scaleWidth(context, 16),
+                                    ),
                                   ),
-                                  child: const Icon(
+                                  child: Icon(
                                     Icons.movie_filter,
                                     color: Colors.white,
-                                    size: 40,
+                                    size: SizeConfig.iconSize(context, 40),
                                   ),
                                 ),
-                                const SizedBox(height: 24),
-                                const Text(
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 24),
+                                ),
+                                Text(
                                   'VfxPick\nPipeline Tracker',
                                   style: TextStyle(
                                     color: Colors.white,
-                                    fontSize: 32,
+                                    fontSize: SizeConfig.fontSize(context, 32),
                                     fontWeight: FontWeight.w900,
                                     height: 1.2,
                                     letterSpacing: 1.0,
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 16),
+                                ),
                                 Text(
                                   'Manage shots, assets, tasks, and reviews in one unified premium studio console. Experience state-of-the-art VFX pipeline workflow.',
                                   style: TextStyle(
                                     color: Colors.white.withOpacity(0.8),
-                                    fontSize: 14,
+                                    fontSize: SizeConfig.fontSize(context, 14),
                                     height: 1.5,
                                   ),
                                 ),
@@ -131,7 +142,11 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Right Side: Input Form
                       Expanded(
                         child: Padding(
-                          padding: EdgeInsets.all(isDesktop ? 40.0 : 24.0),
+                          padding: EdgeInsets.all(
+                            isDesktop
+                                ? SizeConfig.scaleWidth(context, 40)
+                                : SizeConfig.scaleWidth(context, 24),
+                          ),
                           child: Form(
                             key: _formKey,
                             child: Column(
@@ -141,24 +156,28 @@ class _LoginScreenState extends State<LoginScreen> {
                                 Text(
                                   'Welcome Back',
                                   style: TextStyle(
-                                    fontSize: 24,
+                                    fontSize: SizeConfig.fontSize(context, 24),
                                     fontWeight: FontWeight.bold,
                                     color: Theme.of(
                                       context,
                                     ).colorScheme.onSurface,
                                   ),
                                 ),
-                                const SizedBox(height: 4),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 4),
+                                ),
                                 Text(
                                   'Sign in to access your production tracker',
                                   style: TextStyle(
-                                    fontSize: 14,
+                                    fontSize: SizeConfig.fontSize(context, 14),
                                     color: Theme.of(
                                       context,
                                     ).textTheme.bodyMedium?.color,
                                   ),
                                 ),
-                                const SizedBox(height: 24),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 24),
+                                ),
 
                                 // Email
                                 CustomTextField(
@@ -176,7 +195,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     return null;
                                   },
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 16),
+                                ),
 
                                 // Password
                                 CustomTextField(
@@ -192,14 +213,19 @@ class _LoginScreenState extends State<LoginScreen> {
                                     return null;
                                   },
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 16),
+                                ),
 
                                 // Remember Me & Forgot Password Row
                                 Wrap(
                                   alignment: WrapAlignment.spaceBetween,
                                   crossAxisAlignment: WrapCrossAlignment.center,
-                                  runSpacing: 4,
-                                  spacing: 10,
+                                  runSpacing: SizeConfig.scaleHeight(
+                                    context,
+                                    4,
+                                  ),
+                                  spacing: SizeConfig.scaleWidth(context, 10),
                                   children: [
                                     Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -213,9 +239,14 @@ class _LoginScreenState extends State<LoginScreen> {
                                           },
                                           activeColor: AppColors.brandGreen,
                                         ),
-                                        const Text(
+                                        Text(
                                           'Remember Me',
-                                          style: TextStyle(fontSize: 13),
+                                          style: TextStyle(
+                                            fontSize: SizeConfig.fontSize(
+                                              context,
+                                              13,
+                                            ),
+                                          ),
                                         ),
                                       ],
                                     ),
@@ -231,17 +262,22 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ),
                                         );
                                       },
-                                      child: const Text(
+                                      child: Text(
                                         'Forgot Password?',
                                         style: TextStyle(
-                                          fontSize: 13,
+                                          fontSize: SizeConfig.fontSize(
+                                            context,
+                                            13,
+                                          ),
                                           color: AppColors.brandGreen,
                                         ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 20),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 20),
+                                ),
 
                                 // Sign In Button
                                 GradientButton(
@@ -250,7 +286,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   isLoading: authController.isLoading,
                                   onPressed: _handleLogin,
                                 ),
-                                const SizedBox(height: 16),
+                                SizedBox(
+                                  height: SizeConfig.scaleHeight(context, 16),
+                                ),
 
                                 // Signup is intentionally hidden from the login page.
                               ],

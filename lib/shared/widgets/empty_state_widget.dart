@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/size_config.dart';
 
 class EmptyStateWidget extends StatelessWidget {
   final IconData icon;
@@ -26,13 +27,11 @@ class EmptyStateWidget extends StatelessWidget {
         direction: Axis.vertical,
         crossAxisAlignment: WrapCrossAlignment.center,
         alignment: WrapAlignment.center,
-        // mainAxisAlignment: MainAxisAlignment.center,
-        // mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
             child: Container(
-              padding: const EdgeInsets.all(20),
+              padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 20)),
               decoration: BoxDecoration(
                 color: isDark
                     ? Colors.white.withOpacity(0.02)
@@ -46,44 +45,46 @@ class EmptyStateWidget extends StatelessWidget {
               ),
               child: Icon(
                 icon,
-                size: 24,
+                size: SizeConfig.iconSize(context, 24),
                 color: isDark
                     ? AppColors.darkTextSecondary
                     : AppColors.lightTextSecondary,
               ),
             ),
           ),
-          const SizedBox(height: 5),
+          SizedBox(height: SizeConfig.scaleHeight(context, 5)),
           Text(
             title,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: SizeConfig.fontSize(context, 14),
               fontWeight: FontWeight.bold,
               color: isDark
                   ? AppColors.darkTextPrimary
                   : AppColors.lightTextPrimary,
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: SizeConfig.scaleHeight(context, 8)),
           Text(
             description,
             textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 14,
+              fontSize: SizeConfig.fontSize(context, 14),
               color: isDark
                   ? AppColors.darkTextSecondary
                   : AppColors.lightTextSecondary,
             ),
           ),
           if (actionLabel != null && onActionPressed != null) ...[
-            const SizedBox(height: 20),
+            SizedBox(height: SizeConfig.scaleHeight(context, 20)),
             ElevatedButton(
               onPressed: onActionPressed,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandGreen,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 8),
+                  ),
                 ),
               ),
               child: Text(actionLabel!),
