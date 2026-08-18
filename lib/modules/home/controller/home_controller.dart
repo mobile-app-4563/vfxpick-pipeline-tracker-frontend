@@ -6,14 +6,20 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/models/domain_models.dart';
 import '../../../core/models/todays_pickout_model.dart';
 import '../../../core/services/dashboard_service.dart';
+import '../../../core/services/production_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../core/services/review_service.dart';
 
 /// Home page controller for Today's Pickouts and dashboard data.
+/// Supports department-based filtering:
+/// - Production department: shows concern data from production_data table
+/// - Other departments: shows actual data (reports/performance)
+/// - Admin: shows both data types
 class HomeController extends ChangeNotifier {
   final DashboardService _dashboardService = DashboardService();
   final ReportService _reportService = ReportService();
   final ReviewService _reviewService = ReviewService();
+  final ProductionService _productionService = ProductionService();
 
   List<TodaysPickoutModel> _todaysPickouts = [];
   Map<String, double> _reportMandaysByDepartment = {};
@@ -23,11 +29,18 @@ class HomeController extends ChangeNotifier {
     'Approved': const [],
     'Approved Internal': const [],
   };
+
+  // ── Production-specific data (for Production department users) ──
+  List<Map<String, dynamic>> _productionConcerns = [];
+  Map<String, int> _concernStatusCount = {};
+
   bool _isLoading = false;
   bool _isInsightsLoading = false;
   bool _isInventActiveLoading = false;
+  bool _isProductionLoading = false;
   String? _errorMessage;
   String? _inventActiveError;
+  String? _productionError;
 
   List<TodaysPickoutModel> get todaysPickouts => _todaysPickouts;
   Map<String, double> get reportMandaysByDepartment =>
@@ -37,11 +50,16 @@ class HomeController extends ChangeNotifier {
   List<Map<String, dynamic>> get artistPerformance => _artistPerformance;
   Map<String, List<InventActiveShow>> get inventActiveShowsByStatus =>
       _inventActiveShowsByStatus;
+  List<Map<String, dynamic>> get productionConcerns => _productionConcerns;
+  Map<String, int> get concernStatusCount => _concernStatusCount;
+
   bool get isLoading => _isLoading;
   bool get isInsightsLoading => _isInsightsLoading;
   bool get isInventActiveLoading => _isInventActiveLoading;
+  bool get isProductionLoading => _isProductionLoading;
   String? get errorMessage => _errorMessage;
   String? get inventActiveError => _inventActiveError;
+  String? get productionError => _productionError;
 
   /// Fetch today's pickouts from the API
   Future<void> fetchTodaysPickouts() async {
@@ -66,13 +84,59 @@ class HomeController extends ChangeNotifier {
       _todaysPickouts.sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
       _errorMessage = null;
 
-      // ── Fire insights + invent-active in PARALLEL (not sequentially) ───
-      await Future.wait([fetchInsights(), fetchInventActiveShows()]);
+      // ── Fire insights + invent-active + production concerns in PARALLEL ───
+      await Future.wait([
+        fetchInsights(),
+        fetchInventActiveShows(),
+        fetchProductionConcerns(),
+      ]);
     } catch (e) {
       _errorMessage = 'Failed to load today\'s pickouts: $e';
       _todaysPickouts = [];
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetch production concerns from production_data table
+  /// Only called if user's department is 'Production' or user is Admin
+  Future<void> fetchProductionConcerns() async {
+    _isProductionLoading = true;
+    _productionError = null;
+    notifyListeners();
+
+    try {
+      // Get only open/in-progress concerns (not resolved/on hold)
+      final response = await _productionService.getProductionConcerns(
+        status: '', // Get all statuses, or filter if needed
+      );
+
+      if (response['success'] == true) {
+        final concerns =
+            (response['concerns'] as List<dynamic>?) ?? const <dynamic>[];
+        _productionConcerns = concerns.whereType<Map<String, dynamic>>().toList(
+          growable: false,
+        );
+
+        // Count concerns by status
+        _concernStatusCount = {};
+        for (final concern in _productionConcerns) {
+          final status = (concern['status'] ?? 'Unknown').toString();
+          _concernStatusCount[status] = (_concernStatusCount[status] ?? 0) + 1;
+        }
+      } else {
+        _productionError =
+            response['error'] ?? 'Failed to load production concerns';
+        _productionConcerns = [];
+        _concernStatusCount = {};
+      }
+    } catch (e) {
+      _productionError = 'Failed to load production concerns: $e';
+      _productionConcerns = [];
+      _concernStatusCount = {};
+    } finally {
+      _isProductionLoading = false;
       notifyListeners();
     }
   }
@@ -198,11 +262,15 @@ class HomeController extends ChangeNotifier {
       'Approved': const [],
       'Approved Internal': const [],
     };
+    _productionConcerns = [];
+    _concernStatusCount = {};
     _inventActiveError = null;
+    _productionError = null;
     _errorMessage = null;
     _isLoading = false;
     _isInsightsLoading = false;
     _isInventActiveLoading = false;
+    _isProductionLoading = false;
     notifyListeners();
   }
 }

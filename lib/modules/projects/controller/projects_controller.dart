@@ -190,8 +190,8 @@ class ProjectController extends ChangeNotifier {
 
   Future<String?> updateShot(String shotId, Map<String, dynamic> body) async {
     try {
-      await _service.updateShot(shotId, body);
-      await loadShots();
+      final resp = await _service.updateShot(shotId, body);
+      _replaceShotLocally(shotId, resp);
       return null;
     } on ApiException catch (e) {
       return e.message;
@@ -229,10 +229,40 @@ class ProjectController extends ChangeNotifier {
 
   Future<void> updateStatus(String shotId, String status) async {
     try {
-      await _service.updateStatus(shotId, status);
-      await loadShots();
+      final resp = await _service.updateStatus(shotId, status);
+      _replaceShotLocally(shotId, resp);
     } catch (e) {
       debugPrint('ProjectController.updateStatus error: $e');
+    }
+  }
+
+  Future<void> updatePriority(String shotId, String priority) async {
+    try {
+      final resp = await _service.updateShot(shotId, {'priority': priority});
+      _replaceShotLocally(shotId, resp);
+    } catch (e) {
+      debugPrint('ProjectController.updatePriority error: $e');
+    }
+  }
+
+  /// Monotonic counter bumped whenever a shot is replaced in [_shots].
+  /// Screens include it in their grid row-cache keys so an in-place update
+  /// (same list length) still refreshes the rendered rows.
+  int _shotsRevision = 0;
+  int get shotsRevision => _shotsRevision;
+
+  /// Swaps the updated shot into [_shots] from the API `{shot: {...}}`
+  /// response WITHOUT a full reload — keeps the grid stable (no spinner,
+  /// no scroll/page reset, dropdowns update in place).
+  void _replaceShotLocally(String shotId, Map<String, dynamic> resp) {
+    final shotJson = resp['shot'];
+    if (shotJson is Map<String, dynamic>) {
+      final index = _shots.indexWhere((s) => s.shotId == shotId);
+      if (index >= 0) {
+        _shots[index] = ShotModel.fromJson(shotJson);
+        _shotsRevision++;
+        notifyListeners();
+      }
     }
   }
 

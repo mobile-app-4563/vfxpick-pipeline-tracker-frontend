@@ -10,6 +10,7 @@ import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../../../shared/widgets/todays_pickout_widget.dart';
+import '../../auth/controller/auth_controller.dart';
 import '../controller/home_controller.dart';
 
 /// Home page with pickouts, department quick filter and analytics cards.
@@ -32,20 +33,37 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final authController = context.read<AuthController>();
+    final userDepartment = authController.currentUser?.department ?? '';
+    final userRole = authController.currentUser?.role ?? '';
+    final isProduction = userDepartment == 'Production';
+    final isAdmin = userRole == 'Admin';
+
     return Consumer<HomeController>(
       builder: (context, controller, child) {
+        // ── Build cards based on user department ──
         final pickoutsCard = _AnimatedEntry(
           order: 0,
           child: _buildPickoutsCard(controller, isDark),
         );
-        final chartCard = _AnimatedEntry(
-          order: 1,
-          child: _buildPieSection(
-            title: 'Reports Mandays (Current Month)',
-            data: controller.reportMandaysByDepartment,
-            isLoading: controller.isInsightsLoading,
-          ),
-        );
+
+        // For Production department: show production concerns
+        // For others: show reports mandays chart
+        // For Admin: show both
+        final insightCard = isProduction
+            ? _AnimatedEntry(
+                order: 1,
+                child: _buildProductionConcernsCard(controller, isDark),
+              )
+            : _AnimatedEntry(
+                order: 1,
+                child: _buildPieSection(
+                  title: 'Reports Mandays (Current Month)',
+                  data: controller.reportMandaysByDepartment,
+                  isLoading: controller.isInsightsLoading,
+                ),
+              );
+
         final inventCard = _AnimatedEntry(
           order: 2,
           child: _InventActiveShowsCard(
@@ -55,6 +73,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller.inventActiveError ?? controller.errorMessage,
           ),
         );
+
+        // For Admin: add an additional card showing both data types
+        final adminCard = isAdmin
+            ? _AnimatedEntry(
+                order: 3,
+                child: _buildAdminDashboard(controller, isDark),
+              )
+            : null;
 
         return RefreshIndicator(
           onRefresh: () => controller.fetchTodaysPickouts(),
@@ -73,7 +99,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(width: width * 0.35, child: chartCard),
+                          SizedBox(width: width * 0.35, child: insightCard),
                           SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: pickoutsCard),
                           SizedBox(width: SizeConfig.scaleWidth(context, 16)),
@@ -83,7 +109,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   }
 
-                  final cards = <Widget>[pickoutsCard, chartCard, inventCard];
+                  final cards = <Widget>[pickoutsCard, insightCard, inventCard];
+                  if (adminCard != null) {
+                    cards.add(adminCard);
+                  }
                   final crossAxisCount = width >= 760 ? 2 : 1;
 
                   return GridView.builder(
@@ -195,6 +224,293 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
+  }
+
+  /// Build production concerns card for Production department users
+  Widget _buildProductionConcernsCard(HomeController controller, bool isDark) {
+    return GlassContainer(
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Production Concerns',
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 18),
+              fontWeight: FontWeight.bold,
+              color: isDark
+                  ? AppColors.darkTextPrimary
+                  : AppColors.lightTextPrimary,
+            ),
+          ),
+          SizedBox(height: SizeConfig.scaleHeight(context, 8)),
+          if (controller.isProductionLoading)
+            const Expanded(child: Center(child: LoadingWidget()))
+          else if (controller.productionError != null)
+            Expanded(
+              child: EmptyStateWidget(
+                title: "Error Loading Concerns",
+                description: controller.productionError!,
+                icon: Icons.error_outline,
+              ),
+            )
+          else if (controller.productionConcerns.isEmpty)
+            Expanded(
+              child: const EmptyStateWidget(
+                title: "No Concerns",
+                description: "No production concerns tracked.",
+                icon: Icons.check_circle_outline,
+              ),
+            )
+          else
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    // Show status summary
+                    Padding(
+                      padding: EdgeInsets.only(
+                        bottom: SizeConfig.scaleHeight(context, 12),
+                      ),
+                      child: Wrap(
+                        spacing: SizeConfig.scaleWidth(context, 8),
+                        runSpacing: SizeConfig.scaleHeight(context, 8),
+                        children: controller.concernStatusCount.entries.map((
+                          entry,
+                        ) {
+                          return Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: SizeConfig.scaleWidth(context, 8),
+                              vertical: SizeConfig.scaleHeight(context, 4),
+                            ),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(
+                                entry.key,
+                              ).withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(
+                                SizeConfig.scaleWidth(context, 4),
+                              ),
+                              border: Border.all(
+                                color: _getStatusColor(entry.key),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              '${entry.key}: ${entry.value}',
+                              style: TextStyle(
+                                fontSize: SizeConfig.fontSize(context, 12),
+                                fontWeight: FontWeight.w600,
+                                color: _getStatusColor(entry.key),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    // Show first 5 concerns
+                    ...controller.productionConcerns.take(5).map((concern) {
+                      return Card(
+                        margin: EdgeInsets.only(
+                          bottom: SizeConfig.scaleHeight(context, 8),
+                        ),
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(
+                            _getPriorityIcon(concern['priority'] as String?),
+                            size: SizeConfig.iconSize(context, 16),
+                            color: _getPriorityColor(
+                              concern['priority'] as String?,
+                            ),
+                          ),
+                          title: Text(
+                            concern['concernType'] ?? 'Unknown',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 13),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          subtitle: Text(
+                            concern['concernDescription'] ?? '',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 11),
+                            ),
+                          ),
+                          trailing: Chip(
+                            label: Text(
+                              concern['status'] ?? 'Unknown',
+                              style: TextStyle(
+                                fontSize: SizeConfig.fontSize(context, 10),
+                              ),
+                            ),
+                            backgroundColor: _getStatusColor(
+                              concern['status'] as String?,
+                            ).withValues(alpha: 0.2),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Build admin dashboard showing both production concerns and reports
+  Widget _buildAdminDashboard(HomeController controller, bool isDark) {
+    return GlassContainer(
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Admin Dashboard (All Data)',
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 18),
+              fontWeight: FontWeight.bold,
+              color: isDark
+                  ? AppColors.darkTextPrimary
+                  : AppColors.lightTextPrimary,
+            ),
+          ),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Production Concerns Summary
+                  Text(
+                    'Production Concerns',
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 14),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: SizeConfig.scaleHeight(context, 6)),
+                  Text(
+                    '${controller.productionConcerns.length} total concerns',
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 12),
+                    ),
+                  ),
+                  if (controller.concernStatusCount.isNotEmpty)
+                    Padding(
+                      padding: EdgeInsets.only(
+                        top: SizeConfig.scaleHeight(context, 6),
+                      ),
+                      child: Wrap(
+                        spacing: SizeConfig.scaleWidth(context, 6),
+                        children: controller.concernStatusCount.entries
+                            .map(
+                              (e) => Text(
+                                '${e.key}: ${e.value}',
+                                style: TextStyle(
+                                  fontSize: SizeConfig.fontSize(context, 11),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ),
+                  Divider(
+                    height: SizeConfig.scaleHeight(context, 24),
+                    color: isDark
+                        ? AppColors.darkTextPrimary.withValues(alpha: 0.2)
+                        : AppColors.lightTextPrimary.withValues(alpha: 0.2),
+                  ),
+                  Text(
+                    'Reports Mandays (Current Month)',
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 14),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: SizeConfig.scaleHeight(context, 6)),
+                  if (controller.reportMandaysByDepartment.isEmpty)
+                    Text(
+                      'No report data available',
+                      style: TextStyle(
+                        fontSize: SizeConfig.fontSize(context, 12),
+                      ),
+                    )
+                  else
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: controller.reportMandaysByDepartment.entries
+                          .map(
+                            (e) => Padding(
+                              padding: EdgeInsets.only(
+                                bottom: SizeConfig.scaleHeight(context, 4),
+                              ),
+                              child: Text(
+                                '${e.key}: ${e.value.toStringAsFixed(2)} MD',
+                                style: TextStyle(
+                                  fontSize: SizeConfig.fontSize(context, 11),
+                                ),
+                              ),
+                            ),
+                          )
+                          .toList(),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String? status) {
+    switch (status?.toLowerCase()) {
+      case 'open':
+        return Colors.blue;
+      case 'in progress':
+        return Colors.orange;
+      case 'resolved':
+        return Colors.green;
+      case 'on hold':
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  Color _getPriorityColor(String? priority) {
+    switch (priority?.toLowerCase()) {
+      case 'low':
+        return Colors.blue;
+      case 'medium':
+        return Colors.orange;
+      case 'high':
+        return Colors.red;
+      case 'critical':
+        return Colors.deepOrange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getPriorityIcon(String? priority) {
+    switch (priority?.toLowerCase()) {
+      case 'low':
+        return Icons.trending_down;
+      case 'medium':
+        return Icons.trending_flat;
+      case 'high':
+        return Icons.trending_up;
+      case 'critical':
+        return Icons.warning;
+      default:
+        return Icons.priority_high;
+    }
   }
 }
 

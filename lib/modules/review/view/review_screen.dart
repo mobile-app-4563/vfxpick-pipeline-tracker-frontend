@@ -28,6 +28,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
   bool _exportingIndividual = false;
   bool _expandDepartment = false;
   bool _expandIndividual = false;
+  bool _showCellBorders = true;
   DateTime? _startDate;
   DateTime? _endDate;
 
@@ -313,6 +314,24 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   ),
                 ),
               ),
+              FilterChip(
+                selected: _showCellBorders,
+                onSelected: (value) => setState(() => _showCellBorders = value),
+                avatar: Icon(
+                  Icons.border_all,
+                  size: SizeConfig.iconSize(context, 18),
+                  color: _showCellBorders ? AppColors.brandGreen : null,
+                ),
+                label: const Text('Cell Borders'),
+                showCheckmark: true,
+                selectedColor: AppColors.brandGreen.withValues(alpha: 0.12),
+                checkmarkColor: AppColors.brandGreen,
+                side: BorderSide(
+                  color: _showCellBorders
+                      ? AppColors.brandGreen
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
               _exportButton(
                 context,
                 busy: _exportingDept,
@@ -348,6 +367,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         ),
                         SizedBox(height: SizeConfig.scaleHeight(context, 8)),
                         DynamicDataTable(
+                          showCellBorders: _showCellBorders,
                           fields: [
                             DynamicTableField(
                               key: 'clientNo',
@@ -460,6 +480,24 @@ class _ReviewScreenState extends State<ReviewScreen> {
                   ),
                 ),
               ),
+              FilterChip(
+                selected: _showCellBorders,
+                onSelected: (value) => setState(() => _showCellBorders = value),
+                avatar: Icon(
+                  Icons.border_all,
+                  size: SizeConfig.iconSize(context, 18),
+                  color: _showCellBorders ? AppColors.brandGreen : null,
+                ),
+                label: const Text('Cell Borders'),
+                showCheckmark: true,
+                selectedColor: AppColors.brandGreen.withValues(alpha: 0.12),
+                checkmarkColor: AppColors.brandGreen,
+                side: BorderSide(
+                  color: _showCellBorders
+                      ? AppColors.brandGreen
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
               _exportButton(
                 context,
                 busy: _exportingIndividual,
@@ -499,6 +537,7 @@ class _ReviewScreenState extends State<ReviewScreen> {
                         ),
                         SizedBox(height: SizeConfig.scaleHeight(context, 8)),
                         DynamicDataTable(
+                          showCellBorders: _showCellBorders,
                           fields: [
                             DynamicTableField(
                               key: 'clientNo',

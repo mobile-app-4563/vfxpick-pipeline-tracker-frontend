@@ -34,6 +34,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   final String _artistEtaFilter = '';
   String _supervisorStatusFilter = '';
   String _artistStatusFilter = '';
+  bool _showCellBorders = true;
 
   @override
   void initState() {
@@ -247,6 +248,24 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
                   },
                 ),
               ),
+              FilterChip(
+                selected: _showCellBorders,
+                onSelected: (value) => setState(() => _showCellBorders = value),
+                avatar: Icon(
+                  Icons.border_all,
+                  size: SizeConfig.iconSize(context, 18),
+                  color: _showCellBorders ? AppColors.brandGreen : null,
+                ),
+                label: const Text('Cell Borders'),
+                showCheckmark: true,
+                selectedColor: AppColors.brandGreen.withValues(alpha: 0.12),
+                checkmarkColor: AppColors.brandGreen,
+                side: BorderSide(
+                  color: _showCellBorders
+                      ? AppColors.brandGreen
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
             ],
           ),
         ],
@@ -307,6 +326,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
         dataRowMinHeight: MediaQuery.of(context).size.height * 44 / 768,
         dataRowMaxHeight: MediaQuery.of(context).size.height * 56 / 768,
+        showCellBorders: _showCellBorders,
         fields: [
           DynamicTableField(
             key: 'sno',

@@ -40,6 +40,7 @@ class ShotModel {
   final String? approvedBy;
   final String? comments;
   final String? complexity;
+  final String? priority;
   final String? fromRoto;
   final String? fromPaint;
   final String? fromMm;
@@ -85,6 +86,7 @@ class ShotModel {
     this.approvedBy,
     this.comments,
     this.complexity,
+    this.priority,
     this.fromRoto,
     this.fromPaint,
     this.fromMm,
@@ -142,6 +144,7 @@ class ShotModel {
       approvedBy: json['approvedBy'],
       comments: json['comments'],
       complexity: json['complexity'],
+      priority: json['priority'],
       fromRoto: json['fromRoto'],
       fromPaint: json['fromPaint'],
       fromMm: json['fromMm'],

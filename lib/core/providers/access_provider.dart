@@ -9,7 +9,6 @@ class AccessProvider extends ChangeNotifier {
 
   static const List<String> orderedMenuRoutes = [
     '/home',
-    '/dashboard',
     '/bidding',
     '/projects',
     '/production-management',
@@ -22,13 +21,12 @@ class AccessProvider extends ChangeNotifier {
     '/notifications',
     '/user-register',
     '/access-provider',
-    '/hrms',
     '/inventory',
+    '/profile',
   ];
 
   static const Set<String> protectedRoutes = {
     '/home',
-    '/dashboard',
     '/bidding',
     '/projects',
     '/production-management',
@@ -41,20 +39,19 @@ class AccessProvider extends ChangeNotifier {
     '/notifications',
     '/user-register',
     '/access-provider',
-    '/hrms',
     '/inventory',
+    '/profile',
   };
 
   static const Set<String> _artistDefaults = {
     '/home',
-    '/dashboard',
     '/tasks',
     '/notifications',
+    '/profile',
   };
 
   static const Set<String> _fullAccessDefaults = {
     '/home',
-    '/dashboard',
     '/bidding',
     '/projects',
     '/production-management',
@@ -66,8 +63,8 @@ class AccessProvider extends ChangeNotifier {
     '/teams',
     '/notifications',
     '/user-register',
-    '/hrms',
     '/inventory',
+    '/profile',
   };
 
   final Map<String, Set<String>> _roleRoutes = {};
@@ -148,9 +145,6 @@ class AccessProvider extends ChangeNotifier {
 
   Set<String> _effectiveAllowedRoutes(String role) {
     final allowed = {...(_roleRoutes[role] ?? _artistDefaults)};
-    if (isFullAccessRole(role)) {
-      allowed.add('/hrms');
-    }
     if (isAdminRole(role)) {
       allowed.add('/access-provider');
     }
@@ -164,8 +158,6 @@ class AccessProvider extends ChangeNotifier {
     switch (route) {
       case '/home':
         return 'Home';
-      case '/dashboard':
-        return 'Dashboard';
       case '/bidding':
         return 'Bidding';
       case '/projects':
@@ -190,10 +182,10 @@ class AccessProvider extends ChangeNotifier {
         return 'Add Users';
       case '/access-provider':
         return 'Access Provider';
-      case '/hrms':
-        return 'HRMS';
       case '/inventory':
         return 'Inventory';
+      case '/profile':
+        return 'My Profile';
       default:
         return route;
     }

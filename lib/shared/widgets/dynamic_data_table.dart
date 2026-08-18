@@ -49,6 +49,8 @@ class DynamicDataTable extends StatefulWidget {
   final int rowsPerPage;
   final int? currentPage;
   final ValueChanged<int>? onPageChanged;
+  final bool fitToWidth;
+  final bool showCellBorders;
 
   const DynamicDataTable({
     super.key,
@@ -59,7 +61,7 @@ class DynamicDataTable extends StatefulWidget {
     this.minColumnWidth = 0,
     this.headingRowHeight = 44,
     this.dataRowMinHeight = 44,
-    this.dataRowMaxHeight = 56,
+    this.dataRowMaxHeight = 30,
     this.columnSpacing = 24,
     this.padding = const EdgeInsets.all(8),
     this.empty,
@@ -70,6 +72,8 @@ class DynamicDataTable extends StatefulWidget {
     this.rowsPerPage = 50,
     this.currentPage,
     this.onPageChanged,
+    this.fitToWidth = false,
+    this.showCellBorders = false,
   });
 
   @override
@@ -78,6 +82,16 @@ class DynamicDataTable extends StatefulWidget {
 
 class _DynamicDataTableState extends State<DynamicDataTable> {
   int _internalPage = 0;
+
+  // Cached visible-page slice — recomputed only when the page, page size, or
+  // the source row list (identity/length) changes, so repeated builds never
+  // re-slice/re-parse the full row list (e.g. 10-row pages with hundreds of
+  // rows only ever build 10 rows, and only once per page/filter change).
+  List<Map<String, dynamic>>? _cachedVisibleRows;
+  int _cachedVisiblePage = -1;
+  int _cachedVisibleRowsPerPage = -1;
+  List<Map<String, dynamic>>? _cachedVisibleSourceRows;
+  int _cachedVisibleSourceLength = -1;
 
   final ScrollController _hScrollController = ScrollController();
   bool _isDragging = false;
@@ -136,17 +150,40 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     if (widget.rowsPerPage <= 0 || widget.rows.length <= widget.rowsPerPage) {
       return widget.rows;
     }
+
+    // Cache the sliced page rows: repeated builds (page flips, filter
+    // re-renders, cell-edit rebuilds) reuse the same page slice instead of
+    // re-slicing the full list every time. Keyed on page + rowsPerPage + the
+    // source list instance/length; any change invalidates the cache.
+    if (_cachedVisibleRows != null &&
+        _cachedVisiblePage == page &&
+        _cachedVisibleRowsPerPage == widget.rowsPerPage &&
+        _cachedVisibleSourceLength == widget.rows.length &&
+        identical(_cachedVisibleSourceRows, widget.rows)) {
+      return _cachedVisibleRows!;
+    }
+
     final start = page * widget.rowsPerPage;
     final end = (start + widget.rowsPerPage).clamp(0, widget.rows.length);
+    List<Map<String, dynamic>> visible;
     if (start >= widget.rows.length) {
       if (widget.currentPage != null && widget.onPageChanged != null) {
         widget.onPageChanged!(0);
-        return widget.rows.take(widget.rowsPerPage).toList();
+        visible = widget.rows.take(widget.rowsPerPage).toList();
+      } else {
+        _internalPage = 0;
+        visible = widget.rows.take(widget.rowsPerPage).toList();
       }
-      _internalPage = 0;
-      return widget.rows.take(widget.rowsPerPage).toList();
+    } else {
+      visible = widget.rows.sublist(start, end);
     }
-    return widget.rows.sublist(start, end);
+
+    _cachedVisibleRows = visible;
+    _cachedVisiblePage = page;
+    _cachedVisibleRowsPerPage = widget.rowsPerPage;
+    _cachedVisibleSourceRows = widget.rows;
+    _cachedVisibleSourceLength = widget.rows.length;
+    return visible;
   }
 
   @override
@@ -179,6 +216,22 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     List<Map<String, dynamic>> tableRows, {
     bool enableSwipe = true,
   }) {
+    // Fit-to-width mode: stretch columns proportionally instead of using a
+    // horizontal scroll view.
+    if (widget.fitToWidth) {
+      return _buildFitToWidthTable(context, tableFields, tableRows);
+    }
+
+    // Full cell borders + centered content (spreadsheet-style grid).
+    if (widget.showCellBorders) {
+      return _buildBorderedScrollableTable(
+        context,
+        tableFields,
+        tableRows,
+        enableSwipe: enableSwipe,
+      );
+    }
+
     final table = SingleChildScrollView(
       controller: enableSwipe ? _hScrollController : null,
       scrollDirection: Axis.horizontal,
@@ -249,56 +302,240 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     );
   }
 
-  /// Hand-icon dragger pill pinned under the table. Dragging it (or dragging
-  /// anywhere on the table with the mouse) pans wide tables horizontally.
-  Widget _buildSwipeHandle(BuildContext context) {
+  /// Renders the table stretched to the available width using proportional
+  /// (flex) column widths — the table never scrolls horizontally.
+  Widget _buildFitToWidthTable(
+    BuildContext context,
+    List<DynamicTableField> tableFields,
+    List<Map<String, dynamic>> tableRows,
+  ) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: EdgeInsets.only(top: SizeConfig.scaleHeight(context, 4)),
-      child: Center(
-        child: MouseRegion(
-          cursor: _isDragging
-              ? SystemMouseCursors.grabbing
-              : SystemMouseCursors.grab,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onHorizontalDragStart: (_) => _setDragging(true),
-            onHorizontalDragUpdate: (details) => _panTable(details.delta.dx),
-            onHorizontalDragEnd: (_) => _setDragging(false),
-            onHorizontalDragCancel: () => _setDragging(false),
-            child: Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: SizeConfig.scaleWidth(context, 12),
-                vertical: SizeConfig.scaleHeight(context, 4),
-              ),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: scheme.outlineVariant.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.back_hand,
-                    size: SizeConfig.iconSize(context, 14),
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  SizedBox(width: SizeConfig.scaleWidth(context, 5)),
-                  Text(
-                    'Swipe',
-                    style: TextStyle(
-                      fontSize: SizeConfig.fontSize(context, 11),
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
+    final headerStyle = TextStyle(
+      fontSize: SizeConfig.fontSize(context, 12),
+      fontWeight: FontWeight.w600,
+      color: scheme.onSurface,
+    );
+    final cellStyle = TextStyle(
+      fontSize: SizeConfig.fontSize(context, 12),
+      color: scheme.onSurface,
+    );
+
+    // Floor the flex weights so no column collapses to an unreadable width:
+    // every column gets at least 35% of the average weight, keeping wide
+    // columns proportional while narrow ones stay legible. The total flex
+    // only grows, so the table can never overflow horizontally.
+    final flexValues = tableFields
+        .map((field) => (field.width ?? 100.0).toDouble())
+        .toList(growable: false);
+    final floor = flexValues.isEmpty
+        ? 100.0
+        : (flexValues.fold(0.0, (a, b) => a + b) / flexValues.length) * 0.35;
+    final columnWidths = <int, TableColumnWidth>{
+      for (var i = 0; i < tableFields.length; i++)
+        i: FlexColumnWidth(flexValues[i] < floor ? floor : flexValues[i]),
+    };
+
+    final headerRow = TableRow(
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+      children: [
+        for (final field in tableFields)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: SizeConfig.scaleWidth(context, 6),
+              vertical: SizeConfig.scaleHeight(context, 8),
+            ),
+            child: Text(
+              field.label,
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: headerStyle,
             ),
           ),
+      ],
+    );
+
+    final dataRows = <TableRow>[
+      for (var index = 0; index < tableRows.length; index++)
+        TableRow(
+          children: [
+            for (final field in tableFields)
+              _buildFitToWidthCell(
+                context,
+                field,
+                tableRows[index],
+                index,
+                cellStyle,
+              ),
+          ],
         ),
+    ];
+
+    return Table(
+      columnWidths: columnWidths,
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      border: TableBorder(
+        top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        left: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        right: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        horizontalInside: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+        verticalInside: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.4),
+        ),
+      ),
+      children: [headerRow, ...dataRows],
+    );
+  }
+
+  Widget _buildFitToWidthCell(
+    BuildContext context,
+    DynamicTableField field,
+    Map<String, dynamic> row,
+    int rowIndex,
+    TextStyle cellStyle, {
+    bool centerAll = false,
+  }) {
+    final value = row[field.key];
+    Widget child;
+    if (field.builder != null) {
+      child = field.builder!(context, value, row, rowIndex);
+    } else {
+      final displayText = (value == null || value.toString().trim().isEmpty)
+          ? '-'
+          : value.toString();
+      child = Text(
+        displayText,
+        textAlign: centerAll || !field.numeric
+            ? TextAlign.center
+            : TextAlign.right,
+        // Never ellipsize — wrap so the full value stays visible.
+        softWrap: true,
+        style: cellStyle,
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.scaleWidth(context, 6),
+        vertical: SizeConfig.scaleHeight(context, 6),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          minHeight: widget.dataRowMinHeight,
+          // No max-height cap: rows grow to fit wrapped content so every
+          // field is fully visible.
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  /// Spreadsheet-style grid: every cell gets a full border and all content is
+  /// centered. Columns keep their configured widths (minColumnWidth floor) and
+  /// the table scrolls horizontally when it overflows, with the same swipe/
+  /// grab-to-pan behavior as the standard DataTable mode.
+  Widget _buildBorderedScrollableTable(
+    BuildContext context,
+    List<DynamicTableField> tableFields,
+    List<Map<String, dynamic>> tableRows, {
+    bool enableSwipe = true,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final borderColor = scheme.outlineVariant.withValues(alpha: 0.45);
+    final headerStyle = TextStyle(
+      fontSize: SizeConfig.fontSize(context, 12),
+      fontWeight: FontWeight.w600,
+      color: scheme.onSurface,
+    );
+    final cellStyle = TextStyle(
+      fontSize: SizeConfig.fontSize(context, 12),
+      color: scheme.onSurface,
+    );
+
+    // Fixed column widths: prefer the field's configured width, falling back
+    // to minColumnWidth. Never let a column shrink below minColumnWidth.
+    final columnWidths = <int, TableColumnWidth>{
+      for (var i = 0; i < tableFields.length; i++)
+        i: FixedColumnWidth(
+          (tableFields[i].width ?? widget.minColumnWidth) <
+                  widget.minColumnWidth
+              ? widget.minColumnWidth
+              : (tableFields[i].width ?? widget.minColumnWidth),
+        ),
+    };
+
+    final headerRow = TableRow(
+      decoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+      children: [
+        for (final field in tableFields)
+          Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: SizeConfig.scaleWidth(context, 6),
+              vertical: SizeConfig.scaleHeight(context, 8),
+            ),
+            child: Text(
+              field.label,
+              textAlign: TextAlign.center,
+              softWrap: true,
+              style: headerStyle,
+            ),
+          ),
+      ],
+    );
+
+    final dataRows = <TableRow>[
+      for (var index = 0; index < tableRows.length; index++)
+        TableRow(
+          children: [
+            for (final field in tableFields)
+              _buildFitToWidthCell(
+                context,
+                field,
+                tableRows[index],
+                index,
+                cellStyle,
+                centerAll: true,
+              ),
+          ],
+        ),
+    ];
+
+    final table = SingleChildScrollView(
+      controller: enableSwipe ? _hScrollController : null,
+      scrollDirection: Axis.horizontal,
+      child: Table(
+        columnWidths: columnWidths,
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        // Complete outer frame (all four sides) + internal grid lines, so the
+        // table always renders as a fully-framed spreadsheet no matter how the
+        // host screen wraps it (flush inside a GlassContainer like Production
+        // Management, or padded inside a card).
+        border: TableBorder(
+          top: BorderSide(color: borderColor),
+          bottom: BorderSide(color: borderColor),
+          left: BorderSide(color: borderColor),
+          right: BorderSide(color: borderColor),
+          horizontalInside: BorderSide(color: borderColor),
+          verticalInside: BorderSide(color: borderColor),
+        ),
+        children: [headerRow, ...dataRows],
+      ),
+    );
+
+    if (!enableSwipe) return table;
+
+    return MouseRegion(
+      cursor: _isDragging
+          ? SystemMouseCursors.grabbing
+          : (_hasOverflow ? SystemMouseCursors.grab : SystemMouseCursors.basic),
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragStart: (_) => _setDragging(true),
+        onHorizontalDragUpdate: (details) => _panTable(details.delta.dx),
+        onHorizontalDragEnd: (_) => _setDragging(false),
+        onHorizontalDragCancel: () => _setDragging(false),
+        child: table,
       ),
     );
   }
@@ -468,7 +705,8 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
 
         Widget buildContent() {
           // ── Frozen columns mode ──────────────────────────────────
-          if (widget.frozenColumnCount > 0 &&
+          if (!widget.fitToWidth &&
+              widget.frozenColumnCount > 0 &&
               widget.frozenColumnCount < widget.fields.length) {
             final frozenFieldsList = widget.fields
                 .take(widget.frozenColumnCount)

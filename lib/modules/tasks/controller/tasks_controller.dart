@@ -21,6 +21,9 @@ class TaskController extends ChangeNotifier {
   bool _isLoading = true;
   String? _error;
 
+  /// "All" sentinel value for dropdowns (mirrors ProjectController).
+  static const String allOption = 'All';
+
   List<String> get departments => _departments;
   List<ClientModel> get clients => _clients;
   List<ShowModel> get shows => _shows;
@@ -78,10 +81,25 @@ class TaskController extends ChangeNotifier {
     _departmentShots = [];
     notifyListeners();
     try {
-      final resp = await _projectService.getShows(clientId);
-      _shows = ((resp['shows'] as List<dynamic>?) ?? const [])
-          .map((e) => ShowModel.fromJson(e as Map<String, dynamic>))
-          .toList();
+      if (clientId == allOption) {
+        // "All" selected — reload all shows across every client
+        final allShows = <ShowModel>[];
+        for (final client in _clients) {
+          try {
+            final resp = await _projectService.getShows(client.clientId);
+            final shows = ((resp['shows'] as List<dynamic>?) ?? const []).map(
+              (e) => ShowModel.fromJson(e as Map<String, dynamic>),
+            );
+            allShows.addAll(shows);
+          } catch (_) {}
+        }
+        _shows = allShows;
+      } else {
+        final resp = await _projectService.getShows(clientId);
+        _shows = ((resp['shows'] as List<dynamic>?) ?? const [])
+            .map((e) => ShowModel.fromJson(e as Map<String, dynamic>))
+            .toList();
+      }
       await loadShots();
     } catch (e) {
       debugPrint('TaskController.selectClient error: $e');
@@ -101,9 +119,9 @@ class TaskController extends ChangeNotifier {
     notifyListeners();
     try {
       final resp = await _projectService.getShots(
-        department: selectedDepartment,
-        clientId: selectedClientId,
-        showId: selectedShowId,
+        department: selectedDepartment == allOption ? null : selectedDepartment,
+        clientId: selectedClientId == allOption ? null : selectedClientId,
+        showId: selectedShowId == allOption ? null : selectedShowId,
       );
       _departmentShots = ((resp['shots'] as List<dynamic>?) ?? const [])
           .map((e) => ShotModel.fromJson(e as Map<String, dynamic>))

@@ -73,10 +73,20 @@ class _MyAppState extends State<MyApp> {
       themeMode: theme.themeMode,
       routerConfig: _router,
       builder: (context, child) {
-        if (authController.isInitializing) {
-          return const _StartupLoadingScreen();
+        if (authController.isInitializing && child != null) {
+          // Paint the startup screen OVER the navigator instead of replacing
+          // it. Replacing the child unmounts the Navigator — if that happens
+          // while a route transition is in flight (e.g. a dialog push/pop),
+          // the navigator is disposed while locked
+          // (`assert(!_debugLocked)` in NavigatorState.dispose) and every
+          // later context lookup throws "deactivated widget's ancestor is
+          // unsafe".
+          return Stack(
+            fit: StackFit.expand,
+            children: [child, const _StartupLoadingScreen()],
+          );
         }
-        return child ?? const SizedBox.shrink();
+        return child ?? const _StartupLoadingScreen();
       },
     );
   }

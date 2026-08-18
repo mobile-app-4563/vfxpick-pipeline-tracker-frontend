@@ -33,7 +33,6 @@ class _MainLayoutState extends State<MainLayout> {
 
   String _getPageTitle(String path) {
     if (path.contains('/home')) return 'Home';
-    if (path.contains('/dashboard')) return 'Dashboard';
     if (path.contains('/projects')) return 'Projects';
     if (path.contains('/production-management')) return 'Production Management';
     if (path.contains('/assets')) return 'Assets';
@@ -43,10 +42,10 @@ class _MainLayoutState extends State<MainLayout> {
     if (path.contains('/reports')) return 'Reports';
     if (path.contains('/teams')) return 'Teams';
     if (path.contains('/notifications')) return 'Notifications';
-    if (path.contains('/hrms')) return 'HRMS';
     if (path.contains('/access-provider')) return 'Access Provider';
     if (path.contains('/inventory')) return 'Inventory';
     if (path.contains('/user-register')) return 'Register';
+    if (path.contains('/profile')) return 'My Profile';
     return 'VFXPICK Pipeline';
   }
 
@@ -178,6 +177,8 @@ class _MainLayoutState extends State<MainLayout> {
                             );
                           } else if (value == 'notifications') {
                             context.go('/notifications');
+                          } else if (value == 'profile') {
+                            context.go('/profile');
                           }
                         },
                         itemBuilder: (context) => [
@@ -197,7 +198,7 @@ class _MainLayoutState extends State<MainLayout> {
                                   height: SizeConfig.scaleHeight(context, 2),
                                 ),
                                 Text(
-                                  '${user?.role ?? ''} â€¢ ${user?.department ?? ''}',
+                                  '${user?.role ?? ''} • ${user?.department ?? ''}',
                                   style: TextStyle(
                                     fontSize: SizeConfig.fontSize(context, 12),
                                   ),
@@ -220,6 +221,19 @@ class _MainLayoutState extends State<MainLayout> {
                                       ? 'Switch to Light'
                                       : 'Switch to Dark',
                                 ),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'profile',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.person_outline,
+                                  size: SizeConfig.iconSize(context, 18),
+                                ),
+                                SizeConfig.sizedBoxW(context, 8),
+                                Text('My Profile'),
                               ],
                             ),
                           ),
@@ -343,32 +357,48 @@ class _MainLayoutState extends State<MainLayout> {
                               ),
                             ),
                             SizeConfig.sizedBoxW(context, 8),
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  user?.name ?? 'Guest User',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: SizeConfig.fontSize(context, 13),
-                                    fontWeight: FontWeight.bold,
-                                    color: isDark
-                                        ? AppColors.darkTextPrimary
-                                        : AppColors.lightTextPrimary,
-                                  ),
+                            // FittedBox keeps the two-line name/role block
+                            // inside the AppBar's constrained action height;
+                            // otherwise it overflows by ~8px and throws a
+                            // RenderFlex overflow error on every frame.
+                            Flexible(
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      user?.name ?? 'Guest User',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: SizeConfig.fontSize(
+                                          context,
+                                          13,
+                                        ),
+                                        fontWeight: FontWeight.bold,
+                                        color: isDark
+                                            ? AppColors.darkTextPrimary
+                                            : AppColors.lightTextPrimary,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${user?.role ?? ''}  •  ${user?.department ?? ''}',
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: SizeConfig.fontSize(
+                                          context,
+                                          10,
+                                        ),
+                                        color: isDark
+                                            ? AppColors.darkTextSecondary
+                                            : AppColors.lightTextSecondary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  '${user?.role ?? ''}  â€¢  ${user?.department ?? ''}',
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontSize: SizeConfig.fontSize(context, 10),
-                                    color: isDark
-                                        ? AppColors.darkTextSecondary
-                                        : AppColors.lightTextSecondary,
-                                  ),
-                                ),
-                              ],
+                              ),
                             ),
                           ],
                         ),

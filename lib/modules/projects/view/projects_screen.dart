@@ -41,6 +41,13 @@ class ProjectsScreen extends StatefulWidget {
   State<ProjectsScreen> createState() => _ProjectsScreenState();
 }
 
+/// Dropdown options for the PRIORITY grid column.
+const List<String> _priorityOptions = [
+  'Priority 1',
+  'Priority 2',
+  'Priority 3',
+];
+
 class _ProjectsScreenState extends State<ProjectsScreen> {
   final List<Map<String, dynamic>> _importDraftRows = [];
   final TextEditingController _csvPasteController = TextEditingController();
@@ -68,6 +75,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Set<String> _approvedByChips = {};
   Set<String> _complexityChips = {};
   Set<String> _statusChips = {};
+  Set<String> _priorityChips = {};
   Set<String> _fromRotoChips = {};
   Set<String> _fromPaintChips = {};
   Set<String> _fromMmChips = {};
@@ -96,9 +104,15 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   bool _isDeleting = false;
   String? _roleDepartment;
 
+  // Show/hide the spreadsheet-style cell borders on the grid (toggled via the
+  // "Cell Borders" checkbox in the toolbar). On by default to match the Excel
+  // template — same behavior as the Production Management module.
+  bool _showCellBorders = true;
+
   // ── Row cache to avoid rebuilding all row Maps on every setState ──
   List<Map<String, dynamic>>? _cachedRows;
   int _cachedShotsLength = -1;
+  int _cachedShotsRevision = -1;
 
   // ── Filtered-grid cache: filtered rows are re-computed ONLY when the shots
   //    list or any filter changes — never on page changes / unrelated builds. ──
@@ -125,7 +139,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   int _projectPage = 0;
   int _previewPage = 0;
 
-  static const int _rowsPerPage = 50;
+  // Only 10 rows per page — matches the Production grid. The table slices
+  // rows internally, so this keeps every page light (filters / sorting still
+  // run over the full list, but only 10 rows are ever rendered).
+  static const int _rowsPerPage = 10;
 
   int _totalPages(int totalRows) =>
       _rowsPerPage > 0 ? (totalRows / _rowsPerPage).ceil() : 1;
@@ -287,6 +304,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       join(_approvedByChips),
       join(_complexityChips),
       join(_statusChips),
+      join(_priorityChips),
       join(_fromRotoChips),
       join(_fromPaintChips),
       join(_fromMmChips),
@@ -616,6 +634,38 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           icon: const Icon(Icons.filter_alt_outlined),
           label: const Text('Filters'),
         ),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+            backgroundColor: _showCellBorders
+                ? AppColors.brandGreen.withValues(alpha: 0.12)
+                : null,
+            foregroundColor: _showCellBorders ? AppColors.brandGreen : null,
+            side: BorderSide(
+              color: _showCellBorders
+                  ? AppColors.brandGreen
+                  : Theme.of(context).colorScheme.outlineVariant,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                SizeConfig.scaleWidth(context, 2),
+              ),
+            ),
+          ),
+          onPressed: () => setState(() => _showCellBorders = !_showCellBorders),
+          icon: Icon(
+            _showCellBorders ? Icons.check : Icons.border_all,
+            size: SizeConfig.iconSize(context, 18),
+          ),
+          label: Text(
+            'Cell Borders',
+            style: TextStyle(
+              color: !_showCellBorders
+                  ? Theme.of(context).colorScheme.onSurface
+                  : AppColors.brandGreen,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -740,6 +790,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         initialComments: _commentsFilter,
         initialComplexityChips: _complexityChips,
         initialStatusChips: _statusChips,
+        initialPriorityChips: _priorityChips,
         initialFromRotoChips: _fromRotoChips,
         initialFromPaintChips: _fromPaintChips,
         initialFromMmChips: _fromMmChips,
@@ -781,6 +832,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       _commentsFilter = result.comments;
       _complexityChips = result.complexityChips;
       _statusChips = result.statusChips;
+      _priorityChips = result.priorityChips;
       _fromRotoChips = result.fromRotoChips;
       _fromPaintChips = result.fromPaintChips;
       _fromMmChips = result.fromMmChips;
@@ -807,7 +859,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
 
     // ── Rebuild cache only when shots list changes ──────────────────
-    if (_cachedShotsLength != controller.shots.length || _cachedRows == null) {
+    if (_cachedShotsRevision != controller.shotsRevision ||
+        _cachedShotsLength != controller.shots.length ||
+        _cachedRows == null) {
+      _cachedShotsRevision = controller.shotsRevision;
       _cachedShotsLength = controller.shots.length;
       _cachedRows = List<Map<String, dynamic>>.generate(
         controller.shots.length,
@@ -844,6 +899,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             'fromMm': shot.fromMm ?? '-',
             'fromComp': shot.fromComp ?? '-',
             'status': shot.status,
+            'priority': shot.priority ?? '',
             'shot': shot,
           };
         },
@@ -856,7 +912,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     // ── Filter ONCE from the row cache; the result is cached and reused
     //    across page flips and unrelated rebuilds (page changes only re-slice
     //    the cached filtered list — no re-parsing, no O(N) filter per build). ──
-    final signature = _buildShotFilterSignature(controller);
+    final signature =
+        '${_buildShotFilterSignature(controller)}#rev${controller.shotsRevision}';
     if (_filterSignature != signature || _cachedFilteredRows == null) {
       _filterSignature = signature;
       _cachedFilteredRows = cachedRows
@@ -893,6 +950,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 contains('comments', _commentsFilter) &&
                 chipMatch('complexity', _complexityChips) &&
                 chipMatch('status', _statusChips) &&
+                chipMatch('priority', _priorityChips) &&
                 chipMatch('fromRoto', _fromRotoChips) &&
                 chipMatch('fromPaint', _fromPaintChips) &&
                 chipMatch('fromMm', _fromMmChips) &&
@@ -927,12 +985,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 child: DynamicDataTable(
                   currentPage: _projectPage,
                   onPageChanged: _changeProjectPage,
+                  rowsPerPage: _rowsPerPage,
                   minColumnWidth: SizeConfig.scaleWidth(context, 40),
                   columnSpacing: SizeConfig.scaleWidth(context, 30),
                   dataRowMinHeight:
                       MediaQuery.of(context).size.height * 48 / 768,
                   dataRowMaxHeight:
                       MediaQuery.of(context).size.height * 62 / 768,
+                  showCellBorders: _showCellBorders,
                   // frozenColumnCount: _isBulkDeleteMode ? 6 : 5,
                   fields: [
                     if (_isBulkDeleteMode)
@@ -1107,7 +1167,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     DynamicTableField(
                       key: 'status',
                       label: 'Status',
-                      width: SizeConfig.scaleWidth(context, 150),
+                      width: SizeConfig.scaleWidth(context, 180),
                       builder: (context, value, row, rowIndex) {
                         final shot = row['shot'] as ShotModel;
                         return SingleChildScrollView(
@@ -1124,6 +1184,33 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                 : (v) {
                                     if (v != null) {
                                       controller.updateStatus(shot.shotId, v);
+                                    }
+                                  },
+                          ),
+                        );
+                      },
+                    ),
+                    DynamicTableField(
+                      key: 'priority',
+                      label: 'Priority',
+                      width: SizeConfig.scaleWidth(context, 120),
+                      builder: (context, value, row, rowIndex) {
+                        final shot = row['shot'] as ShotModel;
+                        final current = value == null ? '' : value.toString();
+                        return SingleChildScrollView(
+                          child: CustomDropdown<String>(
+                            compact: true,
+                            labelText: 'Priority',
+                            value: _priorityOptions.contains(current)
+                                ? current
+                                : null,
+                            items: _priorityOptions,
+                            itemToString: (v) => v,
+                            onChanged: _isArtist
+                                ? null
+                                : (v) {
+                                    if (v != null) {
+                                      controller.updatePriority(shot.shotId, v);
                                     }
                                   },
                           ),
@@ -1239,6 +1326,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                         case 'status':
                           _statusChips = v.isEmpty ? {} : {v};
                           break;
+                        case 'priority':
+                          _priorityChips = v.isEmpty ? {} : {v};
+                          break;
                         case 'fromRoto':
                           _fromRotoChips = v.isEmpty ? {} : {v};
                           break;
@@ -1346,12 +1436,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             child: DynamicDataTable(
               currentPage: _previewPage,
               onPageChanged: _changePreviewPage,
+              rowsPerPage: _rowsPerPage,
               columnSpacing: SizeConfig.scaleWidth(context, 30),
               padding: SizeConfig.paddingSymmetric(
                 context,
                 horizontal: 4,
                 vertical: 4,
               ),
+              showCellBorders: true,
               // headingRowHeight: MediaQuery.of(context).size.height * 40 / 768,
               dataRowMinHeight: MediaQuery.of(context).size.height * 40 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 52 / 768,
@@ -1471,6 +1563,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   key: 'status',
                   label: 'Status',
                   width: SizeConfig.scaleWidth(context, 130),
+                ),
+                DynamicTableField(
+                  key: 'priority',
+                  label: 'Priority',
+                  width: SizeConfig.scaleWidth(context, 100),
                 ),
                 DynamicTableField(
                   key: 'fromRoto',
@@ -1848,6 +1945,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         TextCellValue('From MM'),
         TextCellValue('From Comp'),
         TextCellValue('Status'),
+        TextCellValue('Priority'),
       ]);
       ExcelExportUtils.styleRow(
         sheet,
@@ -1894,6 +1992,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           TextCellValue(shot.fromMm ?? '-'),
           TextCellValue(shot.fromComp ?? '-'),
           TextCellValue(shot.status),
+          TextCellValue(shot.priority ?? '-'),
         ]);
         ExcelExportUtils.styleRow(
           sheet,
@@ -2646,6 +2745,14 @@ Map<String, dynamic> _toApiImportRowT(
                   'complexity',
                   'shot_complexity',
                 ], fallbackColumnIndex: 21) ??
+                '')
+            .toString(),
+    'priority':
+        (_pickFieldValueT(row, [
+                  'priority',
+                  'shot_priority',
+                  'pipeline_priority',
+                ], fallbackColumnIndex: 0) ??
                 '')
             .toString(),
     'notes':
@@ -3850,6 +3957,7 @@ class _ProjectFilterResult {
   final Set<String> approvedByChips;
   final Set<String> complexityChips;
   final Set<String> statusChips;
+  final Set<String> priorityChips;
   final Set<String> fromRotoChips;
   final Set<String> fromPaintChips;
   final Set<String> fromMmChips;
@@ -3879,6 +3987,7 @@ class _ProjectFilterResult {
     required this.approvedByChips,
     required this.complexityChips,
     required this.statusChips,
+    required this.priorityChips,
     required this.fromRotoChips,
     required this.fromPaintChips,
     required this.fromMmChips,
@@ -3915,6 +4024,7 @@ class _ProjectFilterDialog extends StatefulWidget {
   final Set<String> initialApprovedByChips;
   final Set<String> initialComplexityChips;
   final Set<String> initialStatusChips;
+  final Set<String> initialPriorityChips;
   final Set<String> initialFromRotoChips;
   final Set<String> initialFromPaintChips;
   final Set<String> initialFromMmChips;
@@ -3942,6 +4052,7 @@ class _ProjectFilterDialog extends StatefulWidget {
     required this.initialApprovedByChips,
     required this.initialComplexityChips,
     required this.initialStatusChips,
+    required this.initialPriorityChips,
     required this.initialFromRotoChips,
     required this.initialFromPaintChips,
     required this.initialFromMmChips,
@@ -3967,6 +4078,7 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
   late Set<String> _approvedByChips;
   late Set<String> _complexityChips;
   late Set<String> _statusChips;
+  late Set<String> _priorityChips;
   late Set<String> _fromRotoChips;
   late Set<String> _fromPaintChips;
   late Set<String> _fromMmChips;
@@ -3979,6 +4091,7 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
   List<String> _uniqueLevels = [];
   List<String> _uniqueComplexities = [];
   List<String> _uniqueApprovers = [];
+  List<String> _uniquePriorities = [];
   List<String> _uniqueFromRoto = [];
   List<String> _uniqueFromPaint = [];
   List<String> _uniqueFromMm = [];
@@ -4028,6 +4141,7 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
     _approvedByChips = Set<String>.from(widget.initialApprovedByChips);
     _complexityChips = Set<String>.from(widget.initialComplexityChips);
     _statusChips = Set<String>.from(widget.initialStatusChips);
+    _priorityChips = Set<String>.from(widget.initialPriorityChips);
     _fromRotoChips = Set<String>.from(widget.initialFromRotoChips);
     _fromPaintChips = Set<String>.from(widget.initialFromPaintChips);
     _fromMmChips = Set<String>.from(widget.initialFromMmChips);
@@ -4055,6 +4169,10 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
     _uniqueLevels = _sorted(uq((s) => s.levelOfShot));
     _uniqueComplexities = _sorted(uq((s) => s.complexity));
     _uniqueApprovers = _sorted(uq((s) => s.approvedBy));
+    _uniquePriorities = _dedupeSorted([
+      ..._priorityOptions,
+      ...uq((s) => s.priority),
+    ]);
     _uniqueFromRoto = _sorted(uq((s) => s.fromRoto));
     _uniqueFromPaint = _sorted(uq((s) => s.fromPaint));
     _uniqueFromMm = _sorted(uq((s) => s.fromMm));
@@ -4094,6 +4212,7 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
       _approvedByChips.clear();
       _complexityChips.clear();
       _statusChips.clear();
+      _priorityChips.clear();
       _fromRotoChips.clear();
       _fromPaintChips.clear();
       _fromMmChips.clear();
@@ -4134,6 +4253,7 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
         approvedByChips: _approvedByChips,
         complexityChips: _complexityChips,
         statusChips: _statusChips,
+        priorityChips: _priorityChips,
         fromRotoChips: _fromRotoChips,
         fromPaintChips: _fromPaintChips,
         fromMmChips: _fromMmChips,
@@ -4342,7 +4462,10 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
         _filterListTile(
           'Classification',
           subtitle: _classificationSummary,
-          activeCount: _levelOfShotChips.length + _complexityChips.length,
+          activeCount:
+              _levelOfShotChips.length +
+              _complexityChips.length +
+              _priorityChips.length,
           onTap: () => setState(() => _subPageKey = 'classification'),
         ),
 
@@ -4407,6 +4530,12 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
             allItems: _uniqueComplexities,
             selected: _complexityChips,
             onChanged: (v) => setState(() => _complexityChips = v),
+          ),
+          _ChipFieldGroup(
+            label: 'Priority',
+            allItems: _uniquePriorities,
+            selected: _priorityChips,
+            onChanged: (v) => setState(() => _priorityChips = v),
           ),
         ]);
       case 'crossDept':
@@ -4630,6 +4759,9 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
     }
     if (_complexityChips.isNotEmpty) {
       parts.add('Complexity (${_complexityChips.length})');
+    }
+    if (_priorityChips.isNotEmpty) {
+      parts.add('Priority (${_priorityChips.length})');
     }
     return parts.isEmpty ? null : parts.join(', ');
   }

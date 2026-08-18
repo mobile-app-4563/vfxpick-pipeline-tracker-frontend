@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
+import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
@@ -24,6 +25,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _shotsFilter = '';
   String _mandaysFilter = '';
   String _dueFilter = '';
+  bool _showCellBorders = true;
 
   @override
   void initState() {
@@ -95,10 +97,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          Padding(
+            padding: EdgeInsets.only(
+              bottom: SizeConfig.scaleHeight(context, 10),
+            ),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FilterChip(
+                selected: _showCellBorders,
+                onSelected: (value) => setState(() => _showCellBorders = value),
+                avatar: Icon(
+                  Icons.border_all,
+                  size: SizeConfig.iconSize(context, 18),
+                  color: _showCellBorders ? AppColors.brandGreen : null,
+                ),
+                label: const Text('Cell Borders'),
+                showCheckmark: true,
+                selectedColor: AppColors.brandGreen.withValues(alpha: 0.12),
+                checkmarkColor: AppColors.brandGreen,
+                side: BorderSide(
+                  color: _showCellBorders
+                      ? AppColors.brandGreen
+                      : Theme.of(context).colorScheme.outlineVariant,
+                ),
+              ),
+            ),
+          ),
           GlassContainer(
             child: DynamicDataTable(
               dataRowMinHeight: MediaQuery.of(context).size.height * 46 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 60 / 768,
+              showCellBorders: _showCellBorders,
               fields: [
                 DynamicTableField(
                   key: 'department',

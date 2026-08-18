@@ -20,6 +20,7 @@ class AuthController extends ChangeNotifier {
   String? _errorMessage;
 
   AuthController() {
+    _api.beginAuthBootstrap();
     _bootstrapSession();
   }
 
@@ -39,12 +40,17 @@ class AuthController extends ChangeNotifier {
     final storedUserJson = prefs.getString(_userStorageKey);
 
     if (storedToken == null || storedToken.isEmpty) {
+      _api.markAuthReady();
       _isInitializing = false;
       notifyListeners();
       return;
     }
 
     _api.setToken(storedToken);
+    // Token restored — release any request that was gated on bootstrap. This
+    // must happen BEFORE validateSessionToken() (which itself calls the API)
+    // to avoid a deadlock.
+    _api.markAuthReady();
 
     if (storedUserJson != null && storedUserJson.isNotEmpty) {
       try {
@@ -261,5 +267,70 @@ class AuthController extends ChangeNotifier {
   void updateSessionUser(UserModel updatedUser) {
     _currentUser = updatedUser;
     notifyListeners();
+  }
+
+  /// Fetch the current user's full profile (incl. department seniors + manager).
+  /// Returns the raw response map: {user, seniors, manager}.
+  Future<Map<String, dynamic>?> fetchProfile() async {
+    try {
+      return await _api.get(ApiConstants.authProfile);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Update the current user's own profile.
+  ///
+  /// Role and department are intentionally NOT accepted here — the backend
+  /// ignores them. Optional password change requires [currentPassword].
+  /// Returns the updated [UserModel] on success, or null on failure (error
+  /// surfaced via [errorMessage]).
+  Future<UserModel?> updateProfile({
+    required String name,
+    required String email,
+    String? phone,
+    String? employeeId,
+    String? avatar,
+    String? level,
+    String? currentPassword,
+    String? newPassword,
+  }) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _api.put(ApiConstants.authProfile, {
+        'name': name.trim(),
+        'email': email.trim().toLowerCase(),
+        if (phone != null) 'phone': phone.trim(),
+        if (employeeId != null) 'employeeId': employeeId.trim(),
+        if (avatar != null) 'avatar': avatar.trim(),
+        if (level != null) 'level': level.trim(),
+        if (currentPassword != null && currentPassword.isNotEmpty)
+          'currentPassword': currentPassword,
+        if (newPassword != null && newPassword.isNotEmpty)
+          'newPassword': newPassword,
+      });
+
+      final updated = UserModel.fromJson(
+        response['user'] as Map<String, dynamic>,
+      );
+      _currentUser = updated;
+      await _persistSession(_api.getToken()!, _currentUser!);
+      _isLoading = false;
+      notifyListeners();
+      return updated;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return null;
+    }
   }
 }

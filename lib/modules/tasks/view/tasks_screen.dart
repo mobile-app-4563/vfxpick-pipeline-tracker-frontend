@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 
 import 'package:excel/excel.dart' hide Border;
@@ -35,13 +33,15 @@ class TasksScreen extends StatefulWidget {
 
 class _TasksScreenState extends State<TasksScreen> {
   final List<Map<String, String>> _importDraftRows = [];
-  final TextEditingController _csvPasteController = TextEditingController();
   bool _isArtist = false;
   bool _isBroadAccess = false;
+  bool _isAdmin = false;
   List<String> _accessibleDepartments = AppConstants.pipelineDepartments;
   bool _isExporting = false;
-  bool _isImporting = false;
+  bool _showCellBorders = true;
   int _previewPage = 0;
+  final GlobalKey<_DepartmentViewState> _departmentViewKey =
+      GlobalKey<_DepartmentViewState>();
 
   // ── Page-change feedback: brief "Parsing…" overlay while the preview grid
   //    switches pages, so heavy table rebuilds are never silent. ──
@@ -53,11 +53,6 @@ class _TasksScreenState extends State<TasksScreen> {
   List<Map<String, dynamic>>? _cachedImportPreviewRows;
   int _cachedImportPreviewLength = -1;
 
-  void _resetImportPreviewCache() {
-    _cachedImportPreviewRows = null;
-    _cachedImportPreviewLength = -1;
-  }
-
   @override
   void initState() {
     super.initState();
@@ -67,6 +62,7 @@ class _TasksScreenState extends State<TasksScreen> {
       final dashboardDept = query['department'];
       _isArtist = user?.role == AppConstants.roleArtist;
       _isBroadAccess = AppConstants.broadAccessRoles.contains(user?.role);
+      _isAdmin = user?.role == AppConstants.roleAdmin;
       final departments = AppConstants.accessiblePipelineDepartments(
         role: user?.role,
         department: user?.department,
@@ -98,12 +94,6 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   @override
-  void dispose() {
-    _csvPasteController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final controller = context.watch<TaskController>();
     if (_isArtist) {
@@ -112,7 +102,12 @@ class _TasksScreenState extends State<TasksScreen> {
         children: [
           _actionBar(controller),
           SizedBox(height: SizeConfig.scaleHeight(context, 12)),
-          Expanded(child: _ArtistPortal(controller: controller)),
+          Expanded(
+            child: _ArtistPortal(
+              controller: controller,
+              showCellBorders: _showCellBorders,
+            ),
+          ),
         ],
       );
     }
@@ -125,7 +120,34 @@ class _TasksScreenState extends State<TasksScreen> {
           _importPreviewTable(),
         ],
         SizedBox(height: SizeConfig.scaleHeight(context, 12)),
-        Expanded(child: _DepartmentView(controller: controller)),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: () => controller.loadDepartmentShots(
+              department: controller.selectedDepartment,
+            ),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.only(
+                bottom: SizeConfig.scaleHeight(context, 24),
+              ),
+              children: [
+                _DepartmentView(
+                  key: _departmentViewKey,
+                  controller: controller,
+                  showCellBorders: _showCellBorders,
+                  onFiltersChanged: () => setState(() {}),
+                ),
+                if (_isAdmin) ...[
+                  SizedBox(height: SizeConfig.scaleHeight(context, 24)),
+                  _ProductionView(
+                    controller: controller,
+                    showCellBorders: _showCellBorders,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -152,11 +174,21 @@ class _TasksScreenState extends State<TasksScreen> {
             label: const Text('Export Excel'),
           ),
           OutlinedButton.icon(
-            onPressed: _isImporting
-                ? null
-                : () => _openPasteCsvDialog(controller),
-            icon: const Icon(Icons.content_paste_go_outlined),
-            label: const Text('Paste CSV'),
+            style: OutlinedButton.styleFrom(
+              fixedSize: Size(
+                SizeConfig.scaleWidth(context, 130),
+                MediaQuery.of(context).size.height * 45 / 768,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 0),
+                ),
+              ),
+            ),
+            onPressed: () =>
+                setState(() => _showCellBorders = !_showCellBorders),
+            icon: SizedBox(),
+            label: const Text('Cell Borders'),
           ),
         ],
       ),
@@ -164,8 +196,6 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 
   Widget _importActions(BuildContext context, TaskController controller) {
-    final canImport = controller.selectedDepartment != null;
-
     return Wrap(
       alignment: WrapAlignment.start,
       crossAxisAlignment: WrapCrossAlignment.center,
@@ -202,7 +232,7 @@ class _TasksScreenState extends State<TasksScreen> {
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             fixedSize: Size(
-              SizeConfig.scaleWidth(context, 160),
+              SizeConfig.scaleWidth(context, 130),
               MediaQuery.of(context).size.height * 40 / 768,
             ),
             shape: RoundedRectangleBorder(
@@ -211,11 +241,47 @@ class _TasksScreenState extends State<TasksScreen> {
               ),
             ),
           ),
-          onPressed: _isImporting || !canImport
-              ? null
-              : () => _openPasteCsvDialog(controller),
-          icon: const Icon(Icons.content_paste_go_outlined),
-          label: const Text('Paste CSV'),
+          onPressed: () =>
+              _departmentViewKey.currentState?.openFilterDialog(context),
+          icon: Icon(
+            Icons.filter_alt_outlined,
+            size: SizeConfig.iconSize(context, 18),
+            color: _departmentViewKey.currentState?.hasActiveFilters == true
+                ? AppColors.brandGreen
+                : null,
+          ),
+          label: const Text('Filter'),
+        ),
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            fixedSize: Size(
+              SizeConfig.scaleWidth(context, 150),
+              MediaQuery.of(context).size.height * 40 / 768,
+            ),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                SizeConfig.scaleWidth(context, 2),
+              ),
+            ),
+            foregroundColor: _showCellBorders ? AppColors.brandGreen : null,
+            side: BorderSide(
+              color: _showCellBorders
+                  ? AppColors.brandGreen
+                  : Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
+          onPressed: () => setState(() => _showCellBorders = !_showCellBorders),
+          icon: Icon(
+            Icons.border_all,
+            size: SizeConfig.iconSize(context, 18),
+            color: _showCellBorders ? AppColors.brandGreen : null,
+          ),
+          label: Text(
+            'Cell Borders',
+            style: TextStyle(
+              color: !_showCellBorders ? AppColors.brandGreen : Colors.white,
+            ),
+          ),
         ),
       ],
     );
@@ -292,92 +358,6 @@ class _TasksScreenState extends State<TasksScreen> {
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
-      }
-    }
-  }
-
-  Future<void> _openPasteCsvDialog(TaskController controller) async {
-    _csvPasteController.clear();
-    final shouldImport = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Paste CSV Status Updates'),
-        content: SizedBox(
-          width: MediaQuery.of(dialogContext).size.width < 700
-              ? MediaQuery.of(dialogContext).size.width * 0.92
-              : 620,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _isArtist
-                    ? 'Headers: shot_id,artist_status'
-                    : 'Headers: shot_id,supervisor_status,artist_status',
-                style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
-              ),
-              SizedBox(height: SizeConfig.scaleHeight(context, 10)),
-              TextField(
-                controller: _csvPasteController,
-                minLines: 8,
-                maxLines: 14,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.all(
-                      Radius.circular(SizeConfig.scaleWidth(context, 2)),
-                    ),
-                  ),
-                  hintText: 'shot_id,supervisor_status,artist_status',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Apply'),
-          ),
-        ],
-      ),
-    );
-
-    if (!mounted) return;
-    if (shouldImport != true) {
-      return;
-    }
-
-    setState(() => _isImporting = true);
-    try {
-      // Parse the pasted CSV in a background isolate so the UI never janks.
-      final parsed = await compute(
-        _parseCsvInIsolate,
-        _csvPasteController.text,
-      );
-      setState(() {
-        _previewPage = 0;
-        _resetImportPreviewCache();
-        _importDraftRows
-          ..clear()
-          ..addAll(parsed);
-      });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported ${parsed.length} rows for review')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('CSV import failed: $e')));
-    } finally {
-      if (mounted) {
-        setState(() => _isImporting = false);
       }
     }
   }
@@ -488,6 +468,8 @@ class _TasksScreenState extends State<TasksScreen> {
             child: DynamicDataTable(
               currentPage: _previewPage,
               onPageChanged: _changePreviewPage,
+              rowsPerPage: _tasksRowsPerPage,
+              showCellBorders: true,
               // headingRowHeight: MediaQuery.of(context).size.height * 40 / 768,
               dataRowMinHeight: MediaQuery.of(context).size.height * 40 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 52 / 768,
@@ -517,64 +499,9 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 }
 
-/// Entry point for `compute()`.  Parses pasted CSV text in a background
-/// isolate so the UI thread never blocks on large pastes.
-List<Map<String, String>> _parseCsvInIsolate(String csvText) {
-  final lines = const LineSplitter().convert(csvText.trim());
-  if (lines.length < 2) {
-    return const [];
-  }
-
-  final headers = _splitCsvLineT(lines.first)
-      .map(
-        (h) => h.trim().toLowerCase().replaceAll(' ', '_').replaceAll('-', '_'),
-      )
-      .toList(growable: false);
-
-  final out = <Map<String, String>>[];
-  for (var i = 1; i < lines.length; i++) {
-    final line = lines[i].trim();
-    if (line.isEmpty) continue;
-    final values = _splitCsvLineT(lines[i]);
-    final row = <String, String>{};
-    for (var c = 0; c < headers.length; c++) {
-      if (headers[c].isEmpty) continue;
-      row[headers[c]] = c < values.length ? values[c].trim() : '';
-    }
-    out.add(row);
-  }
-  return out;
-}
-
-List<String> _splitCsvLineT(String line) {
-  final result = <String>[];
-  final buffer = StringBuffer();
-  var inQuotes = false;
-
-  for (var i = 0; i < line.length; i++) {
-    final ch = line[i];
-    if (ch == '"') {
-      if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
-        buffer.write('"');
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-    if (ch == ',' && !inQuotes) {
-      result.add(buffer.toString());
-      buffer.clear();
-      continue;
-    }
-    buffer.write(ch);
-  }
-
-  result.add(buffer.toString());
-  return result;
-}
-
-const int _tasksRowsPerPage = 50;
+// Only 10 rows per page — matches the Production & Projects grids. Every
+// table slices rows internally, so each page renders just 10 rows.
+const int _tasksRowsPerPage = 10;
 
 int _tasksTotalPages(int totalRows) =>
     _tasksRowsPerPage > 0 ? (totalRows / _tasksRowsPerPage).ceil() : 1;
@@ -626,7 +553,11 @@ String _fmtDate(DateTime? d) => d == null
 
 class _ArtistPortal extends StatefulWidget {
   final TaskController controller;
-  const _ArtistPortal({required this.controller});
+  final bool showCellBorders;
+  const _ArtistPortal({
+    required this.controller,
+    required this.showCellBorders,
+  });
 
   @override
   State<_ArtistPortal> createState() => _ArtistPortalState();
@@ -759,162 +690,172 @@ class _ArtistPortalState extends State<_ArtistPortal> {
             ),
           ),
           SizedBox(height: SizeConfig.scaleHeight(context, 8)),
-          _tasksPaginationBar(
-            context,
-            _artistPage,
-            rows.length,
-            (page) => setState(() => _artistPage = page),
-          ),
           GlassContainer(
-            padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
-            child: DynamicDataTable(
-              currentPage: _artistPage,
-              onPageChanged: (page) => setState(() => _artistPage = page),
-              headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
-              dataRowMinHeight: MediaQuery.of(context).size.height * 44 / 768,
-              dataRowMaxHeight: MediaQuery.of(context).size.height * 56 / 768,
-              fields: [
-                DynamicTableField(
-                  key: 'sno',
-                  label: 'S.No',
-                  width: SizeConfig.scaleWidth(context, 60),
-                  numeric: true,
-                  filterRequired: false,
+            padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 0)),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _tasksPaginationBar(
+                  context,
+                  _artistPage,
+                  rows.length,
+                  (page) => setState(() => _artistPage = page),
                 ),
-                DynamicTableField(
-                  key: 'shotId',
-                  label: 'Shot ID',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'show',
-                  label: 'Show',
-                  width: SizeConfig.scaleWidth(context, 140),
-                ),
-                DynamicTableField(
-                  key: 'frames',
-                  label: 'Frames',
-                  width: SizeConfig.scaleWidth(context, 120),
-                ),
-                DynamicTableField(
-                  key: 'clientStatus',
-                  label: 'Client Status',
-                  width: SizeConfig.scaleWidth(context, 140),
-                  filterOptions: _buildOptions(
-                    AppConstants.shotStatuses,
-                    _clientStatusFilter,
-                  ),
-                ),
-                DynamicTableField(
-                  key: 'artistStatus',
-                  label: 'Artist Status',
-                  width: 180,
-                  filterOptions: _buildOptions(
-                    AppConstants.artistStatuses,
-                    _artistStatusFilter,
-                  ),
-                  builder: (context, value, row, rowIndex) {
-                    final shot = row['shot'] as ShotModel;
-                    return SizedBox(
-                      width: SizeConfig.scaleWidth(context, 170),
-                      child: CustomDropdown<String>(
-                        compact: true,
-                        labelText: 'Artist Status',
-                        value:
-                            AppConstants.artistStatuses.contains(
-                              shot.artistStatus,
-                            )
-                            ? shot.artistStatus
-                            : null,
-                        items: AppConstants.artistStatuses,
-                        onChanged: (v) {
-                          if (v != null) {
-                            controller.updateArtistStatus(shot.shotId, v);
-                          }
-                        },
-                        itemToString: (v) => v,
+                DynamicDataTable(
+                  currentPage: _artistPage,
+                  onPageChanged: (page) => setState(() => _artistPage = page),
+                  rowsPerPage: _tasksRowsPerPage,
+                  showCellBorders: widget.showCellBorders,
+                  headingRowHeight:
+                      MediaQuery.of(context).size.height * 42 / 768,
+                  dataRowMinHeight:
+                      MediaQuery.of(context).size.height * 44 / 768,
+                  dataRowMaxHeight:
+                      MediaQuery.of(context).size.height * 56 / 768,
+                  fields: [
+                    DynamicTableField(
+                      key: 'sno',
+                      label: 'S.No',
+                      width: SizeConfig.scaleWidth(context, 60),
+                      numeric: true,
+                      filterRequired: false,
+                    ),
+                    DynamicTableField(
+                      key: 'shotId',
+                      label: 'Shot ID',
+                      width: SizeConfig.scaleWidth(context, 130),
+                    ),
+                    DynamicTableField(
+                      key: 'show',
+                      label: 'Show',
+                      width: SizeConfig.scaleWidth(context, 140),
+                    ),
+                    DynamicTableField(
+                      key: 'frames',
+                      label: 'Frames',
+                      width: SizeConfig.scaleWidth(context, 120),
+                    ),
+                    DynamicTableField(
+                      key: 'clientStatus',
+                      label: 'Client Status',
+                      width: SizeConfig.scaleWidth(context, 140),
+                      filterOptions: _buildOptions(
+                        AppConstants.shotStatuses,
+                        _clientStatusFilter,
                       ),
-                    );
-                  },
-                ),
-                DynamicTableField(
-                  key: 'supervisorStatus',
-                  label: 'Supervisor Status',
-                  width: SizeConfig.scaleWidth(context, 160),
-                  filterOptions: _buildOptions(
-                    AppConstants.supervisorStatuses,
-                    _supervisorStatusFilter,
-                  ),
-                ),
-                DynamicTableField(
-                  key: 'artistEta',
-                  label: 'Artist ETA',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'clientEta',
-                  label: 'Client ETA',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'actions',
-                  label: 'Actions',
-                  width: SizeConfig.scaleWidth(context, 90),
-                  filterRequired: false,
-                  builder: (context, value, row, rowIndex) {
-                    final shot = row['shot'] as ShotModel;
-                    return IconButton(
-                      tooltip: 'Chat',
-                      icon: Icon(
-                        Icons.chat_bubble_outline,
-                        size: SizeConfig.iconSize(context, 18),
+                    ),
+                    DynamicTableField(
+                      key: 'artistStatus',
+                      label: 'Artist Status',
+                      width: 180,
+                      filterOptions: _buildOptions(
+                        AppConstants.artistStatuses,
+                        _artistStatusFilter,
                       ),
-                      onPressed: () => showDialog(
-                        context: context,
-                        builder: (_) => ShotChatDialog(
-                          shotId: shot.shotId,
-                          shotCode: shot.shotCode,
-                        ),
+                      builder: (context, value, row, rowIndex) {
+                        final shot = row['shot'] as ShotModel;
+                        return SizedBox(
+                          width: SizeConfig.scaleWidth(context, 170),
+                          child: CustomDropdown<String>(
+                            compact: true,
+                            labelText: 'Artist Status',
+                            value:
+                                AppConstants.artistStatuses.contains(
+                                  shot.artistStatus,
+                                )
+                                ? shot.artistStatus
+                                : null,
+                            items: AppConstants.artistStatuses,
+                            onChanged: (v) {
+                              if (v != null) {
+                                controller.updateArtistStatus(shot.shotId, v);
+                              }
+                            },
+                            itemToString: (v) => v,
+                          ),
+                        );
+                      },
+                    ),
+                    DynamicTableField(
+                      key: 'supervisorStatus',
+                      label: 'Supervisor Status',
+                      width: SizeConfig.scaleWidth(context, 160),
+                      filterOptions: _buildOptions(
+                        AppConstants.supervisorStatuses,
+                        _supervisorStatusFilter,
                       ),
-                    );
+                    ),
+                    DynamicTableField(
+                      key: 'artistEta',
+                      label: 'Artist ETA',
+                      width: SizeConfig.scaleWidth(context, 130),
+                    ),
+                    DynamicTableField(
+                      key: 'clientEta',
+                      label: 'Client ETA',
+                      width: SizeConfig.scaleWidth(context, 130),
+                    ),
+                    DynamicTableField(
+                      key: 'actions',
+                      label: 'Actions',
+                      width: SizeConfig.scaleWidth(context, 90),
+                      filterRequired: false,
+                      builder: (context, value, row, rowIndex) {
+                        final shot = row['shot'] as ShotModel;
+                        return IconButton(
+                          tooltip: 'Chat',
+                          icon: Icon(
+                            Icons.chat_bubble_outline,
+                            size: SizeConfig.iconSize(context, 18),
+                          ),
+                          onPressed: () => showDialog(
+                            context: context,
+                            builder: (_) => ShotChatDialog(
+                              shotId: shot.shotId,
+                              shotCode: shot.shotCode,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  rows: rows,
+                  onFilterChanged: (fieldKey, value) {
+                    setState(() {
+                      _artistPage = 0;
+                      final query = value is String ? value : value.toString();
+                      switch (fieldKey) {
+                        case 'shotId':
+                          _shotIdFilter = query;
+                          break;
+                        case 'show':
+                          _showFilter = query;
+                          break;
+                        case 'frames':
+                          _framesFilter = query;
+                          break;
+                        case 'clientStatus':
+                          _clientStatusFilter = query;
+                          break;
+                        case 'artistStatus':
+                          _artistStatusFilter = query;
+                          break;
+                        case 'supervisorStatus':
+                          _supervisorStatusFilter = query;
+                          break;
+                        case 'artistEta':
+                          _artistEtaFilter = query;
+                          break;
+                        case 'clientEta':
+                          _clientEtaFilter = query;
+                          break;
+                        default:
+                          break;
+                      }
+                    });
                   },
                 ),
               ],
-              rows: rows,
-              onFilterChanged: (fieldKey, value) {
-                setState(() {
-                  _artistPage = 0;
-                  final query = value is String ? value : value.toString();
-                  switch (fieldKey) {
-                    case 'shotId':
-                      _shotIdFilter = query;
-                      break;
-                    case 'show':
-                      _showFilter = query;
-                      break;
-                    case 'frames':
-                      _framesFilter = query;
-                      break;
-                    case 'clientStatus':
-                      _clientStatusFilter = query;
-                      break;
-                    case 'artistStatus':
-                      _artistStatusFilter = query;
-                      break;
-                    case 'supervisorStatus':
-                      _supervisorStatusFilter = query;
-                      break;
-                    case 'artistEta':
-                      _artistEtaFilter = query;
-                      break;
-                    case 'clientEta':
-                      _clientEtaFilter = query;
-                      break;
-                    default:
-                      break;
-                  }
-                });
-              },
             ),
           ),
         ],
@@ -925,7 +866,14 @@ class _ArtistPortalState extends State<_ArtistPortal> {
 
 class _DepartmentView extends StatefulWidget {
   final TaskController controller;
-  const _DepartmentView({required this.controller});
+  final bool showCellBorders;
+  final VoidCallback? onFiltersChanged;
+  const _DepartmentView({
+    super.key,
+    required this.controller,
+    required this.showCellBorders,
+    this.onFiltersChanged,
+  });
 
   @override
   State<_DepartmentView> createState() => _DepartmentViewState();
@@ -936,6 +884,9 @@ class _DepartmentViewState extends State<_DepartmentView> {
   // ── Row cache to avoid rebuilding all row Maps on every setState ──
   List<Map<String, dynamic>>? _cachedTaskRows;
   int _cachedShotsLength = -1;
+  String? _cachedDepartment;
+  String? _cachedClientId;
+  String? _cachedShowId;
 
   String _shotIdFilter = '';
   String _frameInFilter = '';
@@ -1097,8 +1048,14 @@ class _DepartmentViewState extends State<_DepartmentView> {
 
     // ── Rebuild row cache only when shots list changes ──────────────
     if (_cachedShotsLength != controller.departmentShots.length ||
+        _cachedDepartment != controller.selectedDepartment ||
+        _cachedClientId != controller.selectedClientId ||
+        _cachedShowId != controller.selectedShowId ||
         _cachedTaskRows == null) {
       _cachedShotsLength = controller.departmentShots.length;
+      _cachedDepartment = controller.selectedDepartment;
+      _cachedClientId = controller.selectedClientId;
+      _cachedShowId = controller.selectedShowId;
       _cachedTaskRows = controller.departmentShots
           .map((shot) {
             final totalFrames = shot.totalFrames > 0
@@ -1180,299 +1137,275 @@ class _DepartmentViewState extends State<_DepartmentView> {
         })
         .toList(growable: false);
 
-    return RefreshIndicator(
-      onRefresh: () => controller.loadDepartmentShots(
-        department: controller.selectedDepartment,
-      ),
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        children: [
-          Padding(
-            padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Task Management',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    fixedSize: Size(
-                      SizeConfig.scaleWidth(context, 130),
-                      MediaQuery.of(context).size.height * 40 / 768,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(
-                        SizeConfig.scaleWidth(context, 2),
-                      ),
-                    ),
-                  ),
-                  onPressed: () => _showFilterDialog(context),
-                  icon: Icon(
-                    Icons.filter_alt_outlined,
-                    size: SizeConfig.iconSize(context, 18),
-                    color: _hasActiveFilters ? AppColors.brandGreen : null,
-                  ),
-                  label: const Text('Filter'),
-                ),
-              ],
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
+          child: Text(
+            'Task Management',
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
           ),
-          _tasksPaginationBar(
-            context,
-            _departmentPage,
-            rows.length,
-            (page) => setState(() => _departmentPage = page),
-          ),
-          GlassContainer(
-            padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
-            child: DynamicDataTable(
-              currentPage: _departmentPage,
-              onPageChanged: (page) => setState(() => _departmentPage = page),
-              // frozenColumnCount: 3,
-              columnSpacing: SizeConfig.scaleWidth(context, 30),
-              headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
-              dataRowMinHeight: MediaQuery.of(context).size.height * 44 / 768,
-              dataRowMaxHeight: MediaQuery.of(context).size.height * 56 / 768,
-              fields: [
-                DynamicTableField(
-                  key: 'sno',
-                  label: 'S.No',
-                  width: SizeConfig.scaleWidth(context, 48),
-                  numeric: true,
-                  filterRequired: false,
-                ),
-                DynamicTableField(
-                  key: 'shotId',
-                  label: 'Shot ID',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'frameIn',
-                  label: 'Frame In',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'frameOut',
-                  label: 'Frame Out',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'totalFrames',
-                  label: 'Total',
-                  width: SizeConfig.scaleWidth(context, 70),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'coordinator',
-                  label: 'Coordinator',
-                  width: SizeConfig.scaleWidth(context, 120),
-                ),
-                DynamicTableField(
-                  key: 'levelOfShot',
-                  label: 'Level',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'complexity',
-                  label: 'Complexity',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'allocationDate',
-                  label: 'Alloc Date',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'allocationEta',
-                  label: 'Alloc ETA',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'startingDate',
-                  label: 'Start Date',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'completeDate',
-                  label: 'Complete',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'dailyWip',
-                  label: 'WIP %',
-                  width: SizeConfig.scaleWidth(context, 70),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'mandays',
-                  label: 'Mandays',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'consumedMandays',
-                  label: 'Consumed',
-                  width: SizeConfig.scaleWidth(context, 90),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'savedMandays',
-                  label: 'Saved',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'supervisorBid',
-                  label: 'Sup Bid',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'clientBid',
-                  label: 'Cli Bid',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'artist',
-                  label: 'Artist',
-                  width: SizeConfig.scaleWidth(context, 120),
-                ),
-                DynamicTableField(
-                  key: 'artistBid',
-                  label: 'Art Bid',
-                  width: SizeConfig.scaleWidth(context, 80),
-                  numeric: true,
-                ),
-                DynamicTableField(
-                  key: 'artistEta',
-                  label: 'Art ETA',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'approvedVersion',
-                  label: 'Appr Ver',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'approvedBy',
-                  label: 'Appr By',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'comments',
-                  label: 'Comments',
-                  width: SizeConfig.scaleWidth(context, 160),
-                ),
-                DynamicTableField(
-                  key: 'supervisorStatus',
-                  label: 'Sup Status',
-                  width: 130,
-                  filterOptions: _buildOptions(
-                    AppConstants.supervisorStatuses,
-                    _supervisorStatusFilter.length == 1
-                        ? _supervisorStatusFilter.first
-                        : '',
+        ),
+        GlassContainer(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _tasksPaginationBar(
+                context,
+                _departmentPage,
+                rows.length,
+                (page) => setState(() => _departmentPage = page),
+              ),
+              DynamicDataTable(
+                currentPage: _departmentPage,
+                onPageChanged: (page) => setState(() => _departmentPage = page),
+                rowsPerPage: _tasksRowsPerPage,
+                showCellBorders: widget.showCellBorders,
+                // frozenColumnCount: 3,
+                columnSpacing: SizeConfig.scaleWidth(context, 30),
+                headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
+                dataRowMinHeight: MediaQuery.of(context).size.height * 44 / 768,
+                dataRowMaxHeight: MediaQuery.of(context).size.height * 56 / 768,
+                fields: [
+                  DynamicTableField(
+                    key: 'sno',
+                    label: 'S.No',
+                    width: SizeConfig.scaleWidth(context, 48),
+                    numeric: true,
+                    filterRequired: false,
                   ),
-                ),
-                DynamicTableField(
-                  key: 'artistStatus',
-                  label: 'Art Status',
-                  width: 130,
-                  filterOptions: _buildOptions(
-                    AppConstants.artistStatuses,
-                    _artistStatusFilter.length == 1
-                        ? _artistStatusFilter.first
-                        : '',
+                  DynamicTableField(
+                    key: 'shotId',
+                    label: 'Shot ID',
+                    width: SizeConfig.scaleWidth(context, 130),
                   ),
-                ),
-                DynamicTableField(
-                  key: 'fromRoto',
-                  label: 'From Roto',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'fromPaint',
-                  label: 'From Paint',
-                  width: SizeConfig.scaleWidth(context, 110),
-                ),
-                DynamicTableField(
-                  key: 'fromMm',
-                  label: 'From MM',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'fromComp',
-                  label: 'From Comp',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'actions',
-                  label: 'Actions',
-                  width: 110,
-                  filterRequired: false,
-                  builder: (context, value, row, rowIndex) {
-                    final shot = row['shot'] as ShotModel;
-                    return Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          tooltip: 'Assign artist',
-                          icon: Icon(
-                            Icons.person_add_alt,
-                            size: SizeConfig.iconSize(context, 18),
+                  DynamicTableField(
+                    key: 'frameIn',
+                    label: 'Frame In',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'frameOut',
+                    label: 'Frame Out',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'totalFrames',
+                    label: 'Total',
+                    width: SizeConfig.scaleWidth(context, 70),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'coordinator',
+                    label: 'Coordinator',
+                    width: SizeConfig.scaleWidth(context, 120),
+                  ),
+                  DynamicTableField(
+                    key: 'levelOfShot',
+                    label: 'Level',
+                    width: SizeConfig.scaleWidth(context, 90),
+                  ),
+                  DynamicTableField(
+                    key: 'complexity',
+                    label: 'Complexity',
+                    width: SizeConfig.scaleWidth(context, 100),
+                  ),
+                  DynamicTableField(
+                    key: 'allocationDate',
+                    label: 'Alloc Date',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'allocationEta',
+                    label: 'Alloc ETA',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'startingDate',
+                    label: 'Start Date',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'completeDate',
+                    label: 'Complete',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'dailyWip',
+                    label: 'WIP %',
+                    width: SizeConfig.scaleWidth(context, 70),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'mandays',
+                    label: 'Mandays',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'consumedMandays',
+                    label: 'Consumed',
+                    width: SizeConfig.scaleWidth(context, 90),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'savedMandays',
+                    label: 'Saved',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'supervisorBid',
+                    label: 'Sup Bid',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'clientBid',
+                    label: 'Cli Bid',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'artist',
+                    label: 'Artist',
+                    width: SizeConfig.scaleWidth(context, 120),
+                  ),
+                  DynamicTableField(
+                    key: 'artistBid',
+                    label: 'Art Bid',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'artistEta',
+                    label: 'Art ETA',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'approvedVersion',
+                    label: 'Appr Ver',
+                    width: SizeConfig.scaleWidth(context, 100),
+                  ),
+                  DynamicTableField(
+                    key: 'approvedBy',
+                    label: 'Appr By',
+                    width: SizeConfig.scaleWidth(context, 100),
+                  ),
+                  DynamicTableField(
+                    key: 'comments',
+                    label: 'Comments',
+                    width: SizeConfig.scaleWidth(context, 160),
+                  ),
+                  DynamicTableField(
+                    key: 'supervisorStatus',
+                    label: 'Sup Status',
+                    width: 130,
+                    filterOptions: _buildOptions(
+                      AppConstants.supervisorStatuses,
+                      _supervisorStatusFilter.length == 1
+                          ? _supervisorStatusFilter.first
+                          : '',
+                    ),
+                  ),
+                  DynamicTableField(
+                    key: 'artistStatus',
+                    label: 'Art Status',
+                    width: 130,
+                    filterOptions: _buildOptions(
+                      AppConstants.artistStatuses,
+                      _artistStatusFilter.length == 1
+                          ? _artistStatusFilter.first
+                          : '',
+                    ),
+                  ),
+                  DynamicTableField(
+                    key: 'fromRoto',
+                    label: 'From Roto',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'fromPaint',
+                    label: 'From Paint',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'fromMm',
+                    label: 'From MM',
+                    width: SizeConfig.scaleWidth(context, 100),
+                  ),
+                  DynamicTableField(
+                    key: 'fromComp',
+                    label: 'From Comp',
+                    width: SizeConfig.scaleWidth(context, 100),
+                  ),
+                  DynamicTableField(
+                    key: 'actions',
+                    label: 'Actions',
+                    width: 110,
+                    filterRequired: false,
+                    builder: (context, value, row, rowIndex) {
+                      final shot = row['shot'] as ShotModel;
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Assign artist',
+                            icon: Icon(
+                              Icons.person_add_alt,
+                              size: SizeConfig.iconSize(context, 18),
+                            ),
+                            onPressed: () => _assign(context, shot),
                           ),
-                          onPressed: () => _assign(context, shot),
-                        ),
-                        IconButton(
-                          tooltip: 'Chat',
-                          icon: Icon(
-                            Icons.chat_bubble_outline,
-                            size: SizeConfig.iconSize(context, 18),
-                          ),
-                          onPressed: () => showDialog(
-                            context: context,
-                            builder: (_) => ShotChatDialog(
-                              shotId: shot.shotId,
-                              shotCode: shot.shotCode,
+                          IconButton(
+                            tooltip: 'Chat',
+                            icon: Icon(
+                              Icons.chat_bubble_outline,
+                              size: SizeConfig.iconSize(context, 18),
+                            ),
+                            onPressed: () => showDialog(
+                              context: context,
+                              builder: (_) => ShotChatDialog(
+                                shotId: shot.shotId,
+                                shotCode: shot.shotCode,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-              rows: rows,
-              onFilterChanged: (fieldKey, value) {
-                setState(() {
-                  _departmentPage = 0;
-                  final query = value is String ? value : value.toString();
-                  _applyTaskGridFilter(fieldKey, query);
-                });
-              },
-            ),
+                        ],
+                      );
+                    },
+                  ),
+                ],
+                rows: rows,
+                onFilterChanged: (fieldKey, value) {
+                  setState(() {
+                    _departmentPage = 0;
+                    final query = value is String ? value : value.toString();
+                    _applyTaskGridFilter(fieldKey, query);
+                  });
+                },
+              ),
+            ],
           ),
-          // SizedBox(height: SizeConfig.scaleHeight(context, 20)),
-          // Padding(
-          //   padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
-          //   child: Text(
-          //     'Client Feedback Details',
-          //     style: Theme.of(
-          //       context,
-          //     ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
-          //   ),
-          // ),
-          // _buildFeedbackTable(controller, rows),
-        ],
-      ),
+        ),
+        // SizedBox(height: SizeConfig.scaleHeight(context, 20)),
+        // Padding(
+        //   padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
+        //   child: Text(
+        //     'Client Feedback Details',
+        //     style: Theme.of(
+        //       context,
+        //     ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+        //   ),
+        // ),
+        // _buildFeedbackTable(controller, rows),
+      ],
     );
   }
 
@@ -1657,10 +1590,16 @@ class _DepartmentViewState extends State<_DepartmentView> {
       _fromMmFilter.isNotEmpty ||
       _fromCompFilter.isNotEmpty;
 
+  bool get hasActiveFilters => _hasActiveFilters;
+
+  Future<void> openFilterDialog(BuildContext context) =>
+      _showFilterDialog(context);
+
   Future<void> _showFilterDialog(BuildContext context) async {
     final result = await showDialog<_FilterResult>(
       context: context,
       builder: (ctx) => _FilterDialog(
+        controller: widget.controller,
         initialSupervisorStatuses: _supervisorStatusFilter,
         initialArtistStatuses: _artistStatusFilter,
         initialArtist: _artistFilter,
@@ -1693,7 +1632,26 @@ class _DepartmentViewState extends State<_DepartmentView> {
       ),
     );
     if (result == null || !mounted) return;
+
+    // Apply data-source selection (department / client / show) first so the
+    // grid reloads with the new scope before filters are applied below.
+    // Capture into locals so they can be promoted to non-nullable.
+    final dept = result.department;
+    final clientId = result.clientId;
+    final showId = result.showId;
+    if (dept != null && dept != widget.controller.selectedDepartment) {
+      widget.controller.selectDepartment(dept);
+      await widget.controller.loadShots();
+    }
+    if (clientId != null && clientId != widget.controller.selectedClientId) {
+      await widget.controller.selectClient(clientId);
+    }
+    if (showId != null && showId != widget.controller.selectedShowId) {
+      await widget.controller.selectShow(showId);
+    }
+    if (!mounted) return;
     setState(() {
+      _departmentPage = 0;
       _supervisorStatusFilter = result.supervisorStatuses;
       _artistStatusFilter = result.artistStatuses;
       _artistFilter = result.artist;
@@ -1724,6 +1682,7 @@ class _DepartmentViewState extends State<_DepartmentView> {
       _fromMmFilter = result.fromMm;
       _fromCompFilter = result.fromComp;
     });
+    widget.onFiltersChanged?.call();
   }
 
   Future<void> _assign(BuildContext context, ShotModel shot) async {
@@ -1736,6 +1695,270 @@ class _DepartmentViewState extends State<_DepartmentView> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Artist assigned')));
     }
+  }
+}
+
+/// Admin-only: renders the selected department's shots mapped onto the
+/// Production Management module's 20-column grid format. The data still comes
+/// from the Tasks/Shots module — only the headers follow the Production grid.
+class _ProductionView extends StatefulWidget {
+  final TaskController controller;
+  final bool showCellBorders;
+  const _ProductionView({
+    required this.controller,
+    required this.showCellBorders,
+  });
+
+  @override
+  State<_ProductionView> createState() => _ProductionViewState();
+}
+
+class _ProductionViewState extends State<_ProductionView> {
+  int _page = 0;
+
+  // ── Row cache to avoid rebuilding all row Maps on every setState ──
+  List<Map<String, dynamic>>? _cachedRows;
+  int _cachedShotsLength = -1;
+  String? _cachedDepartment;
+
+  static const List<String> _monthNames = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  String _monthLabel(DateTime? d) =>
+      d == null ? '—' : '${_monthNames[d.month - 1]}-${d.year}';
+
+  String _framesLabel(ShotModel shot) {
+    if (shot.totalFrames > 0) return '${shot.totalFrames}';
+    if (shot.frameIn > 0 || shot.frameOut > 0) {
+      return '${shot.frameIn}-${shot.frameOut}';
+    }
+    return '—';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = widget.controller;
+    final shots = controller.departmentShots;
+    if (controller.isLoading && shots.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    if (shots.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // ── Rebuild row cache only when the shots list changes ──────────
+    if (_cachedShotsLength != shots.length ||
+        _cachedDepartment != controller.selectedDepartment ||
+        _cachedRows == null) {
+      _cachedShotsLength = shots.length;
+      _cachedDepartment = controller.selectedDepartment;
+      _cachedRows = List<Map<String, dynamic>>.generate(shots.length, (index) {
+        final shot = shots[index];
+        return {
+          'sNo': index + 1,
+          'coordinator': shot.coordinator ?? '—',
+          'month': _monthLabel(shot.allocationDate),
+          'shotsReceivedDate': _fmtDate(shot.allocatedDate),
+          'clientForRef': shot.clientName ?? shot.clientId ?? '—',
+          'client': shot.clientName ?? '—',
+          'show': shot.showName ?? '—',
+          'wipEta': _fmtDate(shot.allocationEta),
+          'eta': _fmtDate(shot.clientEta),
+          'shotCode': shot.shotCode,
+          'frames': _framesLabel(shot),
+          'tasks': shot.department,
+          'reviewNotes': shot.comments ?? shot.notes ?? '—',
+          'status': shot.status,
+          'deliveredOn': _fmtDate(shot.completeDate),
+          'workStation': '—',
+          'shotMandays': shot.mandays.toStringAsFixed(1),
+          'approvedClientMd': '—',
+          'flEta': '—',
+          'flMandays': '—',
+          'shot': shot,
+        };
+      });
+    }
+
+    final rows = _cachedRows!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Production Management',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 4)),
+                    Text(
+                      '${controller.selectedDepartment ?? 'Selected department'} — '
+                      'mapped from the task grid',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        GlassContainer(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _tasksPaginationBar(
+                context,
+                _page,
+                rows.length,
+                (page) => setState(() => _page = page),
+              ),
+              DynamicDataTable(
+                currentPage: _page,
+                onPageChanged: (page) => setState(() => _page = page),
+                rowsPerPage: _tasksRowsPerPage,
+                showCellBorders: widget.showCellBorders,
+                minColumnWidth: SizeConfig.scaleWidth(context, 40),
+                columnSpacing: SizeConfig.scaleWidth(context, 12),
+                headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
+                dataRowMinHeight: MediaQuery.of(context).size.height * 38 / 768,
+                dataRowMaxHeight: MediaQuery.of(context).size.height * 42 / 768,
+                fields: [
+                  DynamicTableField(
+                    key: 'sNo',
+                    label: 'S No',
+                    width: SizeConfig.scaleWidth(context, 56),
+                    numeric: true,
+                    filterRequired: false,
+                  ),
+                  DynamicTableField(
+                    key: 'coordinator',
+                    label: 'Co ordinator',
+                    width: SizeConfig.scaleWidth(context, 140),
+                  ),
+                  DynamicTableField(
+                    key: 'month',
+                    label: 'Month',
+                    width: SizeConfig.scaleWidth(context, 90),
+                  ),
+                  DynamicTableField(
+                    key: 'shotsReceivedDate',
+                    label: 'Shots Received Date',
+                    width: SizeConfig.scaleWidth(context, 150),
+                  ),
+                  DynamicTableField(
+                    key: 'clientForRef',
+                    label: 'Client for Ref',
+                    width: SizeConfig.scaleWidth(context, 140),
+                  ),
+                  DynamicTableField(
+                    key: 'client',
+                    label: 'Client',
+                    width: SizeConfig.scaleWidth(context, 150),
+                  ),
+                  DynamicTableField(
+                    key: 'show',
+                    label: 'Show',
+                    width: SizeConfig.scaleWidth(context, 160),
+                  ),
+                  DynamicTableField(
+                    key: 'wipEta',
+                    label: 'WIP ETA',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'eta',
+                    label: 'ETA',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'shotCode',
+                    label: 'Shot ID',
+                    width: SizeConfig.scaleWidth(context, 140),
+                  ),
+                  DynamicTableField(
+                    key: 'frames',
+                    label: 'Frames',
+                    width: SizeConfig.scaleWidth(context, 80),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'tasks',
+                    label: 'Tasks',
+                    width: SizeConfig.scaleWidth(context, 90),
+                  ),
+                  DynamicTableField(
+                    key: 'reviewNotes',
+                    label: 'Review Notes',
+                    width: SizeConfig.scaleWidth(context, 180),
+                  ),
+                  DynamicTableField(
+                    key: 'status',
+                    label: 'Status',
+                    width: SizeConfig.scaleWidth(context, 130),
+                  ),
+                  DynamicTableField(
+                    key: 'deliveredOn',
+                    label: 'Delivered on',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'workStation',
+                    label: 'Work station',
+                    width: SizeConfig.scaleWidth(context, 110),
+                  ),
+                  DynamicTableField(
+                    key: 'shotMandays',
+                    label: 'Shot man-days',
+                    width: SizeConfig.scaleWidth(context, 110),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'approvedClientMd',
+                    label: 'Approved Client MD',
+                    width: SizeConfig.scaleWidth(context, 130),
+                    numeric: true,
+                  ),
+                  DynamicTableField(
+                    key: 'flEta',
+                    label: 'FL ETA',
+                    width: SizeConfig.scaleWidth(context, 90),
+                  ),
+                  DynamicTableField(
+                    key: 'flMandays',
+                    label: 'FL Man-days',
+                    width: SizeConfig.scaleWidth(context, 100),
+                    numeric: true,
+                  ),
+                ],
+                rows: rows,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -1875,6 +2098,9 @@ class _AssignDialogState extends State<_AssignDialog> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _FilterResult {
+  final String? department;
+  final String? clientId;
+  final String? showId;
   final Set<String> supervisorStatuses;
   final Set<String> artistStatuses;
   final String artist;
@@ -1906,6 +2132,9 @@ class _FilterResult {
   final String fromComp;
 
   const _FilterResult({
+    this.department,
+    this.clientId,
+    this.showId,
     required this.supervisorStatuses,
     required this.artistStatuses,
     required this.artist,
@@ -1939,6 +2168,7 @@ class _FilterResult {
 }
 
 class _FilterDialog extends StatefulWidget {
+  final TaskController controller;
   final Set<String> initialSupervisorStatuses;
   final Set<String> initialArtistStatuses;
   final String initialArtist;
@@ -1970,6 +2200,7 @@ class _FilterDialog extends StatefulWidget {
   final String initialFromComp;
 
   const _FilterDialog({
+    required this.controller,
     required this.initialSupervisorStatuses,
     required this.initialArtistStatuses,
     required this.initialArtist,
@@ -2011,11 +2242,22 @@ class _FilterDialogState extends State<_FilterDialog> {
   late final Map<String, TextEditingController> _controllers;
   late final Map<String, bool> _expanded;
 
+  // ── Data source (department / client / show) single-select ──
+  late String? _selectedDept;
+  late String? _selectedClientId;
+  late String? _selectedShowId;
+
   @override
   void initState() {
     super.initState();
     _supervisorStatuses = Set<String>.from(widget.initialSupervisorStatuses);
     _artistStatuses = Set<String>.from(widget.initialArtistStatuses);
+    _selectedDept =
+        widget.controller.selectedDepartment ?? TaskController.allOption;
+    _selectedClientId =
+        widget.controller.selectedClientId ?? TaskController.allOption;
+    _selectedShowId =
+        widget.controller.selectedShowId ?? TaskController.allOption;
     _controllers = {
       'shotId': TextEditingController(text: widget.initialShotId),
       'artist': TextEditingController(text: widget.initialArtist),
@@ -2073,6 +2315,9 @@ class _FilterDialogState extends State<_FilterDialog> {
 
   void _clearAll() {
     setState(() {
+      _selectedDept = TaskController.allOption;
+      _selectedClientId = TaskController.allOption;
+      _selectedShowId = TaskController.allOption;
       _supervisorStatuses.clear();
       _artistStatuses.clear();
       for (final c in _controllers.values) {
@@ -2085,6 +2330,22 @@ class _FilterDialogState extends State<_FilterDialog> {
     Navigator.pop(
       context,
       _FilterResult(
+        department:
+            _selectedDept !=
+                (widget.controller.selectedDepartment ??
+                    TaskController.allOption)
+            ? _selectedDept
+            : null,
+        clientId:
+            _selectedClientId !=
+                (widget.controller.selectedClientId ?? TaskController.allOption)
+            ? _selectedClientId
+            : null,
+        showId:
+            _selectedShowId !=
+                (widget.controller.selectedShowId ?? TaskController.allOption)
+            ? _selectedShowId
+            : null,
         supervisorStatuses: _supervisorStatuses,
         artistStatuses: _artistStatuses,
         shotId: _controllers['shotId']!.text,
@@ -2138,6 +2399,36 @@ class _FilterDialogState extends State<_FilterDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // ── Data Source (inline single-select chips) ──
+              _labeledChipRow(
+                'Department',
+                [TaskController.allOption, ...widget.controller.departments],
+                _selectedDept,
+                (v) => setState(() => _selectedDept = v),
+              ),
+              SizedBox(height: SizeConfig.scaleHeight(context, 8)),
+              _labeledChipRow(
+                'Client',
+                [
+                  TaskController.allOption,
+                  ...widget.controller.clients.map((c) => c.clientId),
+                ],
+                _selectedClientId,
+                (v) => setState(() => _selectedClientId = v),
+                labelFn: _clientName,
+              ),
+              SizedBox(height: SizeConfig.scaleHeight(context, 8)),
+              _labeledChipRow(
+                'Show',
+                [
+                  TaskController.allOption,
+                  ...widget.controller.shows.map((s) => s.showId),
+                ],
+                _selectedShowId,
+                (v) => setState(() => _selectedShowId = v),
+                labelFn: _showName,
+              ),
+              const Divider(height: 24),
               _sectionHeader(
                 'Supervisor Status',
                 'supervisor',
@@ -2371,6 +2662,88 @@ class _FilterDialogState extends State<_FilterDialog> {
             visualDensity: VisualDensity.compact,
           );
         }).toList(),
+      ),
+    );
+  }
+
+  String _clientName(String clientId) {
+    if (clientId == TaskController.allOption) return clientId;
+    try {
+      return widget.controller.clients
+          .firstWhere((c) => c.clientId == clientId)
+          .clientName;
+    } catch (_) {
+      return clientId;
+    }
+  }
+
+  String _showName(String showId) {
+    if (showId == TaskController.allOption) return showId;
+    try {
+      return widget.controller.shows
+          .firstWhere((s) => s.showId == showId)
+          .showName;
+    } catch (_) {
+      return showId;
+    }
+  }
+
+  Widget _labeledChipRow(
+    String label,
+    List<String> items,
+    String? selected,
+    ValueChanged<String> onSelect, {
+    String Function(String)? labelFn,
+  }) {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.scaleWidth(context, 4),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 12),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          SizedBox(height: SizeConfig.scaleHeight(context, 4)),
+          Wrap(
+            spacing: 4,
+            runSpacing: 4,
+            children: items.map((item) {
+              final isSelected = item == selected;
+              final display = labelFn != null ? labelFn(item) : item;
+              return Padding(
+                padding: const EdgeInsets.all(3),
+                child: FilterChip(
+                  label: Text(
+                    display,
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 11),
+                      color: isSelected ? Colors.white : null,
+                    ),
+                  ),
+                  avatar: null,
+                  showCheckmark: false,
+                  selected: isSelected,
+                  onSelected: (_) => onSelect(item),
+                  selectedColor: AppColors.brandGreen,
+                  checkmarkColor: Colors.white,
+                  side: BorderSide(
+                    color: isSelected
+                        ? AppColors.brandGreen
+                        : Colors.white.withValues(alpha: 0.2),
+                  ),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
       ),
     );
   }

@@ -26,6 +26,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   String _department = AppConstants.pipelineDepartments.first;
   List<String> _accessibleDepartments = AppConstants.pipelineDepartments;
   bool _exporting = false;
+  bool _showCellBorders = true;
   String _clientNoFilter = '';
   String _showFilter = '';
   String _shotFilter = '';
@@ -196,6 +197,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
               },
               child: const Text('Clear Range'),
             ),
+          FilterChip(
+            selected: _showCellBorders,
+            onSelected: (value) => setState(() => _showCellBorders = value),
+            avatar: Icon(
+              Icons.border_all,
+              size: SizeConfig.iconSize(context, 18),
+              color: _showCellBorders ? AppColors.brandGreen : null,
+            ),
+            label: const Text('Cell Borders'),
+            showCheckmark: true,
+            selectedColor: AppColors.brandGreen.withValues(alpha: 0.12),
+            checkmarkColor: AppColors.brandGreen,
+            side: BorderSide(
+              color: _showCellBorders
+                  ? AppColors.brandGreen
+                  : Theme.of(context).colorScheme.outlineVariant,
+            ),
+          ),
         ],
       ),
     );
@@ -308,6 +327,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         children: [
           SizedBox(height: SizeConfig.scaleHeight(context, 10)),
           DynamicDataTable(
+            showCellBorders: _showCellBorders,
             fields: [
               DynamicTableField(
                 key: 'clientNo',

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:vfxpick_pipeline/modules/hrms/view/hrms.dart';
 
 import '../providers/access_provider.dart';
 import '../../modules/access_provider/view/access_provider_screen.dart';
@@ -9,7 +8,6 @@ import '../../modules/auth/view/login_screen.dart';
 import '../../modules/auth/view/register_screen.dart';
 import '../../modules/assets/view/assets_screen.dart';
 import '../../modules/bidding/view/bidding_screen.dart';
-import '../../modules/dashboard/view/dashboard_screen.dart';
 import '../../modules/feedback/view/feedback_screen.dart';
 import '../../modules/home/view/home_screen.dart';
 import '../../modules/notifications/view/notifications_screen.dart';
@@ -20,6 +18,7 @@ import '../../modules/review/view/review_screen.dart';
 import '../../modules/tasks/view/tasks_screen.dart';
 import '../../modules/teams/view/teams_screen.dart';
 import '../../modules/inventory/view/inventory_screen.dart';
+import '../../modules/profile/view/profile_screen.dart';
 import '../../shared/widgets/main_layout.dart';
 
 class AppRoutes {
@@ -69,10 +68,6 @@ class AppRoutes {
             ),
 
             GoRoute(
-              path: '/dashboard',
-              builder: (context, state) => const DashboardScreen(),
-            ),
-            GoRoute(
               path: '/bidding',
               builder: (context, state) => const BiddingScreen(),
             ),
@@ -113,10 +108,6 @@ class AppRoutes {
               builder: (context, state) => const NotificationsScreen(),
             ),
             GoRoute(
-              path: '/hrms',
-              builder: (context, state) => const HrmsView(),
-            ),
-            GoRoute(
               path: '/access-provider',
               builder: (context, state) => const AccessProviderScreen(),
             ),
@@ -127,6 +118,10 @@ class AppRoutes {
             GoRoute(
               path: '/user-register',
               builder: (context, state) => const RegisterScreen(),
+            ),
+            GoRoute(
+              path: '/profile',
+              builder: (context, state) => const ProfileScreen(),
             ),
           ],
         ),

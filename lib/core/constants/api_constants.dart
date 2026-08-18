@@ -6,11 +6,11 @@ class ApiConstants {
   // ───────────────────────────────────────────────────────────────────────────
   // BASE CONFIGURATION
   // ───────────────────────────────────────────────────────────────────────────
-  static const String baseUrlPersonalLaptop =
-      'https://t06z0dmj-3000.inc1.devtunnels.ms/api';
+  // static const String baseUrlPersonalLaptop =
+  // 'https://jdtf4ztk-3000.inc1.devtunnels.ms/api';
   static const String baseUrlServer = 'http://192.168.1.15:3000/api';
+  static const String baseUrlLocalhost = 'http://localhost:3000/api';
   static const String baseUrl = baseUrlServer;
-
   // ─────────────────────────────────────────────
   // AUTH (/api/auth) — unchanged
   // ───────────────────────────────────────────────────────────────────────────
@@ -19,6 +19,7 @@ class ApiConstants {
   static const String logout = '/auth/logout';
   static const String authMe = '/auth/me';
   static const String authOptions = '/auth/options';
+  static const String authProfile = '/auth/profile';
 
   // ───────────────────────────────────────────────────────────────────────────
   // DASHBOARD (/api/dashboard)
@@ -122,4 +123,12 @@ class ApiConstants {
   // ───────────────────────────────────────────────────────────────────────────
   static const String inventory = '/inventory';
   static String inventoryItem(int id) => '/inventory/$id';
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // PRODUCTION (/api/production)
+  // ───────────────────────────────────────────────────────────────────────────
+  static const String production = '/production';
+  static const String productionGrid = '/production/grid';
+  static const String productionGridSync = '/production/grid/sync';
+  static const String productionGridBulkUpsert = '/production/grid/bulk-upsert';
 }

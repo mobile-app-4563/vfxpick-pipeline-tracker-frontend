@@ -31,6 +31,17 @@
 
   <title>vfxpick_pipeline</title>
   <link rel="manifest" href="manifest.json">
+
+  <!--
+    Disable the browser's horizontal overscroll / swipe navigation so that
+    swiping left or right (trackpad swipe, touch edge swipe) no longer goes
+    back/forward to previous routes inside the app.
+  -->
+  <style>
+    html, body {
+      overscroll-behavior-x: none;
+    }
+  </style>
 </head>
 <body>
   <!--

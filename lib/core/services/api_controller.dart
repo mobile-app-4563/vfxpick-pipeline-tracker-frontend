@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 import 'dart:typed_data';
@@ -34,6 +35,35 @@ class ApiController {
   String? getToken() => _token;
 
   bool get isAuthenticated => _token != null;
+
+  // ─── Auth-bootstrap gate ────────────────────────────────────────────────────
+  // Requests fired before session bootstrap finishes (e.g. a screen's
+  // initState load right after a hot restart lands on the same URL) go out
+  // WITHOUT a token → 401 "Authentication token is missing". Gate every
+  // request on bootstrap completion so this race can never happen.
+  bool _authBootstrapBegun = false;
+  Completer<void>? _authBootstrapCompleter;
+
+  /// Called by [AuthController] at startup, BEFORE any screen fires requests.
+  void beginAuthBootstrap() {
+    _authBootstrapBegun = true;
+    _authBootstrapCompleter ??= Completer<void>();
+  }
+
+  /// Called by [AuthController] as soon as the stored token is restored (or
+  /// confirmed absent). Releases any request that was waiting on bootstrap.
+  void markAuthReady() {
+    _authBootstrapBegun = false;
+    _authBootstrapCompleter?.complete();
+    _authBootstrapCompleter = null;
+  }
+
+  Future<void> get _authBootstrapDone {
+    if (!_authBootstrapBegun || _authBootstrapCompleter == null) {
+      return Future.value();
+    }
+    return _authBootstrapCompleter!.future;
+  }
 
   // ─── Headers ─────────────────────────────────────────────────────────────────
   Map<String, String> get _headers => {
@@ -97,6 +127,7 @@ class ApiController {
     String path, {
     Map<String, String>? queryParams,
   }) async {
+    await _authBootstrapDone;
     final url = _uri(path, queryParams: queryParams);
     _logRequest('GET', url.toString());
     try {
@@ -120,6 +151,7 @@ class ApiController {
     String path,
     Map<String, dynamic> body,
   ) async {
+    await _authBootstrapDone;
     final url = _uri(path);
     _logRequest('POST', url.toString(), body: body);
     try {
@@ -143,6 +175,7 @@ class ApiController {
     String path,
     Map<String, dynamic> body,
   ) async {
+    await _authBootstrapDone;
     final url = _uri(path);
     _logRequest('PUT', url.toString(), body: body);
     try {
@@ -166,6 +199,7 @@ class ApiController {
     String path, {
     Map<String, dynamic>? body,
   }) async {
+    await _authBootstrapDone;
     final url = _uri(path);
     _logRequest('PATCH', url.toString(), body: body);
     try {
@@ -190,6 +224,7 @@ class ApiController {
   // ─── DELETE Request ───────────────────────────────────────────────────────────
   /// DELETE request
   Future<Map<String, dynamic>> delete(String path) async {
+    await _authBootstrapDone;
     final url = _uri(path);
     _logRequest('DELETE', url.toString());
     try {
@@ -212,6 +247,7 @@ class ApiController {
     String path, {
     Map<String, String>? queryParams,
   }) async {
+    await _authBootstrapDone;
     final url = _uri(path, queryParams: queryParams);
     _logRequest('GET(bytes)', url.toString());
     try {

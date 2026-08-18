@@ -41,8 +41,6 @@ class _CustomSidebarState extends State<CustomSidebar> {
     switch (route) {
       case '/home':
         return Icons.home_outlined;
-      case '/dashboard':
-        return Icons.dashboard_outlined;
       case '/bidding':
         return Icons.sync_alt_outlined;
       case '/projects':
@@ -67,12 +65,12 @@ class _CustomSidebarState extends State<CustomSidebar> {
         return Icons.notifications_none_outlined;
       case '/user-register':
         return Icons.person_add_alt_1_outlined;
-      case '/hrms':
-        return Icons.badge_outlined;
       case '/access-provider':
         return Icons.admin_panel_settings_outlined;
       case '/inventory':
         return Icons.inventory_2_outlined;
+      case '/profile':
+        return Icons.person_outline;
       default:
         return Icons.circle_outlined;
     }

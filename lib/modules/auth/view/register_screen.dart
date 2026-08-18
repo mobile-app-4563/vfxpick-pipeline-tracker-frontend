@@ -314,13 +314,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ],
           ),
           content: const Text(
-            'Your account has been created successfully. Welcome to VfxPick! You are being redirected to your dashboard.',
+            'Your account has been created successfully. Welcome to VfxPick! You are being redirected to the home screen.',
           ),
           actions: [
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop(); // Dismiss Dialog
-                context.go('/dashboard');
+                context.go('/home');
               },
               child: const Text(
                 'OK',

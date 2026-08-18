@@ -122,6 +122,8 @@ class _CustomDropdownState<T> extends State<CustomDropdown<T>> {
         value: item,
         child: Text(
           widget.itemToString(item),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: isDark
                 ? AppColors.darkTextPrimary
@@ -139,6 +141,7 @@ class _CustomDropdownState<T> extends State<CustomDropdown<T>> {
 
     final dropdown = DropdownButtonFormField<T>(
       value: _safeValue,
+      isExpanded: true,
       items: _buildItems(context, isDark, widget.compact),
       onChanged: (T? newValue) {
         setState(() => _selectedValue = newValue);

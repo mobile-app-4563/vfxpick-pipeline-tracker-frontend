@@ -6,6 +6,9 @@ class UserModel {
   final String role; // Admin, Manager, Team Lead, Employee
   final String status; // Active, Disabled
   final String avatar; // Avatar initial or URL
+  final String level; // Senior | Mid | Junior (artists only)
+  final String phone;
+  final String employeeId;
 
   UserModel({
     required this.userId,
@@ -15,6 +18,9 @@ class UserModel {
     required this.role,
     required this.status,
     required this.avatar,
+    this.level = '',
+    this.phone = '',
+    this.employeeId = '',
   });
 
   UserModel copyWith({
@@ -25,6 +31,9 @@ class UserModel {
     String? role,
     String? status,
     String? avatar,
+    String? level,
+    String? phone,
+    String? employeeId,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -34,6 +43,9 @@ class UserModel {
       role: role ?? this.role,
       status: status ?? this.status,
       avatar: avatar ?? this.avatar,
+      level: level ?? this.level,
+      phone: phone ?? this.phone,
+      employeeId: employeeId ?? this.employeeId,
     );
   }
 
@@ -46,6 +58,9 @@ class UserModel {
       role: json['role'] ?? '',
       status: json['status'] ?? 'Active',
       avatar: json['avatar'] ?? '',
+      level: json['level'] ?? '',
+      phone: json['phone'] ?? '',
+      employeeId: json['employeeId'] ?? '',
     );
   }
 
@@ -58,6 +73,9 @@ class UserModel {
       'role': role,
       'status': status,
       'avatar': avatar,
+      'level': level,
+      'phone': phone,
+      'employeeId': employeeId,
     };
   }
 }
