@@ -8,6 +8,10 @@ class DashboardService {
   Future<Map<String, dynamic>> getSummary() =>
       _api.get(ApiConstants.dashboardSummary);
 
+  /// Today/tomorrow pickout counts + active shows for the Home page.
+  Future<Map<String, dynamic>> fetchHomeSummary() =>
+      _api.get(ApiConstants.dashboardHomeSummary);
+
   Future<Map<String, dynamic>> getShowShots(
     String showId, {
     String? department,

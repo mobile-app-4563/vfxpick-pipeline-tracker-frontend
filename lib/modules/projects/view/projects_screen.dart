@@ -23,6 +23,7 @@ import '../../../shared/widgets/custom_text_field.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
+import '../../../shared/widgets/grid_editable_cell.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../controller/projects_controller.dart';
@@ -41,8 +42,10 @@ class ProjectsScreen extends StatefulWidget {
   State<ProjectsScreen> createState() => _ProjectsScreenState();
 }
 
-/// Dropdown options for the PRIORITY grid column.
+/// Dropdown options for the PRIORITY grid column. 'None' is the default and
+/// represents an unset/null priority value (cleared to '' on the backend).
 const List<String> _priorityOptions = [
+  'None',
   'Priority 1',
   'Priority 2',
   'Priority 3',
@@ -100,8 +103,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   bool _canCreateClientShow = false;
   bool _canCreateShot = false;
   bool _isBulkDeleteMode = false;
+  bool _isBulkEditMode = false;
   final Set<String> _selectedShotIds = {};
   bool _isDeleting = false;
+  bool _isBulkEditing = false;
+  // Inline cell-edit state (double-click-to-edit, same as Production
+  // Management): tracks which cell is showing an editor ("shotId|fieldKey").
+  String? _editingCellKey;
   String? _roleDepartment;
 
   // Show/hide the spreadsheet-style cell borders on the grid (toggled via the
@@ -310,6 +318,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       join(_fromMmChips),
       join(_fromCompChips),
       _isBulkDeleteMode,
+      _isBulkEditMode,
     ].join('|');
   }
 
@@ -371,6 +380,122 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     if (mounted) {
       setState(() {});
     }
+  }
+
+  // ─── Inline cell editing ──────────────────────────────────────────────────
+  // Double-click a cell to edit its value in place (same flow + tooltip as
+  // the Production Management grid). Each commit saves immediately via
+  // [ProjectController.updateShot] — no pending batch.
+  // ──────────────────────────────────────────────────────────────────────────
+  String _cellKey(String shotId, String fieldKey) => '$shotId|$fieldKey';
+
+  void _startCellEdit(String shotId, String fieldKey) {
+    setState(() => _editingCellKey = _cellKey(shotId, fieldKey));
+  }
+
+  void _cancelCellEdit() {
+    if (_editingCellKey != null) {
+      setState(() => _editingCellKey = null);
+    }
+  }
+
+  /// Commits an inline cell edit straight to the backend. Rows render empty
+  /// values as '-' (dates as '—') — both treated as '' for change detection.
+  Future<void> _commitCellEdit(
+    BuildContext context,
+    ProjectController controller,
+    String shotId,
+    String fieldKey,
+    String apiKey,
+    String newValue, {
+    required String currentValue,
+  }) async {
+    // Guard against double-commit (Enter + focus-loss can fire in the same
+    // frame): only the first commit for this cell proceeds.
+    if (_editingCellKey != _cellKey(shotId, fieldKey)) return;
+    final normalized = newValue.trim();
+    final rawCurrent = currentValue.trim();
+    final current = (rawCurrent == '-' || rawCurrent == '—') ? '' : rawCurrent;
+    setState(() => _editingCellKey = null);
+    if (normalized == current) return;
+    final error = await controller.updateShot(shotId, {apiKey: normalized});
+    if (!context.mounted) return;
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update $fieldKey: $error')),
+      );
+    }
+  }
+
+  /// Builds an inline-editable grid column (double-click → TextField / date
+  /// picker / options dropdown, same as Production Management). [apiKey] lets
+  /// the grid key differ from the backend JSON key (startFrame → frameIn).
+  DynamicTableField _editableField(
+    BuildContext context,
+    ProjectController controller,
+    String key,
+    String label,
+    double width, {
+    String apiKey = '',
+    bool numeric = false,
+    bool isDate = false,
+    List<String>? options,
+  }) {
+    return DynamicTableField(
+      key: key,
+      label: label,
+      width: SizeConfig.scaleWidth(context, width),
+      numeric: numeric,
+      builder: (context, value, row, rowIndex) {
+        final shot = row['shot'] as ShotModel;
+        if (_isArtist) {
+          // Artists view values but cannot edit cells (matches the disabled
+          // Status / Priority dropdowns).
+          final display = value == null || value.toString().trim().isEmpty
+              ? '-'
+              : value.toString();
+          return Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: SizeConfig.scaleWidth(context, 4),
+              vertical: SizeConfig.scaleHeight(context, 4),
+            ),
+            child: Text(
+              display,
+              textAlign: TextAlign.center,
+              // Wrap like the editable cells so long values never overlap
+              // the neighboring columns (rows grow to fit).
+              softWrap: true,
+              overflow: TextOverflow.clip,
+              style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
+            ),
+          );
+        }
+        final display = value == null || value.toString().trim().isEmpty
+            ? null
+            : value;
+        return GridEditableCell(
+          fieldKey: key,
+          shotId: shot.shotId,
+          displayValue: display,
+          isEditing: _editingCellKey == _cellKey(shot.shotId, key),
+          isDirty: false,
+          numeric: numeric,
+          isDate: isDate,
+          options: options,
+          onStartEdit: () => _startCellEdit(shot.shotId, key),
+          onCommit: (newValue) => _commitCellEdit(
+            context,
+            controller,
+            shot.shotId,
+            key,
+            apiKey.isEmpty ? key : apiKey,
+            newValue,
+            currentValue: (row[key] ?? '').toString(),
+          ),
+          onCancel: _cancelCellEdit,
+        );
+      },
+    );
   }
 
   @override
@@ -566,29 +691,48 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             icon: const Icon(Icons.close),
             label: const Text('Cancel'),
           ),
-        ] else
+        ] else if (_isBulkEditMode) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
-              side: const BorderSide(color: Colors.red),
+              backgroundColor: AppColors.brandGreen.withValues(alpha: 0.12),
+              foregroundColor: AppColors.brandGreen,
+              fixedSize: SizeConfig.buttonFixedSize(context, 180, 40),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(
                   SizeConfig.scaleWidth(context, 2),
                 ),
               ),
             ),
-            onPressed: _isImporting || _isExporting || _isSavingImport
+            onPressed: (_isBulkEditing || _selectedShotIds.isEmpty)
+                ? null
+                : () => _confirmBulkEdit(context, controller),
+            icon: _isBulkEditing
+                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                : const Icon(Icons.edit_outlined),
+            label: Text('Edit (${_selectedShotIds.length})'),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 120, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
+              ),
+            ),
+            onPressed: _isBulkEditing
                 ? null
                 : () {
                     setState(() {
-                      _isBulkDeleteMode = true;
+                      _isBulkEditMode = false;
                       _selectedShotIds.clear();
                     });
                   },
-            icon: const Icon(Icons.delete_sweep_outlined),
-            label: const Text('Bulk Delete'),
+            icon: const Icon(Icons.close),
+            label: const Text('Cancel'),
           ),
+        ] else
+          ...[],
         // SizeConfig.sizedBoxW(context, 8),
         SizedBox(
           width: SizeConfig.scaleWidth(context, 200),
@@ -666,6 +810,54 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             ),
           ),
         ),
+
+        OutlinedButton.icon(
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.red,
+            fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+            side: const BorderSide(color: Colors.red),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(
+                SizeConfig.scaleWidth(context, 2),
+              ),
+            ),
+          ),
+          onPressed: _isImporting || _isExporting || _isSavingImport
+              ? null
+              : () {
+                  setState(() {
+                    _isBulkDeleteMode = true;
+                    _isBulkEditMode = false;
+                    _selectedShotIds.clear();
+                  });
+                },
+          icon: const Icon(Icons.delete_sweep_outlined),
+          label: const Text('Bulk Delete'),
+        ),
+        // if (_isAdmin)
+        //   OutlinedButton.icon(
+        //     style: OutlinedButton.styleFrom(
+        //       foregroundColor: AppColors.brandGreen,
+        //       fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+        //       side: const BorderSide(color: AppColors.brandGreen),
+        //       shape: RoundedRectangleBorder(
+        //         borderRadius: BorderRadius.circular(
+        //           SizeConfig.scaleWidth(context, 2),
+        //         ),
+        //       ),
+        //     ),
+        //     onPressed: _isImporting || _isExporting || _isSavingImport
+        //         ? null
+        //         : () {
+        //             setState(() {
+        //               _isBulkEditMode = true;
+        //               _isBulkDeleteMode = false;
+        //               _selectedShotIds.clear();
+        //             });
+        //           },
+        //     icon: const Icon(Icons.edit_note_outlined),
+        //     label: const Text('Bulk Edit'),
+        //   ),
       ],
     );
   }
@@ -899,7 +1091,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             'fromMm': shot.fromMm ?? '-',
             'fromComp': shot.fromComp ?? '-',
             'status': shot.status,
-            'priority': shot.priority ?? '',
+            'priority': (shot.priority == null || shot.priority!.isEmpty)
+                ? 'None'
+                : shot.priority!,
             'shot': shot,
           };
         },
@@ -995,7 +1189,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   showCellBorders: _showCellBorders,
                   // frozenColumnCount: _isBulkDeleteMode ? 6 : 5,
                   fields: [
-                    if (_isBulkDeleteMode)
+                    if (_isBulkDeleteMode || _isBulkEditMode)
                       DynamicTableField(
                         key: 'select',
                         label: '',
@@ -1033,9 +1227,43 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       width: SizeConfig.scaleWidth(context, 140),
                     ),
                     DynamicTableField(
-                      key: 'coordinator',
-                      label: 'Coordinator',
-                      width: SizeConfig.scaleWidth(context, 110),
+                      key: 'priority',
+                      label: 'Priority',
+                      width: SizeConfig.scaleWidth(context, 120),
+                      builder: (context, value, row, rowIndex) {
+                        final shot = row['shot'] as ShotModel;
+                        final current = value == null ? '' : value.toString();
+                        return SingleChildScrollView(
+                          child: CustomDropdown<String>(
+                            compact: true,
+                            labelText: 'Priority',
+                            value: _priorityOptions.contains(current)
+                                ? current
+                                : null,
+                            items: _priorityOptions,
+                            itemToString: (v) => v,
+                            onChanged: _isArtist
+                                ? null
+                                : (v) {
+                                    if (v != null) {
+                                      // 'None' clears the priority (backend
+                                      // stores '' so the value is unset).
+                                      controller.updatePriority(
+                                        shot.shotId,
+                                        v == 'None' ? '' : v,
+                                      );
+                                    }
+                                  },
+                          ),
+                        );
+                      },
+                    ),
+                    _editableField(
+                      context,
+                      controller,
+                      'coordinator',
+                      'Coordinator',
+                      110,
                     ),
                     DynamicTableField(
                       key: 'clientName',
@@ -1047,22 +1275,30 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       label: 'Show',
                       width: SizeConfig.scaleWidth(context, 110),
                     ),
-                    DynamicTableField(
-                      key: 'startFrame',
-                      label: 'Start Frame',
-                      width: SizeConfig.scaleWidth(context, 90),
+                    _editableField(
+                      context,
+                      controller,
+                      'startFrame',
+                      'Start Frame',
+                      90,
+                      apiKey: 'frameIn',
                       numeric: true,
                     ),
-                    DynamicTableField(
-                      key: 'endFrame',
-                      label: 'End Frame',
-                      width: SizeConfig.scaleWidth(context, 90),
+                    _editableField(
+                      context,
+                      controller,
+                      'endFrame',
+                      'End Frame',
+                      90,
+                      apiKey: 'frameOut',
                       numeric: true,
                     ),
-                    DynamicTableField(
-                      key: 'totalFrames',
-                      label: 'Total Frames',
-                      width: SizeConfig.scaleWidth(context, 95),
+                    _editableField(
+                      context,
+                      controller,
+                      'totalFrames',
+                      'Total Frames',
+                      95,
                       numeric: true,
                     ),
                     DynamicTableField(
@@ -1070,99 +1306,138 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       label: 'Artist Name',
                       width: SizeConfig.scaleWidth(context, 120),
                     ),
-                    DynamicTableField(
-                      key: 'levelOfShot',
-                      label: 'Level of Shot',
-                      width: SizeConfig.scaleWidth(context, 110),
+                    _editableField(
+                      context,
+                      controller,
+                      'levelOfShot',
+                      'Level of Shot',
+                      110,
                     ),
-                    DynamicTableField(
-                      key: 'allocationDate',
-                      label: 'Allocation Date',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'allocationDate',
+                      'Allocation Date',
+                      120,
+                      isDate: true,
                     ),
-                    DynamicTableField(
-                      key: 'allocationEta',
-                      label: 'Allocation ETA',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'allocationEta',
+                      'Allocation ETA',
+                      120,
+                      isDate: true,
                     ),
-                    DynamicTableField(
-                      key: 'startingDate',
-                      label: 'Starting Date',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'startingDate',
+                      'Starting Date',
+                      120,
+                      isDate: true,
                     ),
-                    DynamicTableField(
-                      key: 'completeDate',
-                      label: 'Complete Date',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'completeDate',
+                      'Complete Date',
+                      120,
+                      isDate: true,
                     ),
-                    DynamicTableField(
-                      key: 'dailyWip',
-                      label: 'Daily WIP %',
-                      width: SizeConfig.scaleWidth(context, 100),
+                    _editableField(
+                      context,
+                      controller,
+                      'dailyWip',
+                      'Daily WIP %',
+                      100,
                       numeric: true,
                     ),
-                    DynamicTableField(
-                      key: 'mandays',
-                      label: 'Mandays',
-                      width: SizeConfig.scaleWidth(context, 90),
+                    _editableField(
+                      context,
+                      controller,
+                      'mandays',
+                      'Mandays',
+                      90,
                       numeric: true,
                     ),
-                    DynamicTableField(
-                      key: 'consumedMandays',
-                      label: 'Consumed Mandays',
-                      width: SizeConfig.scaleWidth(context, 130),
+                    _editableField(
+                      context,
+                      controller,
+                      'consumedMandays',
+                      'Consumed Mandays',
+                      130,
                       numeric: true,
                     ),
-                    DynamicTableField(
-                      key: 'savedMandays',
-                      label: 'Saved Mandays',
-                      width: SizeConfig.scaleWidth(context, 115),
+                    _editableField(
+                      context,
+                      controller,
+                      'savedMandays',
+                      'Saved Mandays',
+                      115,
                       numeric: true,
                     ),
-                    DynamicTableField(
-                      key: 'approvedVersion',
-                      label: 'Approved Version',
-                      width: SizeConfig.scaleWidth(context, 130),
+                    _editableField(
+                      context,
+                      controller,
+                      'approvedVersion',
+                      'Approved Version',
+                      130,
                     ),
-                    DynamicTableField(
-                      key: 'approvedBy',
-                      label: 'Approved By',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'approvedBy',
+                      'Approved By',
+                      120,
                     ),
-                    DynamicTableField(
-                      key: 'comments',
-                      label: 'Comments',
-                      width: SizeConfig.scaleWidth(context, 180),
+                    _editableField(
+                      context,
+                      controller,
+                      'comments',
+                      'Comments',
+                      180,
                     ),
-                    DynamicTableField(
-                      key: 'complexity',
-                      label: 'Complexity',
-                      width: SizeConfig.scaleWidth(context, 110),
+                    _editableField(
+                      context,
+                      controller,
+                      'complexity',
+                      'Complexity',
+                      110,
+                      options: const ['Low', 'Medium', 'High', 'Critical'],
                     ),
                     DynamicTableField(
                       key: 'department',
                       label: 'Department',
                       width: SizeConfig.scaleWidth(context, 100),
                     ),
-                    DynamicTableField(
-                      key: 'fromRoto',
-                      label: 'From Roto',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'fromRoto',
+                      'From Roto',
+                      120,
                     ),
-                    DynamicTableField(
-                      key: 'fromPaint',
-                      label: 'From Paint',
-                      width: SizeConfig.scaleWidth(context, 120),
+                    _editableField(
+                      context,
+                      controller,
+                      'fromPaint',
+                      'From Paint',
+                      120,
                     ),
-                    DynamicTableField(
-                      key: 'fromMm',
-                      label: 'From MM',
-                      width: SizeConfig.scaleWidth(context, 110),
+                    _editableField(
+                      context,
+                      controller,
+                      'fromMm',
+                      'From MM',
+                      110,
                     ),
-                    DynamicTableField(
-                      key: 'fromComp',
-                      label: 'From Comp',
-                      width: SizeConfig.scaleWidth(context, 110),
+                    _editableField(
+                      context,
+                      controller,
+                      'fromComp',
+                      'From Comp',
+                      110,
                     ),
                     DynamicTableField(
                       key: 'status',
@@ -1187,76 +1462,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                     }
                                   },
                           ),
-                        );
-                      },
-                    ),
-                    DynamicTableField(
-                      key: 'priority',
-                      label: 'Priority',
-                      width: SizeConfig.scaleWidth(context, 120),
-                      builder: (context, value, row, rowIndex) {
-                        final shot = row['shot'] as ShotModel;
-                        final current = value == null ? '' : value.toString();
-                        return SingleChildScrollView(
-                          child: CustomDropdown<String>(
-                            compact: true,
-                            labelText: 'Priority',
-                            value: _priorityOptions.contains(current)
-                                ? current
-                                : null,
-                            items: _priorityOptions,
-                            itemToString: (v) => v,
-                            onChanged: _isArtist
-                                ? null
-                                : (v) {
-                                    if (v != null) {
-                                      controller.updatePriority(shot.shotId, v);
-                                    }
-                                  },
-                          ),
-                        );
-                      },
-                    ),
-                    DynamicTableField(
-                      key: 'actions',
-                      filterRequired: false,
-                      label: 'Actions',
-                      width: SizeConfig.scaleWidth(context, 110),
-                      builder: (context, value, row, rowIndex) {
-                        final shot = row['shot'] as ShotModel;
-                        return Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              tooltip: 'Edit shot',
-                              onPressed: _canCreateShot
-                                  ? () => _openShotDialog(
-                                      context,
-                                      controller,
-                                      shot: shot,
-                                    )
-                                  : null,
-                              icon: Icon(
-                                Icons.edit_outlined,
-                                size: SizeConfig.iconSize(context, 18),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: 'Delete shot',
-                              onPressed: _isDeleting
-                                  ? null
-                                  : () => _confirmDeleteShot(
-                                      context,
-                                      controller,
-                                      shot,
-                                    ),
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                size: 18,
-                                color: Colors.red,
-                              ),
-                            ),
-                          ],
                         );
                       },
                     ),
@@ -1564,11 +1769,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   label: 'Status',
                   width: SizeConfig.scaleWidth(context, 130),
                 ),
-                DynamicTableField(
-                  key: 'priority',
-                  label: 'Priority',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
+
                 DynamicTableField(
                   key: 'fromRoto',
                   label: 'Roto',
@@ -1992,7 +2193,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           TextCellValue(shot.fromMm ?? '-'),
           TextCellValue(shot.fromComp ?? '-'),
           TextCellValue(shot.status),
-          TextCellValue(shot.priority ?? '-'),
+          TextCellValue(
+            (shot.priority == null || shot.priority!.isEmpty)
+                ? 'None'
+                : shot.priority!,
+          ),
         ]);
         ExcelExportUtils.styleRow(
           sheet,
@@ -2157,51 +2362,45 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       ? '—'
       : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  Future<void> _confirmDeleteShot(
+  Future<void> _confirmBulkEdit(
     BuildContext context,
     ProjectController controller,
-    ShotModel shot,
   ) async {
-    final confirmed = await showDialog<bool>(
+    final count = _selectedShotIds.length;
+    final body = await showDialog<Map<String, dynamic>>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete Shot'),
+      builder: (_) => _BulkEditDialog(count: count),
+    );
+    if (body == null || body.isEmpty || !mounted) return;
+
+    setState(() => _isBulkEditing = true);
+    var updated = 0;
+    String? firstError;
+    for (final shotId in _selectedShotIds.toList()) {
+      final error = await controller.updateShot(shotId, body);
+      if (error == null) {
+        updated++;
+      } else {
+        firstError ??= error;
+      }
+    }
+    if (!context.mounted) return;
+    setState(() {
+      _isBulkEditing = false;
+      if (firstError == null) {
+        _isBulkEditMode = false;
+        _selectedShotIds.clear();
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
         content: Text(
-          'Are you sure you want to delete shot '
-          '"${shot.shotCode}"? This action cannot be undone.',
+          firstError == null
+              ? 'Updated $updated of $count shot(s).'
+              : 'Updated $updated of $count shot(s). Error: $firstError',
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
       ),
     );
-
-    if (confirmed != true || !mounted) return;
-
-    setState(() => _isDeleting = true);
-    try {
-      final error = await controller.deleteShot(shot.shotId);
-      if (!context.mounted) return;
-      if (error != null) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Delete failed: $error')));
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Shot "${shot.shotCode}" deleted.')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isDeleting = false);
-    }
   }
 
   Future<void> _confirmBulkDelete(
@@ -3267,6 +3466,129 @@ class _ShowFormDialogState extends State<_ShowFormDialog> {
                   ),
                 )
               : const Text('Create'),
+        ),
+      ],
+    );
+  }
+}
+
+class _BulkEditDialog extends StatefulWidget {
+  final int count;
+  const _BulkEditDialog({required this.count});
+
+  @override
+  State<_BulkEditDialog> createState() => _BulkEditDialogState();
+}
+
+class _BulkEditDialogState extends State<_BulkEditDialog> {
+  static const String _noChange = '— No change —';
+
+  static const List<String> _levelOptions = [
+    'Easy',
+    'Medium',
+    'Hard',
+    'Key level shot',
+  ];
+  static const List<String> _complexityOptions = [
+    'Low',
+    'Medium',
+    'High',
+    'Critical',
+  ];
+
+  String _status = _noChange;
+  String _priority = _noChange;
+  String _levelOfShot = _noChange;
+  String _complexity = _noChange;
+  final TextEditingController _coordinator = TextEditingController();
+  final TextEditingController _comments = TextEditingController();
+
+  @override
+  void dispose() {
+    _coordinator.dispose();
+    _comments.dispose();
+    super.dispose();
+  }
+
+  Map<String, dynamic> _collectBody() {
+    final body = <String, dynamic>{};
+    if (_status != _noChange) body['status'] = _status;
+    if (_priority != _noChange) {
+      body['priority'] = _priority == 'None' ? '' : _priority;
+    }
+    if (_levelOfShot != _noChange) body['levelOfShot'] = _levelOfShot;
+    if (_complexity != _noChange) body['complexity'] = _complexity;
+    final coordinator = _coordinator.text.trim();
+    if (coordinator.isNotEmpty) body['coordinator'] = coordinator;
+    final comments = _comments.text.trim();
+    if (comments.isNotEmpty) body['comments'] = comments;
+    return body;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Bulk Edit (${widget.count} shot(s))'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CustomDropdown<String>(
+              compact: true,
+              labelText: 'Status',
+              value: _status,
+              items: [_noChange, ...AppConstants.shotStatuses],
+              itemToString: (v) => v,
+              onChanged: (v) => setState(() => _status = v ?? _noChange),
+            ),
+            CustomDropdown<String>(
+              compact: true,
+              labelText: 'Priority',
+              value: _priority,
+              items: [_noChange, ..._priorityOptions],
+              itemToString: (v) => v,
+              onChanged: (v) => setState(() => _priority = v ?? _noChange),
+            ),
+            CustomDropdown<String>(
+              compact: true,
+              labelText: 'Level of Shot',
+              value: _levelOfShot,
+              items: [_noChange, ..._levelOptions],
+              itemToString: (v) => v,
+              onChanged: (v) => setState(() => _levelOfShot = v ?? _noChange),
+            ),
+            CustomDropdown<String>(
+              compact: true,
+              labelText: 'Complexity',
+              value: _complexity,
+              items: [_noChange, ..._complexityOptions],
+              itemToString: (v) => v,
+              onChanged: (v) => setState(() => _complexity = v ?? _noChange),
+            ),
+            CustomTextField(
+              controller: _coordinator,
+              labelText: 'Coordinator (blank = unchanged)',
+            ),
+            CustomTextField(
+              controller: _comments,
+              labelText: 'Comments (blank = unchanged)',
+              maxLines: 2,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.brandGreen,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.of(context).pop(_collectBody()),
+          child: const Text('Apply'),
         ),
       ],
     );

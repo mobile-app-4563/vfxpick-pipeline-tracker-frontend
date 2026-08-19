@@ -52,6 +52,10 @@ class DynamicDataTable extends StatefulWidget {
   final bool fitToWidth;
   final bool showCellBorders;
 
+  /// Called when a data row is double-tapped (plain-text cells only — cells
+  /// with a custom [builder] keep their own interaction, e.g. dropdowns).
+  final void Function(Map<String, dynamic> row, int rowIndex)? onRowDoubleTap;
+
   const DynamicDataTable({
     super.key,
     required this.fields,
@@ -74,6 +78,7 @@ class DynamicDataTable extends StatefulWidget {
     this.onPageChanged,
     this.fitToWidth = false,
     this.showCellBorders = false,
+    this.onRowDoubleTap,
   });
 
   @override
@@ -277,6 +282,13 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                   softWrap: false,
                   overflow: TextOverflow.visible,
                 );
+                if (widget.onRowDoubleTap != null) {
+                  child = GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onDoubleTap: () => widget.onRowDoubleTap!(row, index),
+                    child: child,
+                  );
+                }
               }
               return DataCell(child);
             }).toList(),
@@ -415,7 +427,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         style: cellStyle,
       );
     }
-    return Padding(
+    final cell = Padding(
       padding: EdgeInsets.symmetric(
         horizontal: SizeConfig.scaleWidth(context, 6),
         vertical: SizeConfig.scaleHeight(context, 6),
@@ -429,6 +441,16 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         child: child,
       ),
     );
+    // Double-tap-to-edit on plain-text cells (builder cells like dropdowns
+    // keep their own interactions).
+    if (widget.onRowDoubleTap != null && field.builder == null) {
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onDoubleTap: () => widget.onRowDoubleTap!(row, rowIndex),
+        child: cell,
+      );
+    }
+    return cell;
   }
 
   /// Spreadsheet-style grid: every cell gets a full border and all content is

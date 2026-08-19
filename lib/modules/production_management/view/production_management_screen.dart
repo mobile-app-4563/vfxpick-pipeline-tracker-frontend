@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
@@ -20,7 +21,9 @@ import '../../../shared/widgets/custom_text_field.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
+import '../../../shared/widgets/grid_editable_cell.dart';
 import '../../../shared/widgets/loading_widget.dart';
+import '../../auth/controller/auth_controller.dart';
 
 /// Status values accepted by the backend `shots.status` ENUM (also used for
 /// the grid's Status column, the create dialog and import normalization).
@@ -29,6 +32,81 @@ const List<String> _gridStatusOptions = [
   'Approved',
   'Awaiting Approval',
   'Approved Internal',
+  'Bidding',
+  'Bids Received',
+  'WIP',
+  'Delivered',
+  'Awaiting Reference',
+  'Awaiting Plates',
+  'Completed',
+  'RTU',
+  'Rough Cost Shared',
+];
+
+/// Fixed filter options for the grid's Status column (blank rows are matched
+/// by the 'Blank' chip). 'Approved'/'Approved Internal' are kept alongside the
+/// production statuses so legacy rows stay filterable.
+const List<String> _statusFilterOptions = [
+  'Blank',
+  'Awaiting Approval',
+  'Bidding',
+  'Bids Received',
+  'WIP',
+  'Delivered',
+  'Hold',
+  'Awaiting Reference',
+  'Awaiting Plates',
+  'Completed',
+  'RTU',
+  'Rough Cost Shared',
+  'Approved',
+  'Approved Internal',
+];
+
+/// Fixed filter options for the grid's Tasks column.
+const List<String> _tasksFilterOptions = [
+  'ROTO / KEYING',
+  'KEYING',
+  'PAINT / PREP',
+  'PREP / COMP',
+  'CT',
+  'OT',
+  'RA',
+  'COMP',
+  'CGI',
+];
+
+/// Fixed filter options for the grid's Work station column.
+const List<String> _workStationFilterOptions = [
+  'Inhouse',
+  'FL',
+  'Inhouse / FL',
+  'Blank',
+  'YTP',
+];
+
+/// Fixed filter options for the grid's Review Notes column.
+const List<String> _reviewNotesFilterOptions = [
+  'Client Feedback',
+  'Additional',
+  'Extended Frames',
+  'No Reference',
+  'No Scope',
+  'Query Raised',
+  'Graded Plate',
+  'Updated Plates',
+  'WIP Version Shared',
+  'Test Shot',
+  'Priority',
+  '1st Priority',
+  '2nd Priority',
+  '3rd Priority',
+  '4th Priority',
+  '5th Priority',
+  'Blank',
+  'QT Plates',
+  'EXR Plates',
+  'Awaiting Approval',
 ];
 
 /// The "All" placeholder used by the single-select Department filter in the
@@ -62,6 +140,13 @@ class _ProductionManagementScreenState
   int _page = 0;
   static const int _rowsPerPage = 10;
 
+  // ─── Row / bulk delete state ──────────────────────────────────────────────
+  bool _isDeleting = false;
+  // Delete controls (row delete + bulk select) are Admin-only.
+  bool _isAdmin = false;
+  // grid_id (shotId) values checked for bulk delete.
+  final Set<String> _selectedGridIds = {};
+
   // Show/hide the spreadsheet-style cell borders on the grid (toggled via the
   // "Cell Borders" checkbox in the toolbar). On by default to match the Excel
   // template look.
@@ -79,7 +164,7 @@ class _ProductionManagementScreenState
   String _clientForRefFilter = '';
   String _clientFilter = '';
   String _showFilter = '';
-  String _reviewNotesFilter = '';
+  Set<String> _reviewNotesChips = {};
   String _framesFilter = '';
   String _shotsReceivedDateFilter = '';
   String _wipEtaFilter = '';
@@ -129,6 +214,12 @@ class _ProductionManagementScreenState
   void initState() {
     super.initState();
     _loadGrid();
+    // Delete options (row delete + bulk delete) are only shown to Admins.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final user = context.read<AuthController>().currentUser;
+      setState(() => _isAdmin = user?.role == AppConstants.roleAdmin);
+    });
   }
 
   Future<void> _loadGrid() async {
@@ -163,6 +254,13 @@ class _ProductionManagementScreenState
       _pendingEdits.values.fold<int>(0, (sum, updates) => sum + updates.length);
 
   String? _cellKey(String shotId, String fieldKey) => '$shotId|$fieldKey';
+
+  /// Lower-cases and strips whitespace/trailing punctuation so chip labels
+  /// ('WIP', 'Inhouse / FL') match stored values ('Wip', 'Inhouse/FL').
+  static String _normalizeChipValue(String s) {
+    final t = s.toLowerCase();
+    return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
+  }
 
   dynamic _displayValue(Map<String, dynamic> row, String fieldKey) {
     final shotId = row['shotId'];
@@ -219,7 +317,7 @@ class _ProductionManagementScreenState
       _clientForRefFilter,
       _clientFilter,
       _showFilter,
-      _reviewNotesFilter,
+      join(_reviewNotesChips),
       _framesFilter,
       _shotsReceivedDateFilter,
       _wipEtaFilter,
@@ -253,7 +351,18 @@ class _ProductionManagementScreenState
 
             bool chipMatch(String key, Set<String> selected) {
               if (selected.isEmpty) return true;
-              return selected.contains((row[key] ?? '').toString());
+              final value = (row[key] ?? '').toString();
+              if (selected.contains(value)) return true;
+              final normalized = _normalizeChipValue(value);
+              for (final s in selected) {
+                if (normalized == _normalizeChipValue(s)) return true;
+              }
+              // The 'Blank' chip matches rows with an empty cell.
+              if (value.trim().isEmpty &&
+                  selected.any((s) => _normalizeChipValue(s) == 'blank')) {
+                return true;
+              }
+              return false;
             }
 
             return (_departmentFilter == _allDepartmentOption ||
@@ -263,7 +372,7 @@ class _ProductionManagementScreenState
                 contains('clientForRef', _clientForRefFilter) &&
                 contains('client', _clientFilter) &&
                 contains('show', _showFilter) &&
-                contains('reviewNotes', _reviewNotesFilter) &&
+                chipMatch('reviewNotes', _reviewNotesChips) &&
                 contains('frames', _framesFilter) &&
                 contains('shotsReceivedDate', _shotsReceivedDateFilter) &&
                 contains('wipEta', _wipEtaFilter) &&
@@ -294,7 +403,7 @@ class _ProductionManagementScreenState
     inc(_clientForRefFilter);
     inc(_clientFilter);
     inc(_showFilter);
-    inc(_reviewNotesFilter);
+    count += _reviewNotesChips.length;
     inc(_framesFilter);
     inc(_shotsReceivedDateFilter);
     inc(_wipEtaFilter);
@@ -334,7 +443,7 @@ class _ProductionManagementScreenState
           _showFilter = v;
           break;
         case 'reviewNotes':
-          _reviewNotesFilter = v;
+          _reviewNotesChips = v.isEmpty ? {} : {v};
           break;
         case 'frames':
           _framesFilter = v;
@@ -395,7 +504,7 @@ class _ProductionManagementScreenState
         initialClientForRef: _clientForRefFilter,
         initialClient: _clientFilter,
         initialShow: _showFilter,
-        initialReviewNotes: _reviewNotesFilter,
+        initialReviewNotesChips: _reviewNotesChips,
         initialFrames: _framesFilter,
         initialShotsReceivedDate: _shotsReceivedDateFilter,
         initialWipEta: _wipEtaFilter,
@@ -419,7 +528,7 @@ class _ProductionManagementScreenState
       _clientForRefFilter = result.clientForRef;
       _clientFilter = result.client;
       _showFilter = result.show;
-      _reviewNotesFilter = result.reviewNotes;
+      _reviewNotesChips = result.reviewNotesChips;
       _framesFilter = result.frames;
       _shotsReceivedDateFilter = result.shotsReceivedDate;
       _wipEtaFilter = result.wipEta;
@@ -1188,10 +1297,135 @@ class _ProductionManagementScreenState
     }
   }
 
+  // ─── Row / bulk delete ────────────────────────────────────────────────────
+  /// Label used in delete confirmations: the Shot ID when present, else the
+  /// grid_id so the user always sees something meaningful.
+  String _rowLabel(Map<String, dynamic> row) {
+    final code = row['shotCode']?.toString().trim() ?? '';
+    return code.isNotEmpty ? code : (row['shotId']?.toString() ?? 'this row');
+  }
+
+  Future<void> _confirmDeleteRow(Map<String, dynamic> row) async {
+    final gridId = row['shotId']?.toString() ?? '';
+    if (gridId.isEmpty || _isDeleting) return;
+    final label = _rowLabel(row);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Row'),
+        content: Text(
+          'Are you sure you want to delete "$label"? '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      final response = await _productionService.deleteProductionGridRow(gridId);
+      if (!mounted) return;
+      if (response['success'] == true) {
+        // Drop pending edits for the removed row so a later Sync never
+        // targets a deleted grid_id.
+        _pendingEdits.remove(gridId);
+        await _loadGrid();
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Row "$label" deleted.')));
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: ${response['error']}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
+  Future<void> _confirmBulkDelete() async {
+    final count = _selectedGridIds.length;
+    if (count == 0 || _isDeleting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bulk Delete Rows'),
+        content: Text(
+          'Are you sure you want to delete $count selected row(s)? '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isDeleting = true);
+    try {
+      final gridIds = _selectedGridIds.toList();
+      final response = await _productionService.bulkDeleteProductionGrid(
+        gridIds,
+      );
+      if (!mounted) return;
+      if (response['success'] == true) {
+        // Drop pending edits for every removed row (see [_confirmDeleteRow]).
+        for (final id in gridIds) {
+          _pendingEdits.remove(id);
+        }
+        await _loadGrid();
+        if (!mounted) return;
+        final deleted = response['deleted'] as int? ?? count;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$deleted row(s) deleted.')));
+        setState(() => _selectedGridIds.clear());
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bulk delete failed: ${response['error']}')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Bulk delete failed: $e')));
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
   // ─── Toolbar ──────────────────────────────────────────────────────────────
   Widget _toolbar(BuildContext context) {
     return Wrap(
-      alignment: WrapAlignment.center,
+      alignment: WrapAlignment.start,
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: SizeConfig.scaleWidth(context, 12),
       runSpacing: SizeConfig.scaleHeight(context, 12),
@@ -1271,7 +1505,7 @@ class _ProductionManagementScreenState
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandGreen,
               foregroundColor: Colors.white,
-              fixedSize: SizeConfig.buttonFixedSize(context, 170, 40),
+              fixedSize: SizeConfig.buttonFixedSize(context, 200, 40),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(
                   SizeConfig.scaleWidth(context, 2),
@@ -1354,6 +1588,44 @@ class _ProductionManagementScreenState
             ),
           ),
         ),
+        if (_isAdmin && _selectedGridIds.isNotEmpty) ...[
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.red.shade50,
+              foregroundColor: Colors.red,
+              fixedSize: SizeConfig.buttonFixedSize(context, 180, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
+              ),
+            ),
+            onPressed: (_isDeleting || _selectedGridIds.isEmpty)
+                ? null
+                : _confirmBulkDelete,
+            icon: _isDeleting
+                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                : const Icon(Icons.delete_forever_outlined),
+            label: Text('Bulk Delete (${_selectedGridIds.length})'),
+          ),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 120, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
+              ),
+            ),
+            onPressed: _isDeleting
+                ? null
+                : () {
+                    setState(() => _selectedGridIds.clear());
+                  },
+            icon: const Icon(Icons.close),
+            label: const Text('Clear'),
+          ),
+        ],
       ],
     );
   }
@@ -1361,6 +1633,29 @@ class _ProductionManagementScreenState
   // ─── Grid fields (all 20 template columns) ───────────────────────────────
   List<DynamicTableField> _buildFields(BuildContext context) {
     return [
+      if (_isAdmin)
+        DynamicTableField(
+          key: 'select',
+          label: '',
+          width: SizeConfig.scaleWidth(context, 48),
+          filterRequired: false,
+          builder: (context, value, row, rowIndex) {
+            final gridId = row['shotId']?.toString() ?? '';
+            final isSelected = _selectedGridIds.contains(gridId);
+            return Checkbox(
+              value: isSelected,
+              onChanged: (checked) {
+                setState(() {
+                  if (checked == true) {
+                    _selectedGridIds.add(gridId);
+                  } else {
+                    _selectedGridIds.remove(gridId);
+                  }
+                });
+              },
+            );
+          },
+        ),
       DynamicTableField(
         key: 'sNo',
         label: 'S No',
@@ -1423,6 +1718,29 @@ class _ProductionManagementScreenState
       ),
       _editableField(context, 'flEta', 'FL ETA', 110, isDate: true),
       _editableField(context, 'flMandays', 'FL Man-days', 110, numeric: true),
+      if (_isAdmin)
+        DynamicTableField(
+          key: 'actions',
+          label: 'Actions',
+          width: SizeConfig.scaleWidth(context, 90),
+          filterRequired: false,
+          builder: (context, value, row, rowIndex) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Delete row',
+                  onPressed: _isDeleting ? null : () => _confirmDeleteRow(row),
+                  icon: Icon(
+                    Icons.delete_outline,
+                    size: SizeConfig.iconSize(context, 18),
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
     ];
   }
 
@@ -1443,7 +1761,7 @@ class _ProductionManagementScreenState
       builder: (context, value, row, rowIndex) {
         final shotId = row['shotId']?.toString() ?? '';
         final display = _displayValue(row, key);
-        return _GridEditableCell(
+        return GridEditableCell(
           fieldKey: key,
           shotId: shotId,
           displayValue: display,
@@ -1765,277 +2083,6 @@ class _ProductionManagementScreenState
   }
 }
 
-/// A single editable grid cell.
-///
-/// Displays the value normally; on double-click it swaps to an editor:
-///  - [options] != null  → a compact dropdown (used by the Status column)
-///  - [isDate]           → opens a date picker dialog directly
-///  - otherwise          → a compact [TextField]
-/// Commits on Enter/focus-loss (text), selection (dropdown) or pick (date),
-/// and highlights while dirty (pending sync).
-class _GridEditableCell extends StatefulWidget {
-  final String fieldKey;
-  final String shotId;
-  final dynamic displayValue;
-  final bool isEditing;
-  final bool isDirty;
-  final bool numeric;
-  final bool isDate;
-  final List<String>? options;
-  final VoidCallback onStartEdit;
-  final ValueChanged<String> onCommit;
-  final VoidCallback onCancel;
-
-  const _GridEditableCell({
-    required this.fieldKey,
-    required this.shotId,
-    required this.displayValue,
-    required this.isEditing,
-    required this.isDirty,
-    required this.numeric,
-    this.isDate = false,
-    this.options,
-    required this.onStartEdit,
-    required this.onCommit,
-    required this.onCancel,
-  });
-
-  @override
-  State<_GridEditableCell> createState() => _GridEditableCellState();
-}
-
-class _GridEditableCellState extends State<_GridEditableCell> {
-  late final TextEditingController _controller;
-  late final FocusNode _focusNode;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: _initialText);
-    _focusNode = FocusNode()..addListener(_onFocusChange);
-    if (widget.isEditing && widget.options == null && !widget.isDate) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focusNode.requestFocus();
-      });
-    }
-  }
-
-  String get _initialText {
-    final value = widget.displayValue;
-    if (value == null) return '';
-    return value.toString();
-  }
-
-  /// Parses the cell's value into a [DateTime], or null when empty/invalid.
-  DateTime? _parseDate(String? value) {
-    if (value == null || value.trim().isEmpty) return null;
-    return DateTime.tryParse(value);
-  }
-
-  /// Formats [date] as an ISO `yyyy-MM-dd` string (matches the backend's
-  /// `to_iso` output so unchanged dates are no-ops on sync).
-  String _formatIsoDate(DateTime date) {
-    final y = date.year.toString().padLeft(4, '0');
-    final m = date.month.toString().padLeft(2, '0');
-    final d = date.day.toString().padLeft(2, '0');
-    return '$y-$m-$d';
-  }
-
-  /// Opens a calendar dialog; commits the picked ISO date, or an empty
-  /// string when the user clears the value (backend stores NULL).
-  Future<void> _pickDate() async {
-    final initial = _parseDate(_initialText) ?? DateTime.now();
-    String? result;
-    await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Select date'),
-        contentPadding: EdgeInsets.zero,
-        // CalendarDatePicker uses a lazy Viewport for its month grid, which
-        // cannot report intrinsic dimensions; a fixed box is required so
-        // AlertDialog's internal IntrinsicWidth doesn't try to measure it.
-        content: SizedBox(
-          width: 320,
-          height: 400,
-          child: CalendarDatePicker(
-            initialDate: initial,
-            firstDate: DateTime(2000),
-            lastDate: DateTime(2100),
-            onDateChanged: (d) => result = _formatIsoDate(d),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              result = null;
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Cancel'),
-          ),
-          if (_initialText.isNotEmpty)
-            TextButton(
-              onPressed: () {
-                result = '';
-                Navigator.pop(dialogContext);
-              },
-              child: const Text('Clear'),
-            ),
-          TextButton(
-            onPressed: () {
-              result ??= _formatIsoDate(initial);
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted || result == null) return;
-    widget.onCommit(result!);
-  }
-
-  /// Compact dropdown editor for option-based columns (e.g. Status).
-  Widget _buildOptionEditor(BuildContext context, ColorScheme scheme) {
-    final current = widget.displayValue?.toString() ?? '';
-    return CustomDropdown<String>(
-      compact: true,
-      labelText: widget.fieldKey,
-      value: widget.options!.contains(current) ? current : null,
-      items: widget.options!,
-      itemToString: (v) => v,
-      onChanged: (v) {
-        if (v != null) widget.onCommit(v);
-      },
-    );
-  }
-
-  void _onFocusChange() {
-    if (!_focusNode.hasFocus && widget.isEditing) {
-      widget.onCommit(_controller.text);
-    }
-  }
-
-  @override
-  void didUpdateWidget(covariant _GridEditableCell oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isEditing &&
-        !oldWidget.isEditing &&
-        widget.options == null &&
-        !widget.isDate) {
-      _controller.text = _initialText;
-      _controller.selection = TextSelection.collapsed(
-        offset: _controller.text.length,
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _focusNode.requestFocus();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_onFocusChange);
-    _controller.dispose();
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    if (widget.isEditing) {
-      // Status (and any future option column): inline dropdown instead of
-      // a free-text field so only valid values can be entered.
-      if (widget.options != null) {
-        return _buildOptionEditor(context, scheme);
-      }
-      return TextField(
-        controller: _controller,
-        focusNode: _focusNode,
-        keyboardType: widget.numeric
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: SizeConfig.fontSize(context, 12),
-          color: scheme.onSurface,
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(
-            horizontal: SizeConfig.scaleWidth(context, 6),
-            vertical: SizeConfig.scaleHeight(context, 6),
-          ),
-          filled: true,
-          fillColor: scheme.primaryContainer.withValues(alpha: 0.45),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(
-              SizeConfig.scaleWidth(context, 0),
-            ),
-            borderSide: BorderSide(color: scheme.primary, width: 1.5),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(
-              SizeConfig.scaleWidth(context, 0),
-            ),
-            borderSide: BorderSide(color: scheme.primary, width: 1.5),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(
-              SizeConfig.scaleWidth(context, 0),
-            ),
-            borderSide: BorderSide(color: scheme.primary, width: 2),
-          ),
-        ),
-        onSubmitted: (value) => widget.onCommit(value),
-        onTapOutside: (_) => widget.onCommit(_controller.text),
-      );
-    }
-
-    return Tooltip(
-      message: widget.isDate
-          ? 'Double-click to pick date'
-          : 'Double-click to edit',
-      waitDuration: const Duration(milliseconds: 600),
-      // Keep the hint out of the semantics tree so it never merges into the
-      // cell's label (cells must read as their value only).
-      excludeFromSemantics: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onDoubleTap: widget.isDate ? _pickDate : widget.onStartEdit,
-        child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: SizeConfig.scaleWidth(context, 4),
-            vertical: SizeConfig.scaleHeight(context, 4),
-          ),
-          decoration: widget.isDirty
-              ? BoxDecoration(
-                  color: Colors.amber.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(
-                    SizeConfig.scaleWidth(context, 4),
-                  ),
-                )
-              : null,
-          child: Text(
-            widget.displayValue == null ? '-' : widget.displayValue.toString(),
-            textAlign: TextAlign.center,
-            // Columns are sized to their content in the scrollable table, so
-            // the value always fits — never ellipsize with "...".
-            softWrap: false,
-            overflow: TextOverflow.visible,
-            style: TextStyle(
-              fontSize: SizeConfig.fontSize(context, 12),
-              color: widget.isDirty ? Colors.amber.shade900 : scheme.onSurface,
-              fontWeight: widget.isDirty ? FontWeight.w600 : FontWeight.normal,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Production grid filter dialog.
 //
@@ -2051,7 +2098,7 @@ class _ProductionFilterResult {
   final String clientForRef;
   final String client;
   final String show;
-  final String reviewNotes;
+  final Set<String> reviewNotesChips;
   final String frames;
   final String shotsReceivedDate;
   final String wipEta;
@@ -2074,7 +2121,7 @@ class _ProductionFilterResult {
     required this.clientForRef,
     required this.client,
     required this.show,
-    required this.reviewNotes,
+    required this.reviewNotesChips,
     required this.frames,
     required this.shotsReceivedDate,
     required this.wipEta,
@@ -2114,7 +2161,7 @@ class _ProductionFilterDialog extends StatefulWidget {
   final String initialClientForRef;
   final String initialClient;
   final String initialShow;
-  final String initialReviewNotes;
+  final Set<String> initialReviewNotesChips;
   final String initialFrames;
   final String initialShotsReceivedDate;
   final String initialWipEta;
@@ -2137,7 +2184,7 @@ class _ProductionFilterDialog extends StatefulWidget {
     required this.initialClientForRef,
     required this.initialClient,
     required this.initialShow,
-    required this.initialReviewNotes,
+    required this.initialReviewNotesChips,
     required this.initialFrames,
     required this.initialShotsReceivedDate,
     required this.initialWipEta,
@@ -2168,13 +2215,16 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
   Set<String> _coordinatorChips = {};
   Set<String> _workStationChips = {};
   Set<String> _monthChips = {};
+  Set<String> _reviewNotesChips = {};
 
   // Unique value lists extracted from the grid rows (computed after first
-  // frame so the dialog opens instantly, like the Projects dialog).
-  List<String> _statuses = [];
-  List<String> _tasks = [];
+  // frame so the dialog opens instantly, like the Projects dialog). Status,
+  // tasks and work station use fixed option lists; coordinator and month are
+  // derived from the rows.
+  late final List<String> _statuses = [..._statusFilterOptions];
+  late final List<String> _tasks = [..._tasksFilterOptions];
   List<String> _coordinators = [];
-  List<String> _workStations = [];
+  late final List<String> _workStations = [..._workStationFilterOptions];
   List<String> _months = [];
   bool _isLoadingValues = true;
 
@@ -2193,7 +2243,6 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
       'clientForRef': TextEditingController(text: widget.initialClientForRef),
       'client': TextEditingController(text: widget.initialClient),
       'show': TextEditingController(text: widget.initialShow),
-      'reviewNotes': TextEditingController(text: widget.initialReviewNotes),
       'frames': TextEditingController(text: widget.initialFrames),
       'shotsReceivedDate': TextEditingController(
         text: widget.initialShotsReceivedDate,
@@ -2213,6 +2262,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
     _coordinatorChips = {...widget.initialCoordinatorChips};
     _workStationChips = {...widget.initialWorkStationChips};
     _monthChips = {...widget.initialMonthChips};
+    _reviewNotesChips = {...widget.initialReviewNotesChips};
 
     _subSearchCtrl.addListener(() {
       setState(() => _subQuery = _subSearchCtrl.text);
@@ -2221,10 +2271,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
-        _statuses = _unique('status');
-        _tasks = _unique('tasks');
         _coordinators = _unique('coordinator');
-        _workStations = _unique('workStation');
         _months = _unique('month');
         _isLoadingValues = false;
       });
@@ -2268,6 +2315,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
       _coordinatorChips = {};
       _workStationChips = {};
       _monthChips = {};
+      _reviewNotesChips = {};
     });
   }
 
@@ -2279,7 +2327,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
         clientForRef: _controllers['clientForRef']!.text,
         client: _controllers['client']!.text,
         show: _controllers['show']!.text,
-        reviewNotes: _controllers['reviewNotes']!.text,
+        reviewNotesChips: _reviewNotesChips,
         frames: _controllers['frames']!.text,
         shotsReceivedDate: _controllers['shotsReceivedDate']!.text,
         wipEta: _controllers['wipEta']!.text,
@@ -2308,6 +2356,8 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
         return 'Personnel';
       case 'months':
         return 'Months';
+      case 'reviewNotes':
+        return 'Review Notes';
       case 'search':
         return 'Search';
       default:
@@ -2401,6 +2451,12 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
           onTap: () => setState(() => _subPageKey = 'months'),
         ),
         _filterListTile(
+          'Review Notes',
+          subtitle: 'Filter by review note type',
+          activeCount: _reviewNotesChips.length,
+          onTap: () => setState(() => _subPageKey = 'reviewNotes'),
+        ),
+        _filterListTile(
           'Search',
           subtitle: 'Shot ID, client, show, notes, dates & numbers',
           activeCount: _textFilterCount,
@@ -2453,6 +2509,15 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
             allItems: _months,
             selected: _monthChips,
             onChanged: (v) => setState(() => _monthChips = v),
+          ),
+        ]);
+      case 'reviewNotes':
+        return _buildChipSubPageBody([
+          _ChipFieldGroup(
+            label: 'Review Notes',
+            allItems: _reviewNotesFilterOptions,
+            selected: _reviewNotesChips,
+            onChanged: (v) => setState(() => _reviewNotesChips = v),
           ),
         ]);
       case 'search':
@@ -2564,7 +2629,6 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
       ('clientForRef', 'Client for Ref'),
       ('client', 'Client'),
       ('show', 'Show'),
-      ('reviewNotes', 'Review Notes'),
       ('frames', 'Frames'),
       ('shotMandays', 'Shot man-days'),
       ('approvedClientMd', 'Approved Client MD'),

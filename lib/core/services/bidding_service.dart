@@ -13,11 +13,12 @@ class BiddingService {
     String? status,
   }) => _api.get(
     '/bidding/pending',
-    queryParams: {
-      'department': ?department,
-      'status': ?status,
-    },
+    queryParams: {'department': ?department, 'status': ?status},
   );
+
+  /// Fetch production-grid shots whose status is 'Bidding' (JAN-DEC column).
+  Future<Map<String, dynamic>> getGridBids() =>
+      _api.get('/bidding/grid-pending');
 
   /// Get bidding details for a specific shot
   Future<Map<String, dynamic>> getShotBids(String shotId) =>

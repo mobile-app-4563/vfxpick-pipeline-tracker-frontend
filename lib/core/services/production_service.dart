@@ -275,4 +275,53 @@ class ProductionService {
       return {'success': false, 'error': 'Failed to bulk upsert grid rows: $e'};
     }
   }
+
+  /// Delete a single production-grid row by its grid_id (shotId).
+  Future<Map<String, dynamic>> deleteProductionGridRow(String gridId) async {
+    try {
+      final response = await _api.delete(
+        ApiConstants.productionGridRow(gridId),
+      );
+
+      if (response['success'] == true) {
+        return response;
+      } else {
+        return {
+          'success': false,
+          'error': response['error'] ?? 'Failed to delete grid row',
+        };
+      }
+    } catch (e) {
+      debugPrint('ProductionService.deleteProductionGridRow error: $e');
+      return {'success': false, 'error': 'Failed to delete grid row: $e'};
+    }
+  }
+
+  /// Bulk delete production-grid rows.
+  ///
+  /// [gridIds] is the list of `grid_id` values (the grid's `shotId` keys).
+  Future<Map<String, dynamic>> bulkDeleteProductionGrid(
+    List<String> gridIds,
+  ) async {
+    try {
+      final body = {'gridIds': gridIds};
+
+      final response = await _api.post(
+        ApiConstants.productionGridBulkDelete,
+        body,
+      );
+
+      if (response['success'] == true) {
+        return response;
+      } else {
+        return {
+          'success': false,
+          'error': response['error'] ?? 'Failed to bulk delete grid rows',
+        };
+      }
+    } catch (e) {
+      debugPrint('ProductionService.bulkDeleteProductionGrid error: $e');
+      return {'success': false, 'error': 'Failed to bulk delete grid rows: $e'};
+    }
+  }
 }

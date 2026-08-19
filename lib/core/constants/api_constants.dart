@@ -25,6 +25,7 @@ class ApiConstants {
   // DASHBOARD (/api/dashboard)
   // ───────────────────────────────────────────────────────────────────────────
   static const String dashboardSummary = '/dashboard/summary';
+  static const String dashboardHomeSummary = '/dashboard/home-summary';
   static const String dashboardTodaysPickouts = '/dashboard/today-pickouts';
   static const String dashboardArtistPerformance =
       '/dashboard/artist-performance';
@@ -131,4 +132,7 @@ class ApiConstants {
   static const String productionGrid = '/production/grid';
   static const String productionGridSync = '/production/grid/sync';
   static const String productionGridBulkUpsert = '/production/grid/bulk-upsert';
+  static const String productionGridBulkDelete = '/production/grid/bulk-delete';
+  static const String biddingGridPending = '/bidding/grid-pending';
+  static String productionGridRow(String gridId) => '/production/grid/$gridId';
 }

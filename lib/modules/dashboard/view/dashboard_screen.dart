@@ -32,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<DashboardController>().loadSummary();
+      context.read<DashboardController>().loadHomeSummary();
     });
   }
 
@@ -93,10 +94,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         .toList(growable: false);
 
     return RefreshIndicator(
-      onRefresh: controller.loadSummary,
+      onRefresh: () async {
+        await Future.wait([
+          controller.loadSummary(),
+          controller.loadHomeSummary(),
+        ]);
+      },
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          _homeSummarySection(context, controller),
           Padding(
             padding: EdgeInsets.only(
               bottom: SizeConfig.scaleHeight(context, 10),
@@ -276,6 +283,187 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   String _fmt(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
+
+  // ─── Home summary: today/tomorrow pickouts + active shows ────────────────
+  Widget _homeSummarySection(
+    BuildContext context,
+    DashboardController controller,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final muted = isDark
+        ? Colors.white.withValues(alpha: 0.6)
+        : Colors.grey.shade700;
+
+    Widget countCard(String label, int count, IconData icon) {
+      return Expanded(
+        child: GlassContainer(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 14)),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                color: AppColors.brandGreen,
+                size: SizeConfig.iconSize(context, 30),
+              ),
+              SizedBox(width: SizeConfig.scaleWidth(context, 12)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      color: AppColors.brandGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: SizeConfig.fontSize(context, 26),
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 13),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final shows = controller.activeShows;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            countCard(
+              'Today\'s Pickouts',
+              controller.todayPickouts,
+              Icons.today_outlined,
+            ),
+            SizedBox(width: SizeConfig.scaleWidth(context, 12)),
+            countCard(
+              'Tomorrow\'s Pickouts',
+              controller.tomorrowPickouts,
+              Icons.event_outlined,
+            ),
+          ],
+        ),
+        SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+        GlassContainer(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 14)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.movie_filter_outlined,
+                    color: AppColors.brandGreen,
+                    size: SizeConfig.iconSize(context, 20),
+                  ),
+                  SizedBox(width: SizeConfig.scaleWidth(context, 8)),
+                  Text(
+                    'Active Shows',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: SizeConfig.fontSize(context, 15),
+                    ),
+                  ),
+                  const Spacer(),
+                  if (controller.homeSummaryLoading)
+                    SizedBox(
+                      width: SizeConfig.scaleWidth(context, 14),
+                      height: SizeConfig.scaleHeight(context, 14),
+                      child: const CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else if (controller.homeSummaryError != null)
+                    Icon(
+                      Icons.error_outline,
+                      size: SizeConfig.iconSize(context, 16),
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                ],
+              ),
+              SizedBox(height: SizeConfig.scaleHeight(context, 8)),
+              if (shows.isEmpty)
+                Text(
+                  controller.homeSummaryError != null
+                      ? 'Could not load active shows.'
+                      : 'No active shows yet.',
+                  style: TextStyle(
+                    fontSize: SizeConfig.fontSize(context, 13),
+                    color: muted,
+                  ),
+                )
+              else
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: SizeConfig.scaleHeight(context, 260),
+                  ),
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: shows.length,
+                    separatorBuilder: (_, _) => Divider(
+                      height: 1,
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                    ),
+                    itemBuilder: (context, index) {
+                      final show = shows[index];
+                      final etaRaw = (show['eta'] ?? '').toString();
+                      final etaDate = DateTime.tryParse(etaRaw);
+                      return Padding(
+                        padding: EdgeInsets.symmetric(
+                          vertical: SizeConfig.scaleHeight(context, 6),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Text(
+                                (show['client'] ?? '—').toString(),
+                                style: TextStyle(
+                                  fontSize: SizeConfig.fontSize(context, 13),
+                                  color: muted,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              flex: 4,
+                              child: Text(
+                                (show['show'] ?? '—').toString(),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: SizeConfig.fontSize(context, 13),
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: SizeConfig.scaleWidth(context, 90),
+                              child: Text(
+                                etaDate != null ? _fmt(etaDate) : '—',
+                                textAlign: TextAlign.right,
+                                style: TextStyle(
+                                  color: AppColors.brandGreen,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: SizeConfig.fontSize(context, 13),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 
   void _openConcernPage(String path, Map<String, String> queryParams) {
     final cleaned = <String, String>{};

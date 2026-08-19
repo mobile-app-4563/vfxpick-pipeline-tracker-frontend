@@ -333,6 +333,8 @@ class ReportItem {
   final DateTime? date;
   final double mandays;
   final String? clientFeedback;
+  // Chart bucket: 'Completed' | 'In Progress' | 'Remaining'.
+  final String progress;
   ReportItem({
     required this.clientNo,
     required this.show,
@@ -340,6 +342,7 @@ class ReportItem {
     this.date,
     required this.mandays,
     this.clientFeedback,
+    this.progress = 'Remaining',
   });
   factory ReportItem.fromJson(Map<String, dynamic> j) => ReportItem(
     clientNo: j['clientNo'] ?? '',
@@ -348,6 +351,7 @@ class ReportItem {
     date: _parseDate(j['date']),
     mandays: _toDouble(j['mandays']),
     clientFeedback: j['clientFeedback'],
+    progress: j['progress'] ?? 'Remaining',
   );
 }
 

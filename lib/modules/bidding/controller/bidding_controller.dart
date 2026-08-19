@@ -14,12 +14,40 @@ class BiddingController extends ChangeNotifier {
   String? _selectedDepartment;
   String? _selectedStatus;
 
+  // Production-grid shots with status = 'Bidding' (JAN-DEC column).
+  List<Map<String, dynamic>> _gridBids = [];
+  bool _gridBidsLoading = true;
+  String? _gridBidsError;
+
   List<ShotModel> get pendingBids => _pendingBids;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
   String? get successMessage => _successMessage;
   String? get selectedDepartment => _selectedDepartment;
   String? get selectedStatus => _selectedStatus;
+  List<Map<String, dynamic>> get gridBids => _gridBids;
+  bool get gridBidsLoading => _gridBidsLoading;
+  String? get gridBidsError => _gridBidsError;
+
+  /// Fetch production-grid shots flagged as 'Bidding'.
+  Future<void> fetchGridBids() async {
+    _gridBidsLoading = true;
+    _gridBidsError = null;
+    notifyListeners();
+    try {
+      final response = await _biddingService.getGridBids();
+      _gridBids = ((response['gridBids'] as List<dynamic>?) ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      _gridBidsError = null;
+    } catch (e) {
+      _gridBidsError = 'Failed to load grid bids: $e';
+      _gridBids = [];
+    } finally {
+      _gridBidsLoading = false;
+      notifyListeners();
+    }
+  }
 
   /// Fetch pending bids with optional filters
   Future<void> fetchPendingBids({String? department, String? status}) async {

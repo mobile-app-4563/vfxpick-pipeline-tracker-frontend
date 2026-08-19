@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:file_saver/file_saver.dart';
 import 'package:go_router/go_router.dart';
@@ -120,6 +121,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   children: [
                     _summary(context, controller),
                     SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                    if (controller.items.isNotEmpty) ...[
+                      _mandaysChart(context, controller),
+                      SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                    ],
                     _table(context, controller),
                   ],
                 ),
@@ -421,6 +426,203 @@ class _ReportsScreenState extends State<ReportsScreen> {
       bytes: bytes,
       fileExtension: 'xlsx',
       mimeType: MimeType.microsoftExcel,
+    );
+  }
+
+  Widget _mandaysChart(BuildContext context, ReportController controller) {
+    // Aggregate mandays per day, bucketed by progress.
+    final byDate = <DateTime, Map<String, double>>{};
+    for (final item in controller.items) {
+      final d = item.date;
+      if (d == null) continue;
+      final day = DateTime(d.year, d.month, d.day);
+      final key = item.progress == 'Completed'
+          ? 'Completed'
+          : item.progress == 'In Progress'
+          ? 'In Progress'
+          : 'Remaining';
+      final bucket = byDate.putIfAbsent(
+        day,
+        () => {'Completed': 0.0, 'In Progress': 0.0, 'Remaining': 0.0},
+      );
+      bucket[key] = (bucket[key] ?? 0.0) + item.mandays;
+    }
+    if (byDate.isEmpty) return const SizedBox.shrink();
+
+    final dates = byDate.keys.toList()..sort();
+    const completedColor = AppColors.brandGreen;
+    final inProgressColor = Colors.amber.shade700;
+    final remainingColor = Colors.blueGrey.shade400;
+
+    double maxY = 0;
+    for (final bucket in byDate.values) {
+      final total =
+          (bucket['Completed'] ?? 0) +
+          (bucket['In Progress'] ?? 0) +
+          (bucket['Remaining'] ?? 0);
+      if (total > maxY) maxY = total;
+    }
+    final maxYCeil = maxY <= 0 ? 1.0 : (maxY + 1).ceilToDouble();
+    final labelStep = (dates.length / 8).ceil().clamp(1, dates.length);
+
+    Widget legendDot(Color color, String label) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
+          ),
+        ],
+      );
+    }
+
+    return GlassContainer(
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 14)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.bar_chart,
+                color: AppColors.brandGreen,
+                size: SizeConfig.iconSize(context, 18),
+              ),
+              SizedBox(width: SizeConfig.scaleWidth(context, 8)),
+              Text(
+                'Mandays — Completed / In Progress / Remaining',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: SizeConfig.fontSize(context, 14),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              legendDot(completedColor, 'Completed'),
+              legendDot(inProgressColor, 'In Progress'),
+              legendDot(remainingColor, 'Remaining'),
+            ],
+          ),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+          SizedBox(
+            height: SizeConfig.scaleHeight(context, 260),
+            width: double.infinity,
+            child: BarChart(
+              BarChartData(
+                maxY: maxYCeil,
+                alignment: BarChartAlignment.spaceAround,
+                barGroups: [
+                  for (var i = 0; i < dates.length; i++)
+                    BarChartGroupData(
+                      x: i,
+                      barRods: [
+                        BarChartRodData(
+                          toY: byDate[dates[i]]!['Completed']!,
+                          color: completedColor,
+                          width: 12,
+                        ),
+                        BarChartRodData(
+                          toY: byDate[dates[i]]!['In Progress']!,
+                          color: inProgressColor,
+                          width: 12,
+                        ),
+                        BarChartRodData(
+                          toY: byDate[dates[i]]!['Remaining']!,
+                          color: remainingColor,
+                          width: 12,
+                        ),
+                      ],
+                    ),
+                ],
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  rightTitles: const AxisTitles(
+                    sideTitles: SideTitles(showTitles: false),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 36,
+                      getTitlesWidget: (value, meta) => SideTitleWidget(
+                        meta: meta,
+                        child: Text(
+                          value.toInt().toString(),
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 11),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 30,
+                      interval: labelStep.toDouble(),
+                      getTitlesWidget: (value, meta) {
+                        final idx = value.toInt();
+                        if (idx < 0 ||
+                            idx >= dates.length ||
+                            idx % labelStep != 0) {
+                          return const SizedBox.shrink();
+                        }
+                        final d = dates[idx];
+                        return SideTitleWidget(
+                          meta: meta,
+                          child: Text(
+                            '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}',
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 11),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.outlineVariant.withValues(alpha: 0.5),
+                    strokeWidth: 1,
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                barTouchData: BarTouchData(
+                  touchTooltipData: BarTouchTooltipData(
+                    getTooltipColor: (group) => Colors.black87,
+                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                      final d = dates[group.x];
+                      const labels = ['Completed', 'In Progress', 'Remaining'];
+                      return BarTooltipItem(
+                        '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}\n${labels[rodIndex]}: ${rod.toY.toStringAsFixed(1)} md',
+                        const TextStyle(color: Colors.white, fontSize: 12),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
