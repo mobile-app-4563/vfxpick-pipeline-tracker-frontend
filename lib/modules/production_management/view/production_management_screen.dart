@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
@@ -138,7 +139,8 @@ class _ProductionManagementScreenState
   bool _isSyncing = false;
   bool _isExporting = false;
   int _page = 0;
-  static const int _rowsPerPage = 10;
+  // The grid renders ALL rows on a single page (no pagination); the page
+  // plumbing is kept so DynamicDataTable's controlled-page mode stays intact.
 
   // ─── Row / bulk delete state ──────────────────────────────────────────────
   bool _isDeleting = false;
@@ -244,10 +246,6 @@ class _ProductionManagementScreenState
   }
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
-  int get _totalPages => _rowsPerPage > 0
-      ? (_filteredRows.length / _rowsPerPage).ceil().clamp(1, 1 << 31)
-      : 1;
-
   bool get _hasPendingEdits => _pendingEdits.isNotEmpty;
 
   int get _pendingEditCount =>
@@ -1156,7 +1154,7 @@ class _ProductionManagementScreenState
           ),
           _paginationBar(context, _previewPage, previewRows.length, (p) {
             setState(() => _previewPage = p);
-          }),
+          }, rowsPerPage: previewRows.length),
           DynamicDataTable(
             currentPage: _previewPage,
             onPageChanged: (p) => setState(() => _previewPage = p),
@@ -1166,7 +1164,8 @@ class _ProductionManagementScreenState
             dataRowMaxHeight: MediaQuery.of(context).size.height * 62 / 768,
             fields: _buildImportPreviewFields(context),
             rows: previewRows,
-            rowsPerPage: _rowsPerPage,
+            // Show ALL imported rows at once (N records, no 10-row cap).
+            rowsPerPage: math.max(previewRows.length, 1),
             showCellBorders: true,
             // Sit flush against the container's green border (no gap).
             padding: EdgeInsets.zero,
@@ -1423,6 +1422,34 @@ class _ProductionManagementScreenState
   }
 
   // ─── Toolbar ──────────────────────────────────────────────────────────────
+  /// True when every currently-visible (filtered) row is selected — drives
+  /// the Select All / Deselect All toggle label.
+  bool get _allGridRowsSelected {
+    final ids = _filteredRows
+        .map((r) => r['shotId']?.toString() ?? '')
+        .where((id) => id.isNotEmpty)
+        .toList();
+    if (ids.isEmpty) return false;
+    return ids.every(_selectedGridIds.contains);
+  }
+
+  /// Selects every visible (filtered) row; when they're all selected already
+  /// it deselects them instead.
+  void _toggleSelectAllGridRows() {
+    setState(() {
+      final allIds = _filteredRows
+          .map((r) => r['shotId']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toList();
+      if (allIds.isEmpty) return;
+      if (allIds.every(_selectedGridIds.contains)) {
+        _selectedGridIds.removeAll(allIds);
+      } else {
+        _selectedGridIds.addAll(allIds);
+      }
+    });
+  }
+
   Widget _toolbar(BuildContext context) {
     return Wrap(
       alignment: WrapAlignment.start,
@@ -1588,43 +1615,58 @@ class _ProductionManagementScreenState
             ),
           ),
         ),
-        if (_isAdmin && _selectedGridIds.isNotEmpty) ...[
+        if (_isAdmin && _filteredRows.isNotEmpty) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.red.shade50,
-              foregroundColor: Colors.red,
-              fixedSize: SizeConfig.buttonFixedSize(context, 180, 40),
+              fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(
                   SizeConfig.scaleWidth(context, 2),
                 ),
               ),
             ),
-            onPressed: (_isDeleting || _selectedGridIds.isEmpty)
-                ? null
-                : _confirmBulkDelete,
-            icon: _isDeleting
-                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-                : const Icon(Icons.delete_forever_outlined),
-            label: Text('Bulk Delete (${_selectedGridIds.length})'),
+            onPressed: _isDeleting ? null : _toggleSelectAllGridRows,
+            icon: const Icon(Icons.select_all),
+            label: Text(_allGridRowsSelected ? 'Deselect All' : 'Select All'),
           ),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              fixedSize: SizeConfig.buttonFixedSize(context, 120, 40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  SizeConfig.scaleWidth(context, 2),
+          if (_selectedGridIds.isNotEmpty) ...[
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                backgroundColor: Colors.red.shade50,
+                foregroundColor: Colors.red,
+                fixedSize: SizeConfig.buttonFixedSize(context, 180, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 2),
+                  ),
                 ),
               ),
+              onPressed: (_isDeleting || _selectedGridIds.isEmpty)
+                  ? null
+                  : _confirmBulkDelete,
+              icon: _isDeleting
+                  ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                  : const Icon(Icons.delete_forever_outlined),
+              label: Text('Bulk Delete (${_selectedGridIds.length})'),
             ),
-            onPressed: _isDeleting
-                ? null
-                : () {
-                    setState(() => _selectedGridIds.clear());
-                  },
-            icon: const Icon(Icons.close),
-            label: const Text('Clear'),
-          ),
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                fixedSize: SizeConfig.buttonFixedSize(context, 120, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 2),
+                  ),
+                ),
+              ),
+              onPressed: _isDeleting
+                  ? null
+                  : () {
+                      setState(() => _selectedGridIds.clear());
+                    },
+              icon: const Icon(Icons.close),
+              label: const Text('Clear'),
+            ),
+          ],
         ],
       ],
     );
@@ -1817,7 +1859,14 @@ class _ProductionManagementScreenState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _paginationBar(context, _page, filteredRows.length, _changeGridPage),
+          // All filtered rows on one page — the bar auto-hides.
+          _paginationBar(
+            context,
+            _page,
+            filteredRows.length,
+            _changeGridPage,
+            rowsPerPage: filteredRows.length,
+          ),
           _withGridParsingOverlay(
             isLoading: _isGridChanging,
             child: DynamicDataTable(
@@ -1830,7 +1879,8 @@ class _ProductionManagementScreenState
               fields: _buildFields(context),
               rows: filteredRows,
               onFilterChanged: _applyColumnFilter,
-              rowsPerPage: _rowsPerPage,
+              // No pagination — the full data set is shown at once.
+              rowsPerPage: math.max(filteredRows.length, 1),
               showCellBorders: _showCellBorders,
               // Sit flush against the container's green border (no gap).
               padding: EdgeInsets.zero,
@@ -1845,12 +1895,14 @@ class _ProductionManagementScreenState
     BuildContext context,
     int currentPage,
     int totalRows,
-    ValueChanged<int> onPageChanged,
-  ) {
-    final totalPages = _totalPages;
+    ValueChanged<int> onPageChanged, {
+    required int rowsPerPage,
+  }) {
+    if (rowsPerPage <= 0) return const SizedBox.shrink();
+    final totalPages = (totalRows / rowsPerPage).ceil().clamp(1, 1 << 31);
     if (totalPages <= 1) return const SizedBox.shrink();
-    final start = currentPage * _rowsPerPage + 1;
-    final end = (start + _rowsPerPage - 1).clamp(0, totalRows);
+    final start = currentPage * rowsPerPage + 1;
+    final end = (start + rowsPerPage - 1).clamp(0, totalRows);
     return Padding(
       padding: EdgeInsets.symmetric(
         vertical: SizeConfig.scaleHeight(context, 6),
@@ -3305,20 +3357,71 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
 
 String? _toIsoDateT(dynamic value) {
   if (value == null) return null;
-  if (value is DateTime) {
-    return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
+  String formatDate(int year, int month, int day) {
+    return '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
   }
-  if (value is num && value > 0 && value < 70000) {
+
+  if (value is DateCellValue) {
+    return formatDate(value.year, value.month, value.day);
+  }
+  if (value is DateTimeCellValue) {
+    return formatDate(value.year, value.month, value.day);
+  }
+  if (value is DateTime) {
+    return formatDate(value.year, value.month, value.day);
+  }
+  num? numericValue;
+  if (value is num) {
+    numericValue = value;
+  } else if (value is IntCellValue) {
+    numericValue = value.value;
+  } else if (value is DoubleCellValue) {
+    numericValue = value.value;
+  }
+  if (numericValue != null && numericValue > 0 && numericValue < 70000) {
     // Excel / OpenOffice serial date: days since 1899-12-30
-    final serial = value.floor();
+    final serial = numericValue.floor();
     final d = DateTime(1899, 12, 30).add(Duration(days: serial));
-    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return formatDate(d.year, d.month, d.day);
   }
   final text = value.toString().trim();
   if (text.isEmpty) return null;
+  final textNumericValue = num.tryParse(text);
+  if (textNumericValue != null &&
+      textNumericValue > 0 &&
+      textNumericValue < 70000) {
+    final serial = textNumericValue.floor();
+    final d = DateTime(1899, 12, 30).add(Duration(days: serial));
+    return formatDate(d.year, d.month, d.day);
+  }
   final parsed = DateTime.tryParse(text);
   if (parsed != null) {
-    return '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
+    return formatDate(parsed.year, parsed.month, parsed.day);
+  }
+  final namedMonth = RegExp(
+    r'^(\d{1,2})[-/\s]([A-Za-z]{3,9})[-/\s](\d{4})$',
+  ).firstMatch(text);
+  if (namedMonth != null) {
+    const monthNames = <String>[
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'may',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'oct',
+      'nov',
+      'dec',
+    ];
+    final day = int.parse(namedMonth.group(1)!);
+    final month = monthNames.indexOf(namedMonth.group(2)!.toLowerCase()) + 1;
+    final year = int.parse(namedMonth.group(3)!);
+    if (month > 0 && day >= 1 && day <= 31) {
+      return formatDate(year, month, day);
+    }
   }
   // dd-MM-yyyy / dd/MM/yyyy / dd.MM.yyyy (day-first, common in VFX sheets)
   final m = RegExp(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$').firstMatch(text);
@@ -3338,7 +3441,7 @@ String? _toIsoDateT(dynamic value) {
       month = second; // ambiguous → treat as day-first
     }
     if (month < 1 || month > 12 || day < 1 || day > 31) return text;
-    return '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
+    return formatDate(year, month, day);
   }
   return text;
 }
@@ -3808,12 +3911,11 @@ Future<Map<String, dynamic>> _saveParsedRowsAsync(
     }
   }
 
-  // Cap the preview — the table paginates this client-side.
-  const previewCap = 60;
+  // Preview every parsed row (N records at once) so nothing is hidden
+  // behind a client-side cap — the preview table no longer paginates.
   final preview = <Map<String, dynamic>>[];
-  final limit = rows.length < previewCap ? rows.length : previewCap;
-  for (var i = 0; i < limit; i++) {
-    preview.add(_gridPreviewRowT(rows[i]));
+  for (final row in rows) {
+    preview.add(_gridPreviewRowT(row));
   }
 
   return <String, dynamic>{

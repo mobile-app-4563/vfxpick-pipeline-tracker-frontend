@@ -3,6 +3,22 @@ import 'package:flutter/material.dart';
 import '../../core/utils/size_config.dart';
 import 'custom_dropdown.dart';
 
+/// Short month names used to render date cells as "Aug 20" (no year).
+const List<String> _monthAbbreviations = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
+
 /// A single editable grid cell (shared by Production Management and Projects).
 ///
 /// Displays the value normally; on double-click it swaps to an editor:
@@ -67,6 +83,24 @@ class _GridEditableCellState extends State<GridEditableCell> {
     final value = widget.displayValue;
     if (value == null) return '';
     return value.toString();
+  }
+
+  /// Text shown in the cell when not editing. Date cells render as "Aug 20"
+  /// (month + day, no year); everything else shows the raw value. The raw
+  /// ISO value is kept in [_initialText] so double-click editing (date
+  /// picker) still works from the full date.
+  String get _displayText {
+    final value = widget.displayValue;
+    if (value == null) return '-';
+    final text = value.toString().trim();
+    if (text.isEmpty) return '-';
+    if (widget.isDate) {
+      final d = DateTime.tryParse(text);
+      if (d != null) {
+        return '${_monthAbbreviations[d.month - 1]} ${d.day}';
+      }
+    }
+    return text;
   }
 
   /// Parses the cell's value into a [DateTime], or null when empty/invalid.
@@ -261,7 +295,7 @@ class _GridEditableCellState extends State<GridEditableCell> {
                 )
               : null,
           child: Text(
-            widget.displayValue == null ? '-' : widget.displayValue.toString(),
+            _displayText,
             textAlign: TextAlign.center,
             // Wrap instead of overflowing: long values stay inside their
             // column and the table row grows in height to fit them, so cell
