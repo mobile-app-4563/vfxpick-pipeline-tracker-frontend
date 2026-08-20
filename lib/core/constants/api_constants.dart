@@ -60,6 +60,16 @@ class ApiConstants {
       '/tasks/shots/$shotId/supervisor-status';
 
   // ───────────────────────────────────────────────────────────────────────────
+  // BIDDING (/api/bidding)
+  // ───────────────────────────────────────────────────────────────────────────
+  static const String biddingPending = '/bidding/pending';
+  static const String biddingGridPending = '/bidding/grid-pending';
+  static String biddingShot(String shotId) => '/bidding/shot/$shotId';
+  static String biddingApprove(String shotId) =>
+      '/bidding/shot/$shotId/approve';
+  static String biddingReject(String shotId) => '/bidding/shot/$shotId/reject';
+
+  // ───────────────────────────────────────────────────────────────────────────
   // TEAMS (/api/teams)
   // ───────────────────────────────────────────────────────────────────────────
   static const String teams = '/teams';
@@ -133,6 +143,5 @@ class ApiConstants {
   static const String productionGridSync = '/production/grid/sync';
   static const String productionGridBulkUpsert = '/production/grid/bulk-upsert';
   static const String productionGridBulkDelete = '/production/grid/bulk-delete';
-  static const String biddingGridPending = '/bidding/grid-pending';
   static String productionGridRow(String gridId) => '/production/grid/$gridId';
 }

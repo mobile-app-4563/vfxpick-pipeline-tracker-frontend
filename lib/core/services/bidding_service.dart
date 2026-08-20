@@ -1,4 +1,5 @@
 import 'api_controller.dart';
+import '../constants/api_constants.dart';
 
 /// Bidding service for managing supervisor, client, and artist bids.
 class BiddingService {
@@ -12,17 +13,17 @@ class BiddingService {
     String? department,
     String? status,
   }) => _api.get(
-    '/bidding/pending',
+    ApiConstants.biddingPending,
     queryParams: {'department': ?department, 'status': ?status},
   );
 
   /// Fetch production-grid shots whose status is 'Bidding' (JAN-DEC column).
   Future<Map<String, dynamic>> getGridBids() =>
-      _api.get('/bidding/grid-pending');
+      _api.get(ApiConstants.biddingGridPending);
 
   /// Get bidding details for a specific shot
   Future<Map<String, dynamic>> getShotBids(String shotId) =>
-      _api.get('/bidding/shot/$shotId');
+      _api.get(ApiConstants.biddingShot(shotId));
 
   /// Update bids for a shot
   /// Request body can contain:
@@ -34,7 +35,7 @@ class BiddingService {
     required double supervisorBid,
     required double clientBid,
     required double artistBid,
-  }) => _api.put('/bidding/shot/$shotId', {
+  }) => _api.put(ApiConstants.biddingShot(shotId), {
     'supervisorBid': supervisorBid,
     'clientBid': clientBid,
     'artistBid': artistBid,
@@ -42,9 +43,9 @@ class BiddingService {
 
   /// Approve a bid (mark shot as Approved)
   Future<Map<String, dynamic>> approveBid(String shotId) =>
-      _api.patch('/bidding/shot/$shotId/approve');
+      _api.patch(ApiConstants.biddingApprove(shotId));
 
   /// Reject a bid (revert shot to Hold status)
   Future<Map<String, dynamic>> rejectBid(String shotId) =>
-      _api.patch('/bidding/shot/$shotId/reject');
+      _api.patch(ApiConstants.biddingReject(shotId));
 }
