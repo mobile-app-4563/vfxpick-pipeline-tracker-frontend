@@ -6,6 +6,10 @@ class ShotModel {
   final String? clientId;
   final String? clientName;
   final String department;
+
+  /// Multi-department support: parsed list of departments this shot belongs
+  /// to (derived from the comma-separated ``department`` value).
+  final List<String> departments;
   final String shotCode;
   final int frameIn;
   final int frameOut;
@@ -53,6 +57,7 @@ class ShotModel {
     this.clientId,
     this.clientName,
     required this.department,
+    this.departments = const [],
     required this.shotCode,
     this.frameIn = 0,
     this.frameOut = 0,
@@ -103,6 +108,24 @@ class ShotModel {
   static int _int(dynamic v) =>
       v == null ? 0 : (v is num ? v.toInt() : int.tryParse(v.toString()) ?? 0);
 
+  static List<String> _departmentsOf(Map<String, dynamic> json) {
+    final raw = json['departments'];
+    if (raw is List) {
+      final list = raw
+          .map((e) => e.toString().trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+      if (list.isNotEmpty) return list;
+    }
+    // Backward compatibility: parse the comma-separated department string.
+    final dept = (json['department'] ?? '').toString();
+    return dept
+        .split(',')
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+  }
+
   factory ShotModel.fromJson(Map<String, dynamic> json) {
     return ShotModel(
       shotId: json['shotId'] ?? '',
@@ -111,6 +134,7 @@ class ShotModel {
       clientId: json['clientId'],
       clientName: json['clientName'],
       department: json['department'] ?? '',
+      departments: _departmentsOf(json),
       shotCode: json['shotCode'] ?? '',
       frameIn: _int(json['frameIn']),
       frameOut: _int(json['frameOut']),

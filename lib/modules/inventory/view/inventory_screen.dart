@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/providers/access_provider.dart';
 import '../../../core/services/inventory_service.dart';
 import '../../../core/utils/size_config.dart';
 import '../../auth/controller/auth_controller.dart';
@@ -80,6 +81,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _delete(int itemId) async {
+    if (!Provider.of<AccessProvider>(context, listen: false).deleteEnabled) {
+      return;
+    }
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -214,6 +218,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
         (user.role == 'Admin' ||
             user.role == 'Production' ||
             user.role == 'Management');
+    final canDelete =
+        canEdit && Provider.of<AccessProvider>(context).deleteEnabled;
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 900;
@@ -248,7 +254,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ],
             _buildFilters(isMobile),
             SizedBox(height: SizeConfig.scaleHeight(context, 16)),
-            Expanded(child: _buildBody(canEdit)),
+            Expanded(child: _buildBody(canEdit, canDelete)),
           ],
         ),
       ),
@@ -474,7 +480,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _buildBody(bool canEdit) {
+  Widget _buildBody(bool canEdit, bool canDelete) {
     if (_loading) return const LoadingWidget();
     if (_error != null && _items.isEmpty) {
       return EmptyStateWidget(
@@ -607,15 +613,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         onPressed: () => _addOrEdit(item),
                         tooltip: 'Edit item',
                       ),
-                      IconButton(
-                        icon: Icon(
-                          Icons.delete_outline,
-                          size: SizeConfig.iconSize(context, 18),
-                          color: AppColors.priorityHigh,
+                      if (canDelete)
+                        IconButton(
+                          icon: Icon(
+                            Icons.delete_outline,
+                            size: SizeConfig.iconSize(context, 18),
+                            color: AppColors.priorityHigh,
+                          ),
+                          onPressed: () => _delete(id),
+                          tooltip: 'Delete item',
                         ),
-                        onPressed: () => _delete(id),
-                        tooltip: 'Delete item',
-                      ),
                     ],
                   )
                 : null,

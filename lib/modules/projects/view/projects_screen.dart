@@ -15,7 +15,9 @@ import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/shot_model.dart';
+import '../../../core/providers/access_provider.dart';
 import '../../../core/services/api_controller.dart';
+import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/excel_export_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
@@ -107,6 +109,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   final Set<String> _selectedShotIds = {};
   bool _isDeleting = false;
   bool _isBulkEditing = false;
+  // Global delete kill-switch from the Access Provider page. When false, bulk
+  // delete is hidden for every user.
+  bool _deleteEnabled = true;
+  // Keeps [_deleteEnabled] in sync when an Admin toggles the kill-switch on
+  // the Access Provider page while this screen is mounted.
+  VoidCallback? _deleteEnabledListener;
   // Inline cell-edit state (double-click-to-edit, same as Production
   // Management): tracks which cell is showing an editor ("shotId|fieldKey").
   String? _editingCellKey;
@@ -332,6 +340,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   @override
   void dispose() {
+    final listener = _deleteEnabledListener;
+    if (listener != null) {
+      context.read<AccessProvider>().removeListener(listener);
+    }
     _csvPasteController.dispose();
     super.dispose();
   }
@@ -346,6 +358,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         AppConstants.pipelineDepartments.contains(user?.department)
         ? user?.department
         : null;
+    _deleteEnabled = context.read<AccessProvider>().deleteEnabled;
+    final access = context.read<AccessProvider>();
+    _deleteEnabledListener = () {
+      if (!mounted) return;
+      final enabled = context.read<AccessProvider>().deleteEnabled;
+      if (enabled != _deleteEnabled) {
+        setState(() => _deleteEnabled = enabled);
+      }
+    };
+    access.addListener(_deleteEnabledListener!);
 
     _canCreateClientShow = _isBroadAccess;
     _canCreateShot =
@@ -663,7 +685,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 ),
               ),
             ),
-            onPressed: (_isDeleting || _selectedShotIds.isEmpty)
+            onPressed:
+                (_isDeleting || _selectedShotIds.isEmpty || !_deleteEnabled)
                 ? null
                 : () => _confirmBulkDelete(context, controller),
             icon: _isDeleting
@@ -811,29 +834,31 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
         ),
 
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.red,
-            fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
-            side: const BorderSide(color: Colors.red),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                SizeConfig.scaleWidth(context, 2),
+        if (_deleteEnabled) ...[
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+              side: const BorderSide(color: Colors.red),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
               ),
             ),
+            onPressed: _isImporting || _isExporting || _isSavingImport
+                ? null
+                : () {
+                    setState(() {
+                      _isBulkDeleteMode = true;
+                      _isBulkEditMode = false;
+                      _selectedShotIds.clear();
+                    });
+                  },
+            icon: const Icon(Icons.delete_sweep_outlined),
+            label: const Text('Bulk Delete'),
           ),
-          onPressed: _isImporting || _isExporting || _isSavingImport
-              ? null
-              : () {
-                  setState(() {
-                    _isBulkDeleteMode = true;
-                    _isBulkEditMode = false;
-                    _selectedShotIds.clear();
-                  });
-                },
-          icon: const Icon(Icons.delete_sweep_outlined),
-          label: const Text('Bulk Delete'),
-        ),
+        ],
         // if (_isAdmin)
         //   OutlinedButton.icon(
         //     style: OutlinedButton.styleFrom(
@@ -2175,10 +2200,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           IntCellValue(totalFrames),
           TextCellValue(shot.artistName ?? '-'),
           TextCellValue(shot.levelOfShot ?? '-'),
-          TextCellValue(ExcelExportUtils.formatDate(shot.allocationDate)),
-          TextCellValue(ExcelExportUtils.formatDate(shot.allocationEta)),
-          TextCellValue(ExcelExportUtils.formatDate(shot.startingDate)),
-          TextCellValue(ExcelExportUtils.formatDate(shot.completeDate)),
+          TextCellValue(formatDateLikeExcelD(shot.allocationDate)),
+          TextCellValue(formatDateLikeExcelD(shot.allocationEta)),
+          TextCellValue(formatDateLikeExcelD(shot.startingDate)),
+          TextCellValue(formatDateLikeExcelD(shot.completeDate)),
           DoubleCellValue(shot.dailyWip),
           DoubleCellValue(shot.mandays),
           DoubleCellValue(shot.consumedMandays),
@@ -2408,6 +2433,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     ProjectController controller,
   ) async {
     final count = _selectedShotIds.length;
+    if (count == 0 || !_deleteEnabled) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -2586,45 +2612,7 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
   return bestScore >= 12 ? bestIdx : 0;
 }
 
-String? _toIsoDateT(dynamic value) {
-  if (value == null) return null;
-  if (value is DateTime) {
-    return '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
-  }
-  if (value is num && value > 0 && value < 70000) {
-    // Excel / OpenOffice serial date: days since 1899-12-30
-    final serial = value.floor();
-    final d = DateTime(1899, 12, 30).add(Duration(days: serial));
-    return '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-  }
-  final text = value.toString().trim();
-  if (text.isEmpty) return null;
-  final parsed = DateTime.tryParse(text);
-  if (parsed != null) {
-    return '${parsed.year.toString().padLeft(4, '0')}-${parsed.month.toString().padLeft(2, '0')}-${parsed.day.toString().padLeft(2, '0')}';
-  }
-  // dd-MM-yyyy / dd/MM/yyyy / dd.MM.yyyy (day-first, common in VFX sheets)
-  final m = RegExp(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$').firstMatch(text);
-  if (m != null) {
-    final first = int.parse(m.group(1)!);
-    final second = int.parse(m.group(2)!);
-    final year = int.parse(m.group(3)!);
-    int day, month;
-    if (first > 12 && second <= 12) {
-      day = first;
-      month = second;
-    } else if (second > 12 && first <= 12) {
-      day = second;
-      month = first;
-    } else {
-      day = first;
-      month = second; // ambiguous → treat as day-first
-    }
-    if (month < 1 || month > 12 || day < 1 || day > 31) return text;
-    return '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
-  }
-  return text;
-}
+String? _toIsoDateT(dynamic value) => excelDateToIso(value);
 
 int _toIntValueT(dynamic value) {
   if (value == null) return 0;
@@ -2800,9 +2788,26 @@ Map<String, dynamic> _toApiImportRowT(
   final status = shotStatuses.contains(statusRaw)
       ? statusRaw
       : 'Awaiting Approval';
+  // A shot may belong to multiple departments (comma-separated).  Prefer a
+  // department column in the file; fall back to the selected department.
+  final fileDept = _pickFieldValueT(row, [
+    'department',
+    'dept',
+    'departments',
+    'task',
+    'tasks',
+    'pipeline_department',
+  ]);
+  final rawDept = (fileDept ?? department ?? '').toString().trim();
+  final dept = rawDept
+      .split(',')
+      .map((d) => d.trim())
+      .where((d) => d.isNotEmpty)
+      .toList()
+      .join(',');
   return {
     'showId': showId,
-    'department': department,
+    'department': dept,
     'shotCode': shotCode,
     'frameIn': _toIntValueT(
       _pickFieldValueT(row, [
@@ -3116,6 +3121,7 @@ Future<Map<String, dynamic>> _postBulkUpsertT(
 /// Compact display row used only by the import preview table.
 Map<String, dynamic> _projectPreviewRowT(Map<String, dynamic> row) {
   String s(String key) => (row[key] ?? '').toString();
+  String d(String key) => formatDateLikeExcel(s(key));
   return <String, dynamic>{
     'shotCode': s('shotCode'),
     'frameIn': s('frameIn'),
@@ -3123,13 +3129,13 @@ Map<String, dynamic> _projectPreviewRowT(Map<String, dynamic> row) {
     'totalFrames': s('totalFrames'),
     'supervisorBid': s('supervisorBid'),
     'clientBid': s('clientBid'),
-    'clientEta': s('clientEta'),
+    'clientEta': d('clientEta'),
     'coordinator': s('coordinator'),
     'levelOfShot': s('levelOfShot'),
-    'allocationDate': s('allocationDate'),
-    'allocationEta': s('allocationEta'),
-    'startingDate': s('startingDate'),
-    'completeDate': s('completeDate'),
+    'allocationDate': d('allocationDate'),
+    'allocationEta': d('allocationEta'),
+    'startingDate': d('startingDate'),
+    'completeDate': d('completeDate'),
     'dailyWip': s('dailyWip'),
     'mandays': s('mandays'),
     'consumedMandays': s('consumedMandays'),
@@ -3635,7 +3641,7 @@ class _ShotDialogState extends State<_ShotDialog> {
   late final TextEditingController _completeDate;
   // Dropdown fields
   late final List<String> _accessibleDepartments;
-  late String _department;
+  late Set<String> _departments = {};
   late String _status;
   late String _levelOfShot;
   late String _complexity;
@@ -3723,11 +3729,17 @@ class _ShotDialogState extends State<_ShotDialog> {
 
     final defaultDepartment =
         s?.department ?? widget.controller.selectedDepartment;
-    if (defaultDepartment != null &&
-        _accessibleDepartments.contains(defaultDepartment)) {
-      _department = defaultDepartment;
-    } else {
-      _department = _accessibleDepartments.first;
+    if (defaultDepartment != null && defaultDepartment.isNotEmpty) {
+      // A shot may belong to multiple comma-separated departments.
+      _departments = defaultDepartment
+          .split(',')
+          .map((d) => d.trim())
+          .where((d) => d.isNotEmpty)
+          .where(_accessibleDepartments.contains)
+          .toSet();
+    }
+    if (_departments.isEmpty && _accessibleDepartments.isNotEmpty) {
+      _departments = {_accessibleDepartments.first};
     }
     _status = s?.status ?? AppConstants.shotStatuses[2];
     _levelOfShot = s?.levelOfShot ?? _levelOptions.first;
@@ -3802,14 +3814,37 @@ class _ShotDialogState extends State<_ShotDialog> {
                     ),
                     SizedBox(
                       width: halfWidth,
-                      child: CustomDropdown<String>(
-                        labelText: 'Department',
-                        value: _department,
-                        items: _accessibleDepartments,
-                        itemToString: (d) => d,
-                        onChanged: (v) => setState(() => _department = v!),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Departments *',
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 12),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
+                  ],
+                ),
+                // Department multi-select chips (a shot may span multiple
+                // departments; stored comma-separated in the backend).
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final d in _accessibleDepartments)
+                      FilterChip(
+                        label: Text(d),
+                        selected: _departments.contains(d),
+                        onSelected: (sel) => setState(() {
+                          if (sel) {
+                            _departments.add(d);
+                          } else {
+                            _departments.remove(d);
+                          }
+                        }),
+                      ),
                   ],
                 ),
                 // Row 2: Coordinator + Status
@@ -4156,13 +4191,17 @@ class _ShotDialogState extends State<_ShotDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_departments.isEmpty) {
+      setState(() => _error = 'Select at least one department.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     final body = <String, dynamic>{
       'shotCode': _code.text.trim(),
-      'department': _department,
+      'department': _departments.join(','),
       'coordinator': _coordinator.text.trim().isEmpty
           ? null
           : _coordinator.text.trim(),

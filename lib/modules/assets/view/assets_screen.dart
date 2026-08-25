@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
+import '../../../core/providers/access_provider.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../core/services/asset_service.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
@@ -45,6 +47,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
   }
 
   Future<void> _delete(AttachmentModel a) async {
+    if (!context.read<AccessProvider>().deleteEnabled) return;
     try {
       await _service.deleteAsset(a.attachmentId);
       await _load();
@@ -97,6 +100,7 @@ class _AssetsScreenState extends State<AssetsScreen> {
         onActionPressed: _load,
       );
     }
+    final deleteEnabled = context.watch<AccessProvider>().deleteEnabled;
     if (_assets.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.folder_outlined,
@@ -134,13 +138,15 @@ class _AssetsScreenState extends State<AssetsScreen> {
                 '${a.shotId != null ? '  \u2022  ${a.shotId}' : ''}',
                 style: TextStyle(fontSize: SizeConfig.fontSize(context, 11)),
               ),
-              trailing: IconButton(
-                icon: Icon(
-                  Icons.delete_outline,
-                  size: SizeConfig.iconSize(context, 18),
-                ),
-                onPressed: () => _delete(a),
-              ),
+              trailing: deleteEnabled
+                  ? IconButton(
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: SizeConfig.iconSize(context, 18),
+                      ),
+                      onPressed: () => _delete(a),
+                    )
+                  : null,
             ),
           );
         },

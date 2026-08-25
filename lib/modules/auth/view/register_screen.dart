@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/services/api_controller.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
@@ -121,12 +123,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (department == _addDepartmentOption) {
       final newDepartment = await _showAddDepartmentDialog();
       if (!mounted || newDepartment == null) return;
+
+      // Sync the new department to the backend so it appears in every
+      // import section (shots + production grid) and registration options.
+      // Requires a broad-access session; when not logged in (fresh
+      // registration) the department is still selected locally and gets
+      // persisted by the backend on register.
+      var synced = false;
+      try {
+        await ApiController.instance.post(ApiConstants.authAddDepartment, {
+          'department': newDepartment,
+        });
+        synced = true;
+        // Cache was busted server-side — refresh global options so all
+        // screens (imports, dialogs) see the new department immediately.
+        final options = await ApiController.instance.get(
+          ApiConstants.authOptions,
+        );
+        AppConstants.applyDynamicOptions(options);
+      } catch (_) {
+        // 401/403 when not signed in — still allow local selection.
+        synced = false;
+      }
+      if (!mounted) return;
+
       setState(() {
         if (!_departmentOptions.contains(newDepartment)) {
           _departmentOptions.add(newDepartment);
         }
         _selectedDept = newDepartment;
       });
+
+      if (!synced) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Department added locally. It will sync to the server after registration.',
+            ),
+          ),
+        );
+      }
       return;
     }
 

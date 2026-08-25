@@ -5,6 +5,7 @@ import 'package:vfxpick_pipeline/shared/widgets/custom_text_field.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/providers/access_provider.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../core/models/domain_models.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
@@ -308,6 +309,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     TeamMember member,
   ) {
     final roleColor = _roleColor(member.role);
+    final deleteEnabled = context.watch<AccessProvider>().deleteEnabled;
     return GlassContainer.responsive(
       context: context,
       borderRadius: SizeConfig.scaleWidth(context, 12),
@@ -410,14 +412,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
                     roleColor,
                     () => _editMember(context, controller, member),
                   ),
-                  SizedBox(width: SizeConfig.scaleWidth(context, 6)),
-                  _actionButton(
-                    context,
-                    Icons.person_remove_rounded,
-                    'Remove',
-                    Colors.red.shade400,
-                    () => _removeMember(context, controller, member),
-                  ),
+                  if (deleteEnabled) ...[
+                    SizedBox(width: SizeConfig.scaleWidth(context, 6)),
+                    _actionButton(
+                      context,
+                      Icons.person_remove_rounded,
+                      'Remove',
+                      Colors.red.shade400,
+                      () => _removeMember(context, controller, member),
+                    ),
+                  ],
                 ],
               ),
             ],
@@ -538,6 +542,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     TeamController controller,
     TeamMember member,
   ) async {
+    if (!context.read<AccessProvider>().deleteEnabled) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

@@ -12,6 +12,7 @@ import 'package:vfxpick_pipeline/shared/widgets/filter_icon.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../core/models/domain_models.dart';
 import '../../../core/models/shot_model.dart';
@@ -327,8 +328,8 @@ class _TasksScreenState extends State<TasksScreen> {
           TextCellValue(shot.status),
           TextCellValue(shot.artistStatus),
           TextCellValue(shot.supervisorStatus ?? ''),
-          TextCellValue(_fmtDate(shot.artistEta)),
-          TextCellValue(_fmtDate(shot.clientEta)),
+          TextCellValue(formatDateLikeExcelD(shot.artistEta)),
+          TextCellValue(formatDateLikeExcelD(shot.clientEta)),
         ]);
       }
 
@@ -547,10 +548,6 @@ Widget _tasksPaginationBar(
   );
 }
 
-String _fmtDate(DateTime? d) => d == null
-    ? '—'
-    : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
 class _ArtistPortal extends StatefulWidget {
   final TaskController controller;
   final bool showCellBorders;
@@ -619,8 +616,11 @@ class _ArtistPortalState extends State<_ArtistPortal> {
                 shot.supervisorStatus ?? '—',
                 _supervisorStatusFilter,
               ) &&
-              _contains(_fmtDate(shot.artistEta), _artistEtaFilter) &&
-              _contains(_fmtDate(shot.clientEta), _clientEtaFilter);
+              _contains(
+                formatDateLikeExcelD(shot.artistEta),
+                _artistEtaFilter,
+              ) &&
+              _contains(formatDateLikeExcelD(shot.clientEta), _clientEtaFilter);
         })
         .toList(growable: false);
 
@@ -636,8 +636,8 @@ class _ArtistPortalState extends State<_ArtistPortal> {
         'clientStatus': shot.status,
         'artistStatus': shot.artistStatus,
         'supervisorStatus': shot.supervisorStatus ?? '—',
-        'artistEta': _fmtDate(shot.artistEta),
-        'clientEta': _fmtDate(shot.clientEta),
+        'artistEta': formatDateLikeExcelD(shot.artistEta),
+        'clientEta': formatDateLikeExcelD(shot.clientEta),
         'shot': shot,
       };
     });
@@ -1071,16 +1071,16 @@ class _DepartmentViewState extends State<_DepartmentView> {
               'clientBid': shot.clientBid.toStringAsFixed(1),
               'artist': shot.artistName ?? 'Unassigned',
               'artistBid': shot.artistBid.toStringAsFixed(1),
-              'artistEta': _fmtDate(shot.artistEta),
+              'artistEta': formatDateLikeExcelD(shot.artistEta),
               'supervisorStatus': shot.supervisorStatus ?? '—',
               'artistStatus': shot.artistStatus,
               'coordinator': shot.coordinator ?? '—',
               'levelOfShot': shot.levelOfShot ?? '—',
               'complexity': shot.complexity ?? '—',
-              'allocationDate': _fmtDate(shot.allocationDate),
-              'allocationEta': _fmtDate(shot.allocationEta),
-              'startingDate': _fmtDate(shot.startingDate),
-              'completeDate': _fmtDate(shot.completeDate),
+              'allocationDate': formatDateLikeExcelD(shot.allocationDate),
+              'allocationEta': formatDateLikeExcelD(shot.allocationEta),
+              'startingDate': formatDateLikeExcelD(shot.startingDate),
+              'completeDate': formatDateLikeExcelD(shot.completeDate),
               'dailyWip': shot.dailyWip.toStringAsFixed(1),
               'mandays': shot.mandays.toStringAsFixed(1),
               'consumedMandays': shot.consumedMandays.toStringAsFixed(1),
@@ -1770,18 +1770,18 @@ class _ProductionViewState extends State<_ProductionView> {
           'sNo': index + 1,
           'coordinator': shot.coordinator ?? '—',
           'month': _monthLabel(shot.allocationDate),
-          'shotsReceivedDate': _fmtDate(shot.allocatedDate),
+          'shotsReceivedDate': formatDateLikeExcelD(shot.allocatedDate),
           'clientForRef': shot.clientName ?? shot.clientId ?? '—',
           'client': shot.clientName ?? '—',
           'show': shot.showName ?? '—',
-          'wipEta': _fmtDate(shot.allocationEta),
-          'eta': _fmtDate(shot.clientEta),
+          'wipEta': formatDateLikeExcelD(shot.allocationEta),
+          'eta': formatDateLikeExcelD(shot.clientEta),
           'shotCode': shot.shotCode,
           'frames': _framesLabel(shot),
           'tasks': shot.department,
           'reviewNotes': shot.comments ?? shot.notes ?? '—',
           'status': shot.status,
-          'deliveredOn': _fmtDate(shot.completeDate),
+          'deliveredOn': formatDateLikeExcelD(shot.completeDate),
           'workStation': '—',
           'shotMandays': shot.mandays.toStringAsFixed(1),
           'approvedClientMd': '—',

@@ -13,8 +13,10 @@ import 'package:provider/provider.dart';
 import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/providers/access_provider.dart';
 import '../../../core/services/api_controller.dart';
 import '../../../core/services/production_service.dart';
+import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/excel_export_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
@@ -64,18 +66,9 @@ const List<String> _statusFilterOptions = [
   'Approved Internal',
 ];
 
-/// Fixed filter options for the grid's Tasks column.
-const List<String> _tasksFilterOptions = [
-  'ROTO / KEYING',
-  'KEYING',
-  'PAINT / PREP',
-  'PREP / COMP',
-  'CT',
-  'OT',
-  'RA',
-  'COMP',
-  'CGI',
-];
+/// Filter options for the grid's Tasks column — built dynamically from
+/// the pipeline departments (incl. any departments added at runtime).
+List<String> _tasksFilterOptions() => [...AppConstants.pipelineDepartments];
 
 /// Fixed filter options for the grid's Work station column.
 const List<String> _workStationFilterOptions = [
@@ -146,6 +139,12 @@ class _ProductionManagementScreenState
   bool _isDeleting = false;
   // Delete controls (row delete + bulk select) are Admin-only.
   bool _isAdmin = false;
+  // Global delete kill-switch from the Access Provider page. When false,
+  // delete controls are hidden for every user across all modules.
+  bool _deleteEnabled = true;
+  // Keeps [_deleteEnabled] in sync when an Admin toggles the kill-switch on
+  // the Access Provider page while this screen is mounted.
+  VoidCallback? _deleteEnabledListener;
   // grid_id (shotId) values checked for bulk delete.
   final Set<String> _selectedGridIds = {};
 
@@ -220,8 +219,31 @@ class _ProductionManagementScreenState
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final user = context.read<AuthController>().currentUser;
-      setState(() => _isAdmin = user?.role == AppConstants.roleAdmin);
+      final access = context.read<AccessProvider>();
+      setState(() {
+        _isAdmin = user?.role == AppConstants.roleAdmin;
+        _deleteEnabled = access.deleteEnabled;
+      });
+      // Keep the kill-switch fresh if toggled on the Access page.
+      _deleteEnabledListener = () {
+        if (!mounted) return;
+        final enabled = context.read<AccessProvider>().deleteEnabled;
+        if (enabled != _deleteEnabled) {
+          setState(() => _deleteEnabled = enabled);
+        }
+      };
+      access.addListener(_deleteEnabledListener!);
     });
+  }
+
+  @override
+  void dispose() {
+    final listener = _deleteEnabledListener;
+    if (listener != null) {
+      context.read<AccessProvider>().removeListener(listener);
+    }
+    _csvPasteController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadGrid() async {
@@ -258,6 +280,19 @@ class _ProductionManagementScreenState
   static String _normalizeChipValue(String s) {
     final t = s.toLowerCase();
     return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
+  }
+
+  /// A row's ``tasks`` column may hold a single department or a
+  /// comma-separated multi-department list — match if any part equals the
+  /// selected department filter.
+  static bool _rowMatchesDepartment(Map<String, dynamic> row, String dept) {
+    final value = (row['tasks'] ?? '').toString();
+    if (value.trim().isEmpty) return false;
+    final wanted = _normalizeChipValue(dept);
+    return value
+        .split(',')
+        .map((p) => _normalizeChipValue(p))
+        .any((p) => p == wanted);
   }
 
   dynamic _displayValue(Map<String, dynamic> row, String fieldKey) {
@@ -351,9 +386,15 @@ class _ProductionManagementScreenState
               if (selected.isEmpty) return true;
               final value = (row[key] ?? '').toString();
               if (selected.contains(value)) return true;
-              final normalized = _normalizeChipValue(value);
-              for (final s in selected) {
-                if (normalized == _normalizeChipValue(s)) return true;
+              // The 'tasks' column may hold a comma-separated
+              // multi-department list — match if any part is selected.
+              final parts = key == 'tasks'
+                  ? value.split(',').map((p) => _normalizeChipValue(p)).toList()
+                  : <String>[_normalizeChipValue(value)];
+              for (final p in parts) {
+                for (final s in selected) {
+                  if (p == _normalizeChipValue(s)) return true;
+                }
               }
               // The 'Blank' chip matches rows with an empty cell.
               if (value.trim().isEmpty &&
@@ -364,8 +405,7 @@ class _ProductionManagementScreenState
             }
 
             return (_departmentFilter == _allDepartmentOption ||
-                    (row['tasks'] ?? '').toString().toLowerCase() ==
-                        _departmentFilter.toLowerCase()) &&
+                    _rowMatchesDepartment(row, _departmentFilter)) &&
                 contains('shotCode', _shotIdFilter) &&
                 contains('clientForRef', _clientForRefFilter) &&
                 contains('client', _clientFilter) &&
@@ -741,22 +781,24 @@ class _ProductionManagementScreenState
           IntCellValue(i + 1),
           TextCellValue(_cellText(row['coordinator'])),
           TextCellValue(_cellText(row['month'])),
-          TextCellValue(_cellText(row['shotsReceivedDate'])),
+          TextCellValue(
+            formatDateLikeExcel(_cellText(row['shotsReceivedDate'])),
+          ),
           TextCellValue(_cellText(row['clientForRef'])),
           TextCellValue(_cellText(row['client'])),
           TextCellValue(_cellText(row['show'])),
-          TextCellValue(_cellText(row['wipEta'])),
-          TextCellValue(_cellText(row['eta'])),
+          TextCellValue(formatDateLikeExcel(_cellText(row['wipEta']))),
+          TextCellValue(formatDateLikeExcel(_cellText(row['eta']))),
           TextCellValue(_cellText(row['shotCode'])),
           _numberCell(row['frames']),
           TextCellValue(_cellText(row['tasks'])),
           TextCellValue(_cellText(row['reviewNotes'])),
           TextCellValue(_cellText(row['status'])),
-          TextCellValue(_cellText(row['deliveredOn'])),
+          TextCellValue(formatDateLikeExcel(_cellText(row['deliveredOn']))),
           TextCellValue(_cellText(row['workStation'])),
           _decimalCell(row['shotMandays']),
           _decimalCell(row['approvedClientMd']),
-          TextCellValue(_cellText(row['flEta'])),
+          TextCellValue(formatDateLikeExcel(_cellText(row['flEta']))),
           _decimalCell(row['flMandays']),
         ]);
         ExcelExportUtils.styleRow(
@@ -1306,7 +1348,7 @@ class _ProductionManagementScreenState
 
   Future<void> _confirmDeleteRow(Map<String, dynamic> row) async {
     final gridId = row['shotId']?.toString() ?? '';
-    if (gridId.isEmpty || _isDeleting) return;
+    if (gridId.isEmpty || _isDeleting || !_deleteEnabled) return;
     final label = _rowLabel(row);
 
     final confirmed = await showDialog<bool>(
@@ -1362,7 +1404,7 @@ class _ProductionManagementScreenState
 
   Future<void> _confirmBulkDelete() async {
     final count = _selectedGridIds.length;
-    if (count == 0 || _isDeleting) return;
+    if (count == 0 || _isDeleting || !_deleteEnabled) return;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1615,7 +1657,7 @@ class _ProductionManagementScreenState
             ),
           ),
         ),
-        if (_isAdmin && _filteredRows.isNotEmpty) ...[
+        if (_isAdmin && _deleteEnabled && _filteredRows.isNotEmpty) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
@@ -1675,7 +1717,7 @@ class _ProductionManagementScreenState
   // ─── Grid fields (all 20 template columns) ───────────────────────────────
   List<DynamicTableField> _buildFields(BuildContext context) {
     return [
-      if (_isAdmin)
+      if (_isAdmin && _deleteEnabled)
         DynamicTableField(
           key: 'select',
           label: '',
@@ -1760,7 +1802,7 @@ class _ProductionManagementScreenState
       ),
       _editableField(context, 'flEta', 'FL ETA', 110, isDate: true),
       _editableField(context, 'flMandays', 'FL Man-days', 110, numeric: true),
-      if (_isAdmin)
+      if (_isAdmin && _deleteEnabled)
         DynamicTableField(
           key: 'actions',
           label: 'Actions',
@@ -2274,7 +2316,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
   // tasks and work station use fixed option lists; coordinator and month are
   // derived from the rows.
   late final List<String> _statuses = [..._statusFilterOptions];
-  late final List<String> _tasks = [..._tasksFilterOptions];
+  late final List<String> _tasks = [..._tasksFilterOptions()];
   List<String> _coordinators = [];
   late final List<String> _workStations = [..._workStationFilterOptions];
   List<String> _months = [];
@@ -2856,7 +2898,7 @@ class _NewGridRowDialogState extends State<_NewGridRowDialog> {
   final _deliveredOn = TextEditingController();
   final _flEta = TextEditingController();
 
-  String _tasks = AppConstants.pipelineDepartments.first;
+  final Set<String> _selectedTasks = {AppConstants.pipelineDepartments.first};
   String _month = AppConstants.months.first;
   String _status = 'Awaiting Approval';
 
@@ -2913,6 +2955,10 @@ class _NewGridRowDialogState extends State<_NewGridRowDialog> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_selectedTasks.isEmpty) {
+      setState(() => _error = 'Select at least one task / department.');
+      return;
+    }
     setState(() {
       _saving = true;
       _error = null;
@@ -2922,7 +2968,8 @@ class _NewGridRowDialogState extends State<_NewGridRowDialog> {
       'client': _client.text.trim(),
       'show': _show.text.trim(),
       'shotCode': _shotCode.text.trim(),
-      'tasks': _tasks,
+      // A grid row may span multiple departments (comma-separated).
+      'tasks': _selectedTasks.join(','),
       'coordinator': _coordinator.text.trim(),
       'month': _month,
       'shotsReceivedDate': _shotsReceivedDate.text.trim(),
@@ -3011,16 +3058,37 @@ class _NewGridRowDialogState extends State<_NewGridRowDialog> {
                     ),
                     SizedBox(
                       width: halfWidth,
-                      child: CustomDropdown<String>(
-                        labelText: 'Tasks',
-                        value: _tasks,
-                        items: AppConstants.pipelineDepartments,
-                        itemToString: (d) => d,
-                        onChanged: (v) {
-                          if (v != null) setState(() => _tasks = v);
-                        },
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Tasks / Departments *',
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 12),
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ),
+                  ],
+                ),
+                // Tasks multi-select chips (a row may span multiple
+                // departments; stored comma-separated in the backend).
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    for (final d in AppConstants.pipelineDepartments)
+                      FilterChip(
+                        label: Text(d),
+                        selected: _selectedTasks.contains(d),
+                        onSelected: (sel) => setState(() {
+                          if (sel) {
+                            _selectedTasks.add(d);
+                          } else {
+                            _selectedTasks.remove(d);
+                          }
+                        }),
+                      ),
                   ],
                 ),
                 // Row 3: Coordinator + Status
@@ -3355,96 +3423,7 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
   return bestScore >= 12 ? bestIdx : 0;
 }
 
-String? _toIsoDateT(dynamic value) {
-  if (value == null) return null;
-  String formatDate(int year, int month, int day) {
-    return '${year.toString().padLeft(4, '0')}-${month.toString().padLeft(2, '0')}-${day.toString().padLeft(2, '0')}';
-  }
-
-  if (value is DateCellValue) {
-    return formatDate(value.year, value.month, value.day);
-  }
-  if (value is DateTimeCellValue) {
-    return formatDate(value.year, value.month, value.day);
-  }
-  if (value is DateTime) {
-    return formatDate(value.year, value.month, value.day);
-  }
-  num? numericValue;
-  if (value is num) {
-    numericValue = value;
-  } else if (value is IntCellValue) {
-    numericValue = value.value;
-  } else if (value is DoubleCellValue) {
-    numericValue = value.value;
-  }
-  if (numericValue != null && numericValue > 0 && numericValue < 70000) {
-    // Excel / OpenOffice serial date: days since 1899-12-30
-    final serial = numericValue.floor();
-    final d = DateTime(1899, 12, 30).add(Duration(days: serial));
-    return formatDate(d.year, d.month, d.day);
-  }
-  final text = value.toString().trim();
-  if (text.isEmpty) return null;
-  final textNumericValue = num.tryParse(text);
-  if (textNumericValue != null &&
-      textNumericValue > 0 &&
-      textNumericValue < 70000) {
-    final serial = textNumericValue.floor();
-    final d = DateTime(1899, 12, 30).add(Duration(days: serial));
-    return formatDate(d.year, d.month, d.day);
-  }
-  final parsed = DateTime.tryParse(text);
-  if (parsed != null) {
-    return formatDate(parsed.year, parsed.month, parsed.day);
-  }
-  final namedMonth = RegExp(
-    r'^(\d{1,2})[-/\s]([A-Za-z]{3,9})[-/\s](\d{4})$',
-  ).firstMatch(text);
-  if (namedMonth != null) {
-    const monthNames = <String>[
-      'jan',
-      'feb',
-      'mar',
-      'apr',
-      'may',
-      'jun',
-      'jul',
-      'aug',
-      'sep',
-      'oct',
-      'nov',
-      'dec',
-    ];
-    final day = int.parse(namedMonth.group(1)!);
-    final month = monthNames.indexOf(namedMonth.group(2)!.toLowerCase()) + 1;
-    final year = int.parse(namedMonth.group(3)!);
-    if (month > 0 && day >= 1 && day <= 31) {
-      return formatDate(year, month, day);
-    }
-  }
-  // dd-MM-yyyy / dd/MM/yyyy / dd.MM.yyyy (day-first, common in VFX sheets)
-  final m = RegExp(r'^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$').firstMatch(text);
-  if (m != null) {
-    final first = int.parse(m.group(1)!);
-    final second = int.parse(m.group(2)!);
-    final year = int.parse(m.group(3)!);
-    int day, month;
-    if (first > 12 && second <= 12) {
-      day = first;
-      month = second;
-    } else if (second > 12 && first <= 12) {
-      day = second;
-      month = first;
-    } else {
-      day = first;
-      month = second; // ambiguous → treat as day-first
-    }
-    if (month < 1 || month > 12 || day < 1 || day > 31) return text;
-    return formatDate(year, month, day);
-  }
-  return text;
-}
+String? _toIsoDateT(dynamic value) => excelDateToIso(value);
 
 int _toIntValueT(dynamic value) {
   if (value == null) return 0;
@@ -3647,25 +3626,26 @@ Map<String, dynamic> _toGridApiRowT(
 /// Compact display row for the import preview table (all 20 columns).
 Map<String, dynamic> _gridPreviewRowT(Map<String, dynamic> row) {
   String s(String key) => (row[key] ?? '').toString().trim();
+  String d(String key) => formatDateLikeExcel(s(key));
   return <String, dynamic>{
     'coordinator': s('coordinator'),
     'month': s('month'),
-    'shotsReceivedDate': s('shotsReceivedDate'),
+    'shotsReceivedDate': d('shotsReceivedDate'),
     'clientForRef': s('clientForRef'),
     'client': s('client'),
     'show': s('show'),
-    'wipEta': s('wipEta'),
-    'eta': s('eta'),
+    'wipEta': d('wipEta'),
+    'eta': d('eta'),
     'shotCode': s('shotCode'),
     'frames': s('frames'),
     'tasks': s('tasks'),
     'reviewNotes': s('reviewNotes'),
     'status': s('status'),
-    'deliveredOn': s('deliveredOn'),
+    'deliveredOn': d('deliveredOn'),
     'workStation': s('workStation'),
     'shotMandays': s('shotMandays'),
     'approvedClientMd': s('approvedClientMd'),
-    'flEta': s('flEta'),
+    'flEta': d('flEta'),
     'flMandays': s('flMandays'),
   };
 }

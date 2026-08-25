@@ -20,6 +20,7 @@ class ApiConstants {
   static const String authMe = '/auth/me';
   static const String authOptions = '/auth/options';
   static const String authProfile = '/auth/profile';
+  static const String authAddDepartment = '/auth/departments';
 
   // ───────────────────────────────────────────────────────────────────────────
   // DASHBOARD (/api/dashboard)
@@ -129,6 +130,7 @@ class ApiConstants {
   static const String accessPermissions = '/access/permissions';
   static const String accessPermissionsReset = '/access/permissions/reset';
   static const String accessPermissionsAudit = '/access/permissions/audit';
+  static const String accessSettings = '/access/settings';
   // ───────────────────────────────────────────────────────────────────────────
   // INVENTORY (/api/inventory)
   // ───────────────────────────────────────────────────────────────────────────

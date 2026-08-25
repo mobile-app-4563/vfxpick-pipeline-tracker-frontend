@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/providers/access_provider.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
@@ -28,6 +29,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<NotificationController>();
+    final deleteEnabled = context.watch<AccessProvider>().deleteEnabled;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -50,7 +52,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               label: const Text('Mark all read'),
             ),
             TextButton.icon(
-              onPressed: controller.notifications.isEmpty
+              onPressed: controller.notifications.isEmpty || !deleteEnabled
                   ? null
                   : controller.clearAll,
               icon: Icon(

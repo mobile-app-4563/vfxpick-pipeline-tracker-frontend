@@ -76,6 +76,8 @@ class AccessProvider extends ChangeNotifier {
   bool _isAuditLoading = false;
   bool _loadedFromApi = false;
   bool _auditLoaded = false;
+  bool _deleteEnabled = true;
+  bool _isSavingSettings = false;
   String? _errorMessage;
   String? _auditErrorMessage;
 
@@ -84,6 +86,8 @@ class AccessProvider extends ChangeNotifier {
   bool get isAuditLoading => _isAuditLoading;
   bool get loadedFromApi => _loadedFromApi;
   bool get auditLoaded => _auditLoaded;
+  bool get deleteEnabled => _deleteEnabled;
+  bool get isSavingSettings => _isSavingSettings;
   List<Map<String, dynamic>> get auditLogs => _auditLogs;
   String? get auditErrorMessage => _auditErrorMessage;
   List<String> get roles {
@@ -237,6 +241,10 @@ class AccessProvider extends ChangeNotifier {
               .toList(growable: false),
         );
         _applyAuditLogsPayload(response['logs']);
+        final rawDelete = response['deleteEnabled'];
+        if (rawDelete is bool) {
+          _deleteEnabled = rawDelete;
+        }
         _loadedFromApi = true;
         _errorMessage = null;
         return true;
@@ -415,6 +423,56 @@ class AccessProvider extends ChangeNotifier {
     }
   }
 
+  Future<bool> loadDeleteSetting() async {
+    try {
+      final response = await _api.get(ApiConstants.accessSettings);
+      final raw = response['deleteEnabled'];
+      if (raw is bool) {
+        _deleteEnabled = raw;
+        notifyListeners();
+      }
+      return true;
+    } on ApiException catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    }
+  }
+
+  /// Global kill-switch: when disabled, delete buttons/actions are hidden for
+  /// every user across all modules. Persisted server-side.
+  Future<bool> setDeleteEnabled(bool enabled) async {
+    final previous = _deleteEnabled;
+    _deleteEnabled = enabled;
+    _isSavingSettings = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _api.put(ApiConstants.accessSettings, {
+        'deleteEnabled': enabled,
+      });
+      final raw = response['deleteEnabled'];
+      if (raw is bool) {
+        _deleteEnabled = raw;
+      }
+      _errorMessage = null;
+      return true;
+    } on ApiException catch (e) {
+      _deleteEnabled = previous;
+      _errorMessage = e.message;
+      return false;
+    } catch (e) {
+      _deleteEnabled = previous;
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isSavingSettings = false;
+      notifyListeners();
+    }
+  }
+
   void resetDefaultsLocal() {
     _resetDefaults();
     notifyListeners();
@@ -434,6 +492,10 @@ class AccessProvider extends ChangeNotifier {
       );
     } else if (fallbackToDefaults) {
       _resetDefaults();
+    }
+    final rawDelete = response['deleteEnabled'];
+    if (rawDelete is bool) {
+      _deleteEnabled = rawDelete;
     }
     _applyAuditLogsPayload(response['logs']);
   }

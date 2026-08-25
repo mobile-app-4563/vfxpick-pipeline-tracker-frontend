@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
@@ -32,6 +33,8 @@ class _BiddingScreenState extends State<BiddingScreen> {
     if (iso == null || iso.isEmpty) return '—';
     final d = DateTime.tryParse(iso);
     if (d == null) return iso;
+    // Month-level dates (Excel's mmm-yy cells) render exactly like Excel.
+    if (d.day == 1) return monthYearLabel(d);
     return '${d.day.toString().padLeft(2, '0')}/'
         '${d.month.toString().padLeft(2, '0')}/${d.year}';
   }

@@ -248,6 +248,78 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                         label: const Text('Reset'),
                       ),
                     ),
+                    SizedBox(width: SizeConfig.scaleWidth(context, 8)),
+                    SizedBox(
+                      height: SizeConfig.scaleHeight(context, 38),
+                      child: PopupMenuButton<String>(
+                        tooltip: 'Delete options',
+                        enabled: !access.isSavingSettings,
+                        onSelected: (value) async {
+                          final enable = value == 'enable';
+                          final ok = await access.setDeleteEnabled(enable);
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                ok
+                                    ? enable
+                                          ? 'Delete options enabled for all users.'
+                                          : 'Delete options disabled for all users.'
+                                    : (access.errorMessage ??
+                                          'Could not update delete options.'),
+                              ),
+                            ),
+                          );
+                        },
+                        itemBuilder: (context) => [
+                          PopupMenuItem(
+                            value: 'enable',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  access.deleteEnabled
+                                      ? Icons.check
+                                      : Icons.delete_forever_outlined,
+                                  size: 18,
+                                  color: access.deleteEnabled
+                                      ? AppColors.brandGreen
+                                      : null,
+                                ),
+                                const SizedBox(width: 10),
+                                const Text('Enable delete for all'),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'disable',
+                            child: Row(
+                              children: [
+                                Icon(
+                                  !access.deleteEnabled
+                                      ? Icons.check
+                                      : Icons.block,
+                                  size: 18,
+                                  color: !access.deleteEnabled
+                                      ? Colors.red
+                                      : null,
+                                ),
+                                const SizedBox(width: 10),
+                                const Text('Disable delete for all'),
+                              ],
+                            ),
+                          ),
+                        ],
+                        icon: Icon(
+                          access.deleteEnabled
+                              ? Icons.delete_sweep_outlined
+                              : Icons.delete_forever_outlined,
+                          color: access.deleteEnabled
+                              ? AppColors.brandGreen
+                              : Colors.red,
+                          size: SizeConfig.iconSize(context, 20),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
                 SizedBox(height: SizeConfig.scaleHeight(context, 16)),
@@ -281,6 +353,106 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                       '$totalAudits',
                     ),
                   ],
+                ),
+                SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                // ── Delete Options (global kill-switch) ──
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SizeConfig.scaleWidth(context, 12),
+                    vertical: SizeConfig.scaleHeight(context, 10),
+                  ),
+                  decoration: BoxDecoration(
+                    color:
+                        (access.deleteEnabled
+                                ? AppColors.brandGreen
+                                : Colors.red)
+                            .withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(
+                      SizeConfig.scaleWidth(context, 12),
+                    ),
+                    border: Border.all(
+                      color:
+                          (access.deleteEnabled
+                                  ? AppColors.brandGreen
+                                  : Colors.red)
+                              .withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: EdgeInsets.all(
+                          SizeConfig.scaleWidth(context, 8),
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              (access.deleteEnabled
+                                      ? AppColors.brandGreen
+                                      : Colors.red)
+                                  .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(
+                            SizeConfig.scaleWidth(context, 9),
+                          ),
+                        ),
+                        child: Icon(
+                          access.deleteEnabled
+                              ? Icons.delete_sweep_outlined
+                              : Icons.delete_forever_outlined,
+                          size: SizeConfig.iconSize(context, 20),
+                          color: access.deleteEnabled
+                              ? AppColors.brandGreen
+                              : Colors.red,
+                        ),
+                      ),
+                      SizedBox(width: SizeConfig.scaleWidth(context, 12)),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Allow delete options',
+                              style: TextStyle(
+                                fontSize: SizeConfig.fontSize(context, 13),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              access.deleteEnabled
+                                  ? 'Delete buttons are visible to all users.'
+                                  : 'Delete buttons are hidden for all users.',
+                              style: TextStyle(
+                                fontSize: SizeConfig.fontSize(context, 11),
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: access.deleteEnabled,
+                        activeTrackColor: AppColors.brandGreen.withOpacity(0.5),
+                        activeThumbColor: AppColors.brandGreen,
+                        inactiveTrackColor: Colors.red.withOpacity(0.3),
+                        inactiveThumbColor: Colors.red,
+                        onChanged: access.isSavingSettings
+                            ? null
+                            : (enabled) async {
+                                final ok = await access.setDeleteEnabled(
+                                  enabled,
+                                );
+                                if (!context.mounted || ok) return;
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      access.errorMessage ??
+                                          'Could not update delete options.',
+                                    ),
+                                  ),
+                                );
+                              },
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
