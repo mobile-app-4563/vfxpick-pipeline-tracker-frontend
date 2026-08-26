@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../providers/access_provider.dart';
 import '../../modules/access_provider/view/access_provider_screen.dart';
+import '../../modules/audit_logs/view/audit_logs_screen.dart';
 import '../../modules/auth/controller/auth_controller.dart';
 import '../../modules/auth/view/login_screen.dart';
 import '../../modules/auth/view/register_screen.dart';
@@ -122,6 +123,10 @@ class AppRoutes {
             GoRoute(
               path: '/profile',
               builder: (context, state) => const ProfileScreen(),
+            ),
+            GoRoute(
+              path: '/audit-logs',
+              builder: (context, state) => const AuditLogsScreen(),
             ),
           ],
         ),

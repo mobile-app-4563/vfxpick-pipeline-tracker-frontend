@@ -23,6 +23,7 @@ class AccessProvider extends ChangeNotifier {
     '/access-provider',
     '/inventory',
     '/profile',
+    '/audit-logs',
   ];
 
   static const Set<String> protectedRoutes = {
@@ -41,6 +42,7 @@ class AccessProvider extends ChangeNotifier {
     '/access-provider',
     '/inventory',
     '/profile',
+    '/audit-logs',
   };
 
   static const Set<String> _artistDefaults = {
@@ -150,7 +152,7 @@ class AccessProvider extends ChangeNotifier {
   Set<String> _effectiveAllowedRoutes(String role) {
     final allowed = {...(_roleRoutes[role] ?? _artistDefaults)};
     if (isAdminRole(role)) {
-      allowed.add('/access-provider');
+      allowed.addAll(orderedMenuRoutes);
     }
     return allowed;
   }
@@ -190,6 +192,8 @@ class AccessProvider extends ChangeNotifier {
         return 'Inventory';
       case '/profile':
         return 'My Profile';
+      case '/audit-logs':
+        return 'Audit Logs';
       default:
         return route;
     }
@@ -297,6 +301,11 @@ class AccessProvider extends ChangeNotifier {
     required bool allowed,
   }) async {
     if (!protectedRoutes.contains(route)) return false;
+    if (isAdminRole(role)) {
+      _errorMessage = 'Admin access is always enabled for every menu.';
+      notifyListeners();
+      return false;
+    }
 
     final snapshot = {
       for (final entry in _roleRoutes.entries) entry.key: {...entry.value},

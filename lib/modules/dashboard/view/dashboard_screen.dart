@@ -132,6 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           GlassContainer(
             child: DynamicDataTable(
+              showDesktopFilterButton: true,
               dataRowMinHeight: MediaQuery.of(context).size.height * 46 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 60 / 768,
               showCellBorders: _showCellBorders,

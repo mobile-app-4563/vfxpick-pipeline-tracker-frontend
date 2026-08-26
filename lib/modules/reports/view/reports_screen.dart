@@ -332,6 +332,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         children: [
           SizedBox(height: SizeConfig.scaleHeight(context, 10)),
           DynamicDataTable(
+            showDesktopFilterButton: true,
             showCellBorders: _showCellBorders,
             fields: [
               DynamicTableField(

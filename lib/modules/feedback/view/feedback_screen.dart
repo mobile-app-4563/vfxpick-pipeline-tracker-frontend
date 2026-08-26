@@ -323,6 +323,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     return GlassContainer(
       padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 8)),
       child: DynamicDataTable(
+        showDesktopFilterButton: true,
         headingRowHeight: MediaQuery.of(context).size.height * 42 / 768,
         dataRowMinHeight: MediaQuery.of(context).size.height * 44 / 768,
         dataRowMaxHeight: MediaQuery.of(context).size.height * 56 / 768,
@@ -490,6 +491,19 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
     );
   }
 
+  /// A shot's ``department`` may hold a single department or a
+  /// comma-separated multi-department list (e.g. "Roto,Paint") — match when
+  /// any part equals the selected department filter (case-insensitive).
+  static bool _matchesDepartment(String? department, String selected) {
+    final wanted = selected.trim().toLowerCase();
+    if (wanted.isEmpty) return true;
+    return (department ?? '')
+        .split(',')
+        .map((p) => p.trim().toLowerCase())
+        .where((p) => p.isNotEmpty)
+        .any((p) => p == wanted);
+  }
+
   List<Map<String, dynamic>> _buildTableRows(List<ShotModel> shots) {
     final filtered = shots.where((shot) {
       final query = _searchQuery.trim().toLowerCase();
@@ -507,7 +521,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
       }
 
       if (_departmentFilter.isNotEmpty &&
-          shot.department != _departmentFilter) {
+          !_matchesDepartment(shot.department, _departmentFilter)) {
         return false;
       }
       if (_clientFilter.isNotEmpty &&

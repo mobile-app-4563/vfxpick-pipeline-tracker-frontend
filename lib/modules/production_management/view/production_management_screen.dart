@@ -66,6 +66,32 @@ const List<String> _statusFilterOptions = [
   'Approved Internal',
 ];
 
+/// Column labels shown in the Paste CSV dialog (positional order). Index N of
+/// a pasted row maps to the N-th column — keep in sync with
+/// `_gridFieldColumnIndex` (the template column fallback order).
+const List<String> _gridPositionalLabels = [
+  'S No',
+  'Co ordinator',
+  'Month',
+  'Shots Received Date',
+  'Client for Ref',
+  'Client',
+  'Show',
+  'WIP ETA',
+  'ETA',
+  'Shot ID',
+  'Frames',
+  'Tasks',
+  'Review Notes',
+  'Status',
+  'Delivered on',
+  'Work station',
+  'Shot man-days',
+  'Approved Client MD',
+  'FL ETA',
+  'FL Man-days',
+];
+
 /// Filter options for the grid's Tasks column — built dynamically from
 /// the pipeline departments (incl. any departments added at runtime).
 List<String> _tasksFilterOptions() => [...AppConstants.pipelineDepartments];
@@ -377,9 +403,26 @@ class _ProductionManagementScreenState
           .where((row) {
             bool contains(String key, String query) {
               if (query.trim().isEmpty) return true;
-              return (row[key] ?? '').toString().toLowerCase().contains(
-                query.trim().toLowerCase(),
-              );
+              final q = query.trim().toLowerCase();
+              final value = (row[key] ?? '').toString();
+              if (value.toLowerCase().contains(q)) return true;
+              // Date columns render as Excel-style labels ("May-25"); also
+              // match the formatted label so users can search what they see.
+              const dateKeys = {
+                'shotsReceivedDate',
+                'wipEta',
+                'eta',
+                'deliveredOn',
+                'flEta',
+              };
+              if (dateKeys.contains(key)) {
+                final formatted = formatDateLikeExcel(value);
+                if (formatted.isNotEmpty &&
+                    formatted.toLowerCase().contains(q)) {
+                  return true;
+                }
+              }
+              return false;
             }
 
             bool chipMatch(String key, Set<String> selected) {
@@ -950,6 +993,48 @@ class _ProductionManagementScreenState
     }
   }
 
+  /// Renders the column template as labeled chips so the user can identify
+  /// what each comma-separated position in a pasted row means.
+  Widget _csvTemplateChips(BuildContext context, List<String> labels) {
+    return SizedBox(
+      height: SizeConfig.scaleHeight(context, 96),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          child: Wrap(
+            spacing: SizeConfig.scaleWidth(context, 6),
+            runSpacing: SizeConfig.scaleHeight(context, 6),
+            children: [
+              for (var i = 0; i < labels.length; i++)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SizeConfig.scaleWidth(context, 8),
+                    vertical: SizeConfig.scaleHeight(context, 4),
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(
+                      SizeConfig.scaleWidth(context, 6),
+                    ),
+                  ),
+                  child: Text(
+                    '${i + 1}. ${labels[i]}',
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 11),
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // ─── Import: paste CSV text for review ───────────────────────────────────
   Future<void> _openPasteCsvDialog() async {
     if (_isImporting || _isSavingImport) return;
@@ -965,17 +1050,20 @@ class _ProductionManagementScreenState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Paste rows with headers, e.g.:\n'
-                'Co ordinator,Month,Shots Received Date,Client,Show,'
-                'Shot ID,Frames,Tasks,Status',
+                'Paste data rows only — no header row needed. '
+                'Columns must follow the order below:',
                 style: Theme.of(dialogContext).textTheme.bodySmall,
               ),
+              const SizedBox(height: 8),
+              _csvTemplateChips(dialogContext, _gridPositionalLabels),
               const SizedBox(height: 10),
               TextField(
                 controller: _csvPasteController,
                 maxLines: 8,
                 decoration: const InputDecoration(
-                  hintText: 'Shot ID,Client,Show,Tasks,Status,...',
+                  hintText:
+                      'e.g. Ravi Kumar,August 2026,2026-08-01,,Disney,Show X,,'
+                      '2026-08-20,SH_0101,80,ROTO,...',
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -1021,7 +1109,14 @@ class _ProductionManagementScreenState
         _importFeedback.clear();
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported ${rows.length} rows for review.')),
+        SnackBar(
+          content: Text(
+            rows.isEmpty
+                ? 'No rows could be parsed. Each line needs a Shot ID '
+                      '(column 9) and a Tasks/Department value (column 11).'
+                : 'Imported ${rows.length} rows for review.',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -3406,8 +3501,10 @@ int _findHeaderRowIndexT(List<List<Data?>> rows) {
   return bestScore >= 12 ? bestIdx : 0;
 }
 
-/// Locates the real header row in a CSV text (list of lines).
-int _findHeaderRowIndexLinesT(List<String> lines) {
+/// Returns the real header line index in a CSV text, or -1 when the text is
+/// data-only (no recognizable header row). Used by the paste parsers so
+/// header-less pastes import every line as a data row.
+int _findHeaderLineOrNoneT(List<String> lines) {
   var bestIdx = 0;
   var bestScore = 0;
   for (var i = 0; i < lines.length; i++) {
@@ -3420,7 +3517,14 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
       bestIdx = i;
     }
   }
-  return bestScore >= 12 ? bestIdx : 0;
+  return bestScore >= 12 ? bestIdx : -1;
+}
+
+/// Locates the real header row in a CSV text (list of lines). Falls back to
+/// line 0 when the text has no recognizable header (legacy file behavior).
+int _findHeaderRowIndexLinesT(List<String> lines) {
+  final idx = _findHeaderLineOrNoneT(lines);
+  return idx < 0 ? 0 : idx;
 }
 
 String? _toIsoDateT(dynamic value) => excelDateToIso(value);
@@ -3666,18 +3770,23 @@ Future<List<Map<String, dynamic>>> _parseGridCsvTextRowsAsync(
   void Function(int parsedRows)? onProgress,
 }) async {
   final lines = const LineSplitter().convert(csvText.trim());
-  if (lines.length < 2) return const [];
+  if (lines.isEmpty) return const [];
 
-  final headerIndex = _findHeaderRowIndexLinesT(lines);
-  final headers = _splitCsvLineT(
-    lines[headerIndex],
-  ).map(_normalizeHeaderT).toList(growable: false);
+  final headerIndex = _findHeaderLineOrNoneT(lines);
+  final hasHeader = headerIndex >= 0;
+  final headers = hasHeader
+      ? _splitCsvLineT(
+          lines[headerIndex],
+        ).map(_normalizeHeaderT).toList(growable: false)
+      : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
   final seenShotCodes = <String>{};
   var processed = 0;
 
-  for (var i = headerIndex + 1; i < lines.length; i++) {
+  // Data-only pastes (no header row) start at line 0; columns are mapped
+  // positionally through `_gridFieldColumnIndex` inside `_toGridApiRowT`.
+  for (var i = hasHeader ? headerIndex + 1 : 0; i < lines.length; i++) {
     if (++processed % _importYieldEvery == 0) {
       await _importYield();
       onProgress?.call(out.length);
@@ -3685,20 +3794,26 @@ Future<List<Map<String, dynamic>>> _parseGridCsvTextRowsAsync(
     final line = lines[i].trim();
     if (line.isEmpty) continue;
     final values = _splitCsvLineT(lines[i]);
-    if (_isHeaderLikeRowT(values, headerLabels)) continue;
+    if (hasHeader && _isHeaderLikeRowT(values, headerLabels)) continue;
     final raw = <String, dynamic>{};
-    for (var c = 0; c < headers.length; c++) {
-      final key = headers[c];
-      final value = c < values.length ? values[c].trim() : null;
+    for (var c = 0; c < values.length; c++) {
+      final value = values[c].trim();
       raw['col_$c'] = value;
-      if (key.isEmpty) continue;
-      raw[key] = value;
+      if (hasHeader && c < headers.length) {
+        final key = headers[c];
+        if (key.isNotEmpty) raw[key] = value;
+      }
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
     final code = (apiRow['shotCode'] ?? '').toString().trim();
     if (code.isEmpty) continue;
-    if (seenShotCodes.contains(code)) continue;
-    seenShotCodes.add(code);
+    // The same shot with different tasks (e.g. Roto vs Comp) or a different
+    // feedback round (review notes) must stay as separate rows.
+    final taskKey = (apiRow['tasks'] ?? '').toString().trim().toUpperCase();
+    final notesKey = (apiRow['reviewNotes'] ?? '').toString().trim();
+    final dedupKey = '$code|$taskKey|$notesKey';
+    if (seenShotCodes.contains(dedupKey)) continue;
+    seenShotCodes.add(dedupKey);
     out.add(apiRow);
   }
   return out;
@@ -3746,8 +3861,13 @@ Future<List<Map<String, dynamic>>> _parseGridExcelRowsAsync(
     final apiRow = _toGridApiRowT(raw, gridStatuses);
     final code = (apiRow['shotCode'] ?? '').toString().trim();
     if (code.isEmpty) continue;
-    if (seenShotCodes.contains(code)) continue;
-    seenShotCodes.add(code);
+    // The same shot with different tasks (e.g. Roto vs Comp) or a different
+    // feedback round (review notes) must stay as separate rows.
+    final taskKey = (apiRow['tasks'] ?? '').toString().trim().toUpperCase();
+    final notesKey = (apiRow['reviewNotes'] ?? '').toString().trim();
+    final dedupKey = '$code|$taskKey|$notesKey';
+    if (seenShotCodes.contains(dedupKey)) continue;
+    seenShotCodes.add(dedupKey);
     out.add(apiRow);
   }
   return out;
@@ -3791,8 +3911,13 @@ Future<List<Map<String, dynamic>>> _parseGridCsvRowsAsync(
     final apiRow = _toGridApiRowT(raw, gridStatuses);
     final code = (apiRow['shotCode'] ?? '').toString().trim();
     if (code.isEmpty) continue;
-    if (seenShotCodes.contains(code)) continue;
-    seenShotCodes.add(code);
+    // The same shot with different tasks (e.g. Roto vs Comp) or a different
+    // feedback round (review notes) must stay as separate rows.
+    final taskKey = (apiRow['tasks'] ?? '').toString().trim().toUpperCase();
+    final notesKey = (apiRow['reviewNotes'] ?? '').toString().trim();
+    final dedupKey = '$code|$taskKey|$notesKey';
+    if (seenShotCodes.contains(dedupKey)) continue;
+    seenShotCodes.add(dedupKey);
     out.add(apiRow);
   }
   return out;

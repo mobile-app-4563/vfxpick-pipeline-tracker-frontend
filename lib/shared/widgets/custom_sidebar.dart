@@ -71,6 +71,8 @@ class _CustomSidebarState extends State<CustomSidebar> {
         return Icons.inventory_2_outlined;
       case '/profile':
         return Icons.person_outline;
+      case '/audit-logs':
+        return Icons.history_outlined;
       default:
         return Icons.circle_outlined;
     }

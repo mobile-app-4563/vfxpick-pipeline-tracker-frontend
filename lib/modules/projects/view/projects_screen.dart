@@ -53,6 +53,71 @@ const List<String> _priorityOptions = [
   'Priority 3',
 ];
 
+/// Column labels shown in the Paste CSV dialog (positional order). Index N of
+/// a pasted row maps to the N-th column — keep in sync with
+/// [_projectPositionalTemplate].
+const List<String> _projectPositionalLabels = [
+  'Shot ID',
+  'Frame In',
+  'Frame Out',
+  'Total Frames',
+  'Coordinator',
+  'Level',
+  'Alloc Date',
+  'Alloc ETA',
+  'Start Date',
+  'Complete Date',
+  'WIP %',
+  'Mandays',
+  'Consumed Mandays',
+  'Saved Mandays',
+  'Sup Bid',
+  'Cli Bid',
+  'ETA',
+  'Approved Version',
+  'Approved By',
+  'Comments',
+  'Complexity',
+  'Notes',
+  'Status',
+  'From Roto',
+  'From Paint',
+  'From MM',
+  'From Comp',
+];
+
+/// Field aliases for header-less pastes: index N of a pasted row maps to this
+/// header key before `_toApiImportRowT` resolves the API fields.
+const List<String> _projectPositionalTemplate = [
+  'shot_id',
+  'frame_in',
+  'frame_out',
+  'total_frames',
+  'coordinator',
+  'level',
+  'allocation_date',
+  'allocation_eta',
+  'starting_date',
+  'complete_date',
+  'daily_wip',
+  'mandays',
+  'consumed_mandays',
+  'saved_mandays',
+  'supervisor_bid',
+  'client_bid',
+  'client_eta',
+  'approved_version',
+  'approved_by',
+  'comments',
+  'complexity',
+  'notes',
+  'status',
+  'from_roto',
+  'from_paint',
+  'from_mm',
+  'from_comp',
+];
+
 class _ProjectsScreenState extends State<ProjectsScreen> {
   final List<Map<String, dynamic>> _importDraftRows = [];
   final TextEditingController _csvPasteController = TextEditingController();
@@ -1146,7 +1211,23 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
             bool chipMatch(String key, Set<String> selected) {
               if (selected.isEmpty) return true;
-              return selected.contains((row[key] ?? '').toString());
+              final value = (row[key] ?? '').toString();
+              if (selected.contains(value)) return true;
+              // Values may hold a comma-separated list (e.g. multi-department
+              // shots) — match if any part matches any selected chip, after
+              // normalizing case/whitespace so chip labels like "Inhouse / FL"
+              // match stored values like "Inhouse/FL".
+              final parts = value
+                  .split(',')
+                  .map((p) => _normalizeChipValue(p))
+                  .where((p) => p.isNotEmpty)
+                  .toList();
+              for (final p in parts) {
+                for (final s in selected) {
+                  if (p == _normalizeChipValue(s)) return true;
+                }
+              }
+              return false;
             }
 
             return contains('shotId', _shotIdFilter) &&
@@ -1915,6 +1996,48 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
   }
 
+  /// Renders the column template as labeled chips so the user can identify
+  /// what each comma-separated position in a pasted row means.
+  Widget _csvTemplateChips(BuildContext context, List<String> labels) {
+    return SizedBox(
+      height: SizeConfig.scaleHeight(context, 96),
+      child: Scrollbar(
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          child: Wrap(
+            spacing: SizeConfig.scaleWidth(context, 6),
+            runSpacing: SizeConfig.scaleHeight(context, 6),
+            children: [
+              for (var i = 0; i < labels.length; i++)
+                Container(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: SizeConfig.scaleWidth(context, 8),
+                    vertical: SizeConfig.scaleHeight(context, 4),
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(
+                      SizeConfig.scaleWidth(context, 6),
+                    ),
+                  ),
+                  child: Text(
+                    '${i + 1}. ${labels[i]}',
+                    style: TextStyle(
+                      fontSize: SizeConfig.fontSize(context, 11),
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _openPasteCsvDialog(ProjectController controller) async {
     _csvPasteController.clear();
     final shouldImport = await showDialog<bool>(
@@ -1930,9 +2053,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Paste CSV data. Any header format is accepted; columns are auto-mapped.',
+                'Paste data rows only — no header row needed. '
+                'Columns must follow the order below:',
                 style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
               ),
+              SizedBox(height: SizeConfig.scaleHeight(context, 8)),
+              _csvTemplateChips(dialogContext, _projectPositionalLabels),
               SizedBox(height: SizeConfig.scaleHeight(context, 10)),
               TextField(
                 controller: _csvPasteController,
@@ -1948,8 +2074,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 ),
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
-                  hintText:
-                      'Shot ID,Frame In,Frame Out,Supervisor Bid,Client Bid,ETA,Status,Notes',
+                  hintText: 'e.g. SH010,1001,1080,80,...',
                 ),
               ),
             ],
@@ -2387,6 +2512,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       ? '—'
       : '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  /// Lower-cases and strips whitespace/trailing punctuation so chip labels
+  /// ('Inhouse / FL', 'WIP') match stored values ('Inhouse/FL', 'Wip').
+  static String _normalizeChipValue(String s) {
+    final t = s.toLowerCase();
+    return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
+  }
+
   Future<void> _confirmBulkEdit(
     BuildContext context,
     ProjectController controller,
@@ -2595,8 +2727,10 @@ int _findHeaderRowIndexT(List<List<Data?>> rows) {
   return bestScore >= 12 ? bestIdx : 0;
 }
 
-/// Locates the real header row in a CSV text (list of lines).
-int _findHeaderRowIndexLinesT(List<String> lines) {
+/// Returns the real header line index in a CSV text, or -1 when the text is
+/// data-only (no recognizable header row). Used by the paste parsers so
+/// header-less pastes import every line as a data row.
+int _findHeaderLineOrNoneT(List<String> lines) {
   var bestIdx = 0;
   var bestScore = 0;
   for (var i = 0; i < lines.length; i++) {
@@ -2609,7 +2743,14 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
       bestIdx = i;
     }
   }
-  return bestScore >= 12 ? bestIdx : 0;
+  return bestScore >= 12 ? bestIdx : -1;
+}
+
+/// Locates the real header row in a CSV text (list of lines). Falls back to
+/// line 0 when the text has no recognizable header (legacy file behavior).
+int _findHeaderRowIndexLinesT(List<String> lines) {
+  final idx = _findHeaderLineOrNoneT(lines);
+  return idx < 0 ? 0 : idx;
 }
 
 String? _toIsoDateT(dynamic value) => excelDateToIso(value);
@@ -3174,31 +3315,49 @@ List<Map<String, dynamic>> _parseCsvTextRowsT(
   List<String> shotStatuses,
 ) {
   final lines = const LineSplitter().convert(csvText.trim());
-  if (lines.length < 2) {
+  if (lines.isEmpty) {
     return const [];
   }
 
-  final headerIndex = _findHeaderRowIndexLinesT(lines);
-  final headers = _splitCsvLineT(
-    lines[headerIndex],
-  ).map(_normalizeHeaderT).toList(growable: false);
+  final headerIndex = _findHeaderLineOrNoneT(lines);
+  final hasHeader = headerIndex >= 0;
+  final headers = hasHeader
+      ? _splitCsvLineT(
+          lines[headerIndex],
+        ).map(_normalizeHeaderT).toList(growable: false)
+      : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
   final seenShotCodes = <String>{};
 
-  for (var i = headerIndex + 1; i < lines.length; i++) {
+  // Data-only pastes (no header row) start at line 0 and map columns
+  // positionally through [_projectPositionalTemplate].
+  for (var i = hasHeader ? headerIndex + 1 : 0; i < lines.length; i++) {
     final line = lines[i].trim();
     if (line.isEmpty) continue;
     final values = _splitCsvLineT(lines[i]);
     // Skip rows whose cell values match header labels (duplicate header rows)
-    if (_isHeaderLikeRowT(values, headerLabels)) continue;
+    if (hasHeader && _isHeaderLikeRowT(values, headerLabels)) continue;
     final raw = <String, dynamic>{};
-    for (var c = 0; c < headers.length; c++) {
-      final key = headers[c];
-      final value = c < values.length ? values[c].trim() : null;
-      raw['col_$c'] = value;
-      if (key.isEmpty) continue;
-      raw[key] = value;
+    if (hasHeader) {
+      for (var c = 0; c < headers.length; c++) {
+        final key = headers[c];
+        final value = c < values.length ? values[c].trim() : null;
+        raw['col_$c'] = value;
+        if (key.isEmpty) continue;
+        raw[key] = value;
+      }
+    } else {
+      // Positional mapping. `col_N` keys are intentionally NOT set so fields
+      // outside the template (e.g. priority) resolve to '' instead of the
+      // first column's value through `_toApiImportRowT`'s column fallbacks.
+      for (var c = 0; c < values.length; c++) {
+        final value = values[c].trim();
+        if (value.isEmpty) continue;
+        if (c < _projectPositionalTemplate.length) {
+          raw[_projectPositionalTemplate[c]] = value;
+        }
+      }
     }
 
     final apiRow = _toApiImportRowT(raw, showId, department, shotStatuses);

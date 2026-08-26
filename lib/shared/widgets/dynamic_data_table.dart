@@ -44,6 +44,11 @@ class DynamicDataTable extends StatefulWidget {
   final Widget? empty;
   final void Function(String fieldKey, dynamic value)? onFilterChanged;
   final bool enableMobileFilterFab;
+
+  /// When true, the filter button is also shown on desktop-width layouts
+  /// (not only below [mobileBreakpoint]) so hosts that have no other filter
+  /// UI (e.g. dashboard, reports) still expose per-column filtering.
+  final bool showDesktopFilterButton;
   final double mobileBreakpoint;
   final int frozenColumnCount;
   final int rowsPerPage;
@@ -71,6 +76,7 @@ class DynamicDataTable extends StatefulWidget {
     this.empty,
     this.onFilterChanged,
     this.enableMobileFilterFab = true,
+    this.showDesktopFilterButton = false,
     this.mobileBreakpoint = 900,
     this.frozenColumnCount = 0,
     this.rowsPerPage = 50,
@@ -720,10 +726,10 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
             .where((field) => field.filterRequired != false)
             .toList(growable: false);
         final shouldShowMobileFilterFab =
-            isMobile &&
-            widget.enableMobileFilterFab &&
             widget.onFilterChanged != null &&
-            filterableFields.isNotEmpty;
+            filterableFields.isNotEmpty &&
+            ((isMobile && widget.enableMobileFilterFab) ||
+                widget.showDesktopFilterButton);
 
         Widget buildContent() {
           // ── Frozen columns mode ──────────────────────────────────

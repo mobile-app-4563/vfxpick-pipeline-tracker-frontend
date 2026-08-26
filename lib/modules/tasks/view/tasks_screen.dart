@@ -578,6 +578,14 @@ class _ArtistPortalState extends State<_ArtistPortal> {
     );
   }
 
+  /// Frame ranges are displayed as "100 - 200"; match regardless of whether
+  /// the user types "100-200" or "100 - 200" (whitespace is ignored).
+  bool _matchesFrames(int frameIn, int frameOut, String query) {
+    if (query.trim().isEmpty) return true;
+    final q = query.replaceAll(RegExp(r'\s+'), '').toLowerCase();
+    return '$frameIn-$frameOut'.contains(q);
+  }
+
   List<FilterOption> _buildOptions(List<String> values, String selected) {
     return values
         .map(
@@ -609,7 +617,7 @@ class _ArtistPortalState extends State<_ArtistPortal> {
         .where((shot) {
           return _contains(shot.shotCode, _shotIdFilter) &&
               _contains(shot.showName ?? '—', _showFilter) &&
-              _contains('${shot.frameIn} - ${shot.frameOut}', _framesFilter) &&
+              _matchesFrames(shot.frameIn, shot.frameOut, _framesFilter) &&
               _contains(shot.status, _clientStatusFilter) &&
               _contains(shot.artistStatus, _artistStatusFilter) &&
               _contains(
@@ -663,7 +671,10 @@ class _ArtistPortalState extends State<_ArtistPortal> {
                     SizedBox(
                       width: searchWidth,
                       child: CustomTextField(
-                        onChanged: (v) => setState(() => _shotIdFilter = v),
+                        onChanged: (v) => setState(() {
+                          _shotIdFilter = v;
+                          _showFilter = v;
+                        }),
                         labelText: 'Search shot / show',
                         suffixIcon: Icons.search,
                       ),

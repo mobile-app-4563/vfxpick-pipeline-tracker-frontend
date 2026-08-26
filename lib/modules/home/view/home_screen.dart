@@ -99,11 +99,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(width: width * 0.35, child: insightCard),
+                          SizedBox(width: width * 0.25, child: insightCard),
                           SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: pickoutsCard),
                           SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: inventCard),
+                          if (adminCard != null) ...[
+                            SizedBox(width: SizeConfig.scaleWidth(context, 16)),
+                            Expanded(child: adminCard),
+                          ],
                         ],
                       ),
                     );
@@ -270,6 +274,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     // Show status summary
                     Padding(
                       padding: EdgeInsets.only(
+                        top: SizeConfig.scaleHeight(context, 8),
                         bottom: SizeConfig.scaleHeight(context, 12),
                       ),
                       child: Wrap(
@@ -314,6 +319,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           bottom: SizeConfig.scaleHeight(context, 8),
                         ),
                         child: ListTile(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
+                              SizeConfig.scaleWidth(context, 8),
+                            ),
+                            side: BorderSide(
+                              color: _getStatusColor(
+                                concern['status'] as String?,
+                              ),
+                              width: 1,
+                            ),
+                          ),
                           dense: true,
                           leading: Icon(
                             _getPriorityIcon(concern['priority'] as String?),

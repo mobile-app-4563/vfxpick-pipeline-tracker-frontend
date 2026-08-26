@@ -23,6 +23,8 @@ class TeamsScreen extends StatefulWidget {
 }
 
 class _TeamsScreenState extends State<TeamsScreen> {
+  int _selectedIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -42,12 +44,15 @@ class _TeamsScreenState extends State<TeamsScreen> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: AppColors.brandGreen,
-        foregroundColor: Colors.white,
-        onPressed: () => _addMember(context, controller),
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Add Member'),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: FloatingActionButton.extended(
+          backgroundColor: AppColors.brandGreen,
+          foregroundColor: Colors.white,
+          onPressed: () => _addMember(context, controller),
+          icon: const Icon(Icons.person_add_alt_1),
+          label: const Text('Add Member'),
+        ),
       ),
       body: _body(context, controller),
     );
@@ -66,69 +71,161 @@ class _TeamsScreenState extends State<TeamsScreen> {
     }
 
     final departments = controller.teams;
+    final memberCount = departments.fold<int>(
+      0,
+      (sum, d) => sum + d.members.length,
+    );
+    final selectedIndex = _selectedIndex < departments.length
+        ? _selectedIndex
+        : 0;
 
-    return DefaultTabController(
-      length: departments.length,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // ── Scrollable top area: header card + import preview ──
-
-          // ── Department tab bar ──
-          _departmentTabBar(departments),
-          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
-          // ── Tab content (swipe disabled, switch via tabs only) ──
-          Expanded(
-            child: TabBarView(
-              physics: const NeverScrollableScrollPhysics(),
-              children: departments
-                  .map((d) => _membersTab(context, controller, d))
-                  .toList(),
+    return Padding(
+      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
+      child: GlassContainer(
+        padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
+        child: ListView(
+          // direction: Axis.horizontal,
+          // crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header: title row + department selector buttons ──
+            _teamsHeader(
+              context,
+              memberCount,
+              departments.length,
+              departments,
+              selectedIndex,
             ),
-          ),
-        ],
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            // ── Selected department fills the view; scrolls internally ──
+            SizedBox(
+              child: _membersTab(
+                context,
+                controller,
+                departments[selectedIndex],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _departmentTabBar(List<DepartmentTeam> departments) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      margin: EdgeInsets.fromLTRB(
-        SizeConfig.scaleWidth(context, 12),
-        SizeConfig.scaleHeight(context, 12),
-        SizeConfig.scaleWidth(context, 12),
-        0,
-      ),
-      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 4)),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withOpacity(0.06)
-            : Colors.black.withOpacity(0.04),
-        // borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 12)),
-        border: GradientBoxBorder(
-          gradient: AppColors.brandGradient,
-          width: SizeConfig.scaleWidth(context, 1),
-        ),
-      ),
-      child: TabBar(
-        isScrollable: true,
-        tabAlignment: TabAlignment.start,
-        dividerColor: Colors.transparent,
-        labelColor: isDark ? Colors.white : AppColors.darkBg,
-        unselectedLabelColor: Colors.grey,
-        labelStyle: TextStyle(
-          fontSize: SizeConfig.fontSize(context, 13),
-          fontWeight: FontWeight.w600,
-        ),
-        indicator: BoxDecoration(
-          gradient: AppColors.brandGradient,
-          borderRadius: BorderRadius.circular(
-            SizeConfig.scaleWidth(context, 8),
+  Widget _teamsHeader(
+    BuildContext context,
+    int memberCount,
+    int departmentCount,
+    List<DepartmentTeam> departments,
+    int selectedIndex,
+  ) {
+    return Row(
+      children: [
+        Container(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 9)),
+          decoration: BoxDecoration(
+            color: AppColors.brandGreen.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            Icons.groups_outlined,
+            color: AppColors.brandGreen,
+            size: SizeConfig.iconSize(context, 22),
           ),
         ),
-        indicatorSize: TabBarIndicatorSize.tab,
-        tabs: departments.map((d) => Tab(text: d.department)).toList(),
+        SizedBox(width: SizeConfig.scaleWidth(context, 10)),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Teams',
+                style: TextStyle(
+                  fontSize: SizeConfig.fontSize(context, 18),
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              Text(
+                '$memberCount members across $departmentCount departments',
+                style: TextStyle(
+                  fontSize: SizeConfig.fontSize(context, 12),
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(width: SizeConfig.scaleWidth(context, 12)),
+        // ── Department selector buttons (horizontally aligned) ──
+        Expanded(
+          child: _departmentButtons(context, departments, selectedIndex),
+        ),
+      ],
+    );
+  }
+
+  Widget _departmentButtons(
+    BuildContext context,
+    List<DepartmentTeam> departments,
+    int selectedIndex,
+  ) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Align(
+      alignment: Alignment.centerRight,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < departments.length; i++) ...[
+              _departmentButton(
+                context,
+                departments[i],
+                isDark,
+                selected: i == selectedIndex,
+                onTap: () => setState(() => _selectedIndex = i),
+              ),
+              SizedBox(width: SizeConfig.scaleWidth(context, 8)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _departmentButton(
+    BuildContext context,
+    DepartmentTeam department,
+    bool isDark, {
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: selected
+          ? AppColors.brandGreen
+          : isDark
+          ? Colors.white.withValues(alpha: 0.06)
+          : Colors.black.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 8)),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 8)),
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: SizeConfig.scaleWidth(context, 14),
+            vertical: SizeConfig.scaleHeight(context, 8),
+          ),
+          child: Text(
+            department.department,
+            style: TextStyle(
+              color: selected
+                  ? Colors.white
+                  : isDark
+                  ? Colors.white
+                  : AppColors.darkBg,
+              fontSize: SizeConfig.fontSize(context, 13),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -138,18 +235,238 @@ class _TeamsScreenState extends State<TeamsScreen> {
     TeamController controller,
     DepartmentTeam scope,
   ) {
+    if (scope.members.isEmpty) {
+      return const Center(
+        child: EmptyStateWidget(
+          icon: Icons.groups_outlined,
+          title: 'No team members',
+          description: 'No artists found for this department.',
+        ),
+      );
+    }
+
+    final groups = _groupMembersByRole(scope.members);
+
+    // Fills the available viewport; scrolling happens inside the table area.
     return RefreshIndicator(
       onRefresh: () => controller.loadTeams(),
-      child: ListView(
-        padding: EdgeInsets.only(
-          left: SizeConfig.scaleWidth(context, 12),
-          right: SizeConfig.scaleWidth(context, 12),
-          top: SizeConfig.scaleHeight(context, 4),
-        ),
+      child: Wrap(
+        direction: Axis.horizontal,
+        // mainAxisSize: MainAxisSize.min,
+        // crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Section heading
-          _membersTable(controller, scope),
+          for (final group in groups) ...[
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: SizedBox(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _roleSectionHeader(
+                      context,
+                      group.role,
+                      group.members.length,
+                    ),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 8)),
+                    _roleTable(context, controller, group.members),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+
+  // ── Role grouping ────────────────────────────
+
+  List<({String role, List<TeamMember> members})> _groupMembersByRole(
+    List<TeamMember> members,
+  ) {
+    const rank = [
+      'supervisor',
+      'lead',
+      'coordinator',
+      'artist',
+      'manager',
+      'admin',
+    ];
+    final buckets = <String, List<TeamMember>>{};
+    for (final member in members) {
+      final role = member.role.trim().isEmpty ? 'Other' : member.role.trim();
+      buckets.putIfAbsent(role, () => []).add(member);
+    }
+    final keys = buckets.keys.toList()
+      ..sort((a, b) {
+        final ra = rank.indexOf(a.toLowerCase());
+        final rb = rank.indexOf(b.toLowerCase());
+        if (ra == -1 && rb == -1) {
+          return a.toLowerCase().compareTo(b.toLowerCase());
+        }
+        if (ra == -1) return 1;
+        if (rb == -1) return -1;
+        return ra.compareTo(rb);
+      });
+    return [for (final key in keys) (role: key, members: buckets[key]!)];
+  }
+
+  String _pluralRole(String role) {
+    final t = role.trim();
+    if (t.isEmpty) return 'Members';
+    final display = t[0].toUpperCase() + t.substring(1);
+    return display.toLowerCase().endsWith('s') ? display : '${display}s';
+  }
+
+  Widget _roleSectionHeader(BuildContext context, String role, int count) {
+    final roleColor = _roleColor(role);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: EdgeInsets.symmetric(
+            horizontal: SizeConfig.scaleWidth(context, 12),
+            vertical: SizeConfig.scaleHeight(context, 6),
+          ),
+          decoration: BoxDecoration(
+            color: roleColor.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(
+              SizeConfig.scaleWidth(context, 8),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.badge_outlined,
+                size: SizeConfig.iconSize(context, 16),
+                color: roleColor,
+              ),
+              SizedBox(width: SizeConfig.scaleWidth(context, 6)),
+              Text(
+                _pluralRole(role),
+                style: TextStyle(
+                  color: roleColor,
+                  fontSize: SizeConfig.fontSize(context, 13),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(width: SizeConfig.scaleWidth(context, 6)),
+              Text(
+                '$count',
+                style: TextStyle(
+                  color: Theme.of(context).textTheme.bodySmall?.color,
+                  fontSize: SizeConfig.fontSize(context, 12),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _roleTable(
+    BuildContext context,
+    TeamController controller,
+    List<TeamMember> members,
+  ) {
+    // Fixed height: the table scrolls vertically inside this area and
+    // horizontally when columns exceed the available width.
+    final maxHeight = SizeConfig.scaleHeight(context, 480);
+    final contentHeight = (members.length + 1) * 56.0;
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(0),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: contentHeight > maxHeight ? maxHeight : contentHeight,
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            scrollDirection: Axis.vertical,
+            child: DataTable(
+              headingRowColor: WidgetStatePropertyAll(
+                AppColors.brandGreen.withValues(alpha: 0.12),
+              ),
+              dataRowMinHeight: 56,
+              dataRowMaxHeight: 64,
+              columnSpacing: SizeConfig.scaleWidth(context, 28),
+              border: TableBorder(
+                borderRadius: BorderRadius.all(Radius.circular(0)),
+                horizontalInside: BorderSide(
+                  color: Theme.of(context).dividerColor,
+                  width: 1,
+                ),
+              ),
+              columns: const [
+                DataColumn(label: Text('Member')),
+                DataColumn(label: Text('Department')),
+                DataColumn(label: Text('Level')),
+                DataColumn(label: Text('Actions')),
+              ],
+              rows: members
+                  .map((member) {
+                    final roleColor = _roleColor(member.role);
+                    final deleteEnabled = context
+                        .watch<AccessProvider>()
+                        .deleteEnabled;
+                    return DataRow(
+                      cells: [
+                        DataCell(Text(member.name)),
+                        DataCell(Text(member.department)),
+                        DataCell(
+                          Text(
+                            member.level?.isNotEmpty == true
+                                ? member.level!
+                                : '-',
+                          ),
+                        ),
+                        DataCell(
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _actionButton(
+                                context,
+                                Icons.edit_rounded,
+                                'Edit',
+                                roleColor,
+                                () => _editMember(context, controller, member),
+                              ),
+                              if (deleteEnabled) ...[
+                                SizedBox(
+                                  width: SizeConfig.scaleWidth(context, 6),
+                                ),
+                                _actionButton(
+                                  context,
+                                  Icons.person_remove_rounded,
+                                  'Remove',
+                                  Colors.red.shade400,
+                                  () => _removeMember(
+                                    context,
+                                    controller,
+                                    member,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    );
+                  })
+                  .toList(growable: false),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -157,132 +474,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
   // ──────────────────────────────────────────────
   // Stunning helpers
   // ──────────────────────────────────────────────
-
-  Widget _membersTable(TeamController controller, DepartmentTeam scope) {
-    // Collect all members of the given department into flat rows grouped by role.
-    final roleGroups = <String, List<Map<String, dynamic>>>{};
-    for (final member in scope.members) {
-      final role = member.role;
-      roleGroups.putIfAbsent(role, () => []);
-      roleGroups[role]!.add({'department': scope.department, 'member': member});
-    }
-
-    // Sort: artist first, then alphabetically
-    final sortedRoles = roleGroups.keys.toList()
-      ..sort((a, b) {
-        final aIsArtist = a == AppConstants.roleArtist;
-        final bIsArtist = b == AppConstants.roleArtist;
-        if (aIsArtist && !bIsArtist) return -1;
-        if (!aIsArtist && bIsArtist) return 1;
-        return a.compareTo(b);
-      });
-
-    if (roleGroups.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 40),
-        child: Center(
-          child: EmptyStateWidget(
-            icon: Icons.groups_outlined,
-            title: 'No team members',
-            description: 'No artists found for your accessible departments.',
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final role in sortedRoles)
-          Padding(
-            padding: EdgeInsets.only(
-              left: SizeConfig.scaleWidth(context, 8),
-              right: SizeConfig.scaleWidth(context, 8),
-            ),
-            child: _buildRoleSection(
-              context,
-              controller,
-              role,
-              roleGroups[role]!,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildRoleSection(
-    BuildContext context,
-    TeamController controller,
-    String role,
-    List<Map<String, dynamic>> members,
-  ) {
-    final roleColor = _roleColor(role);
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: SizeConfig.scaleHeight(context, 16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Role header (no expansion) ──
-          Padding(
-            padding: EdgeInsets.only(
-              left: SizeConfig.scaleWidth(context, 4),
-              bottom: SizeConfig.scaleHeight(context, 10),
-            ),
-            child: Row(
-              children: [
-                // Gradient icon container
-                Container(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: SizeConfig.scaleWidth(context, 10),
-                    vertical: SizeConfig.scaleHeight(context, 4),
-                  ),
-                  decoration: BoxDecoration(
-                    color: roleColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(
-                      SizeConfig.scaleWidth(context, 2),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.person,
-                        size: SizeConfig.iconSize(context, 13),
-                        color: roleColor,
-                      ),
-                      SizedBox(width: SizeConfig.scaleWidth(context, 4)),
-                      Text(
-                        '${members.first['department']} - ${members.length}',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: roleColor,
-                          fontSize: SizeConfig.fontSize(context, 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // ── Member cards: horizontal flow, wraps when exceeding width ──
-          Wrap(
-            spacing: SizeConfig.scaleWidth(context, 12),
-            runSpacing: SizeConfig.scaleHeight(context, 12),
-            children: [
-              for (final row in members)
-                _buildMemberCard(
-                  context,
-                  controller,
-                  row['member'] as TeamMember,
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   Color _roleColor(String role) {
     switch (role.toLowerCase()) {
@@ -303,6 +494,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
     }
   }
 
+  // Retained for compatibility with existing private screen helpers.
+  // ignore: unused_element
   Widget _buildMemberCard(
     BuildContext context,
     TeamController controller,
