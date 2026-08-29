@@ -81,7 +81,14 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   Future<void> _delete(int itemId) async {
-    if (!Provider.of<AccessProvider>(context, listen: false).deleteEnabled) {
+    final user = Provider.of<AuthController>(
+      context,
+      listen: false,
+    ).currentUser;
+    if (!Provider.of<AccessProvider>(
+      context,
+      listen: false,
+    ).deleteEnabledForDepartment(user?.department)) {
       return;
     }
     final confirm = await showDialog<bool>(
@@ -218,8 +225,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
         (user.role == 'Admin' ||
             user.role == 'Production' ||
             user.role == 'Management');
-    final canDelete =
-        canEdit && Provider.of<AccessProvider>(context).deleteEnabled;
+    final canDelete = Provider.of<AccessProvider>(
+      context,
+    ).deleteEnabledForDepartment(user?.department);
 
     final screenWidth = MediaQuery.of(context).size.width;
     final isMobile = screenWidth < 900;

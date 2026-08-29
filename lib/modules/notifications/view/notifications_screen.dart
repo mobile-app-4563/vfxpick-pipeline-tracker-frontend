@@ -7,6 +7,7 @@ import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
+import '../../auth/controller/auth_controller.dart';
 import '../controller/notification_controller.dart';
 import '../model/notification_model.dart';
 
@@ -29,7 +30,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   @override
   Widget build(BuildContext context) {
     final controller = context.watch<NotificationController>();
-    final deleteEnabled = context.watch<AccessProvider>().deleteEnabled;
+    final user = context.read<AuthController>().currentUser;
+    final deleteEnabled = context
+        .watch<AccessProvider>()
+        .deleteEnabledForDepartment(user?.department);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

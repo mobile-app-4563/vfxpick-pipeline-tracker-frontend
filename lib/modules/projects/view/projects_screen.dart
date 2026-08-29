@@ -174,8 +174,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   final Set<String> _selectedShotIds = {};
   bool _isDeleting = false;
   bool _isBulkEditing = false;
-  // Global delete kill-switch from the Access Provider page. When false, bulk
-  // delete is hidden for every user.
+  // Per-department delete switch from the Access Provider page. When the
+  // user's department is disabled, bulk delete is hidden for them.
   bool _deleteEnabled = true;
   // Keeps [_deleteEnabled] in sync when an Admin toggles the kill-switch on
   // the Access Provider page while this screen is mounted.
@@ -423,11 +423,15 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         AppConstants.pipelineDepartments.contains(user?.department)
         ? user?.department
         : null;
-    _deleteEnabled = context.read<AccessProvider>().deleteEnabled;
+    _deleteEnabled = context.read<AccessProvider>().deleteEnabledForDepartment(
+      user?.department,
+    );
     final access = context.read<AccessProvider>();
     _deleteEnabledListener = () {
       if (!mounted) return;
-      final enabled = context.read<AccessProvider>().deleteEnabled;
+      final enabled = context.read<AccessProvider>().deleteEnabledForDepartment(
+        user?.department,
+      );
       if (enabled != _deleteEnabled) {
         setState(() => _deleteEnabled = enabled);
       }
@@ -1301,6 +1305,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                         label: '',
                         width: SizeConfig.scaleWidth(context, 48),
                         filterRequired: false,
+                        sortable: false,
                         builder: (context, value, row, rowIndex) {
                           final shot = row['shot'] as ShotModel;
                           final isSelected = _selectedShotIds.contains(
@@ -1323,7 +1328,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     DynamicTableField(
                       key: 'sno',
                       label: 'S.No',
-                      width: SizeConfig.scaleWidth(context, 40),
+                      width: SizeConfig.scaleWidth(context, 70),
                       filterRequired: false,
                       numeric: true,
                     ),

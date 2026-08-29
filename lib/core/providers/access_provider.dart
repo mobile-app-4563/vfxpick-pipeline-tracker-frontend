@@ -80,6 +80,13 @@ class AccessProvider extends ChangeNotifier {
   bool _auditLoaded = false;
   bool _deleteEnabled = true;
   bool _isSavingSettings = false;
+  // Per-department delete switches from the Access Provider page. Keys are
+  // normalized to upper case so lookups are case-insensitive.
+  final Map<String, bool> _departmentDelete = {};
+  // Per-department menu switches from the Access Provider matrix. Keys are
+  // normalized to upper case. A department with no entry yet defaults to
+  // EVERY menu, so brand-new departments keep their users on role defaults.
+  final Map<String, Set<String>> _departmentMenus = {};
   String? _errorMessage;
   String? _auditErrorMessage;
 
@@ -90,6 +97,11 @@ class AccessProvider extends ChangeNotifier {
   bool get auditLoaded => _auditLoaded;
   bool get deleteEnabled => _deleteEnabled;
   bool get isSavingSettings => _isSavingSettings;
+  Map<String, bool> get departmentDelete => Map.unmodifiable(_departmentDelete);
+  Map<String, Set<String>> get departmentMenus => Map.unmodifiable({
+    for (final entry in _departmentMenus.entries)
+      entry.key: Set<String>.unmodifiable(entry.value),
+  });
   List<Map<String, dynamic>> get auditLogs => _auditLogs;
   String? get auditErrorMessage => _auditErrorMessage;
   List<String> get roles {
@@ -149,12 +161,65 @@ class AccessProvider extends ChangeNotifier {
         normalized == AppConstants.roleManagement.toLowerCase();
   }
 
-  Set<String> _effectiveAllowedRoutes(String role) {
-    final allowed = {...(_roleRoutes[role] ?? _artistDefaults)};
+  /// Per-department delete permission: an explicit department switch wins,
+  /// otherwise falls back to the global kill-switch.
+  bool deleteEnabledForDepartment(String? department) {
+    final key = (department ?? '').trim().toUpperCase();
+    if (key.isNotEmpty) {
+      final direct = _departmentDelete[key];
+      if (direct != null) return direct;
+      final normalized = _departmentDelete.entries
+          .where((e) => e.key.toUpperCase() == key)
+          .toList(growable: false);
+      if (normalized.isNotEmpty) return normalized.first.value;
+    }
+    return _deleteEnabled;
+  }
+
+  Set<String> _effectiveAllowedRoutes(String role, {String? department}) {
+    // Unconfigured roles (e.g. a user registered with a brand-new role, often
+    // alongside a new department) default to EVERY menu so they are never
+    // locked out, regardless of department; the admin can fine-tune in the
+    // Access Provider screen.
+    final allowed = {
+      ...(_roleRoutes[role] ?? Set<String>.from(orderedMenuRoutes)),
+    };
     if (isAdminRole(role)) {
       allowed.addAll(orderedMenuRoutes);
+      return allowed;
+    }
+    if (department != null && department.trim().isNotEmpty) {
+      allowed.retainAll(departmentMenuRoutes(department));
     }
     return allowed;
+  }
+
+  /// Routes allowed for [department] at the department level. Departments with
+  /// no explicit rows default to EVERY menu, so brand-new departments keep
+  /// their users on role defaults until the admin toggles menus off.
+  Set<String> departmentMenuRoutes(String? department) {
+    final key = (department ?? '').trim().toUpperCase();
+    if (key.isEmpty) {
+      return Set<String>.from(orderedMenuRoutes);
+    }
+    final direct = _departmentMenus[key];
+    if (direct != null) {
+      return Set<String>.from(direct);
+    }
+    final normalized = _departmentMenus.entries
+        .where((e) => e.key.toUpperCase() == key)
+        .toList(growable: false);
+    if (normalized.isNotEmpty) {
+      return Set<String>.from(normalized.first.value);
+    }
+    return Set<String>.from(orderedMenuRoutes);
+  }
+
+  /// Department-level menu access. Falls back to true (every menu) when the
+  /// department is unknown or not configured.
+  bool hasDepartmentMenuAccess(String? department, String route) {
+    if (department == null || department.trim().isEmpty) return true;
+    return departmentMenuRoutes(department).contains(route);
   }
 
   String labelForRoute(String route, {required String role}) {
@@ -199,18 +264,18 @@ class AccessProvider extends ChangeNotifier {
     }
   }
 
-  List<String> allowedMenuRoutes(String role) {
-    final allowed = _effectiveAllowedRoutes(role);
+  List<String> allowedMenuRoutes(String role, {String? department}) {
+    final allowed = _effectiveAllowedRoutes(role, department: department);
     return orderedMenuRoutes
         .where((route) => allowed.contains(route))
         .toList(growable: false);
   }
 
-  bool canAccessPath(String role, String path) {
+  bool canAccessPath(String role, String path, {String? department}) {
     if (!protectedRoutes.contains(path)) {
       return true;
     }
-    final allowed = _effectiveAllowedRoutes(role);
+    final allowed = _effectiveAllowedRoutes(role, department: department);
     return allowed.contains(path);
   }
 
@@ -249,6 +314,8 @@ class AccessProvider extends ChangeNotifier {
         if (rawDelete is bool) {
           _deleteEnabled = rawDelete;
         }
+        _applyDepartmentDelete(response['departments']);
+        _applyDepartmentMenus(response['departmentMenus']);
         _loadedFromApi = true;
         _errorMessage = null;
         return true;
@@ -407,6 +474,10 @@ class AccessProvider extends ChangeNotifier {
               .toSet()
               .toList(growable: false),
       },
+      'departmentMenus': {
+        for (final department in AppConstants.departments)
+          department: departmentMenuRoutes(department).toList(growable: false),
+      },
     };
   }
 
@@ -438,8 +509,9 @@ class AccessProvider extends ChangeNotifier {
       final raw = response['deleteEnabled'];
       if (raw is bool) {
         _deleteEnabled = raw;
-        notifyListeners();
       }
+      _applyDepartmentDelete(response['departments']);
+      notifyListeners();
       return true;
     } on ApiException catch (e) {
       _errorMessage = e.message;
@@ -450,18 +522,30 @@ class AccessProvider extends ChangeNotifier {
     }
   }
 
-  /// Global kill-switch: when disabled, delete buttons/actions are hidden for
-  /// every user across all modules. Persisted server-side.
-  Future<bool> setDeleteEnabled(bool enabled) async {
-    final previous = _deleteEnabled;
-    _deleteEnabled = enabled;
+  /// Delete switch. Without [department] it acts as the global kill-switch;
+  /// with [department] it toggles delete for that department only.
+  /// Persisted server-side (admin-only endpoint).
+  Future<bool> setDeleteEnabled(bool enabled, {String? department}) async {
+    final normalizedDept = (department ?? '').trim().toUpperCase();
+    final perDepartment = normalizedDept.isNotEmpty;
+    final previousGlobal = _deleteEnabled;
+    final previousDept = perDepartment
+        ? _departmentDelete[normalizedDept]
+        : null;
+    if (perDepartment) {
+      _departmentDelete[normalizedDept] = enabled;
+    } else {
+      _deleteEnabled = enabled;
+    }
     _isSavingSettings = true;
     _errorMessage = null;
     notifyListeners();
     try {
       final response = await _api.put(ApiConstants.accessSettings, {
+        if (perDepartment) 'department': department,
         'deleteEnabled': enabled,
       });
+      _applyDepartmentDelete(response['departments']);
       final raw = response['deleteEnabled'];
       if (raw is bool) {
         _deleteEnabled = raw;
@@ -469,17 +553,112 @@ class AccessProvider extends ChangeNotifier {
       _errorMessage = null;
       return true;
     } on ApiException catch (e) {
-      _deleteEnabled = previous;
+      _rollbackDelete(
+        perDepartment,
+        normalizedDept,
+        previousDept,
+        previousGlobal,
+      );
       _errorMessage = e.message;
       return false;
     } catch (e) {
-      _deleteEnabled = previous;
+      _rollbackDelete(
+        perDepartment,
+        normalizedDept,
+        previousDept,
+        previousGlobal,
+      );
       _errorMessage = e.toString();
       return false;
     } finally {
       _isSavingSettings = false;
       notifyListeners();
     }
+  }
+
+  void _rollbackDelete(
+    bool perDepartment,
+    String dept,
+    bool? previousDept,
+    bool previousGlobal,
+  ) {
+    if (perDepartment) {
+      if (previousDept == null) {
+        _departmentDelete.remove(dept);
+      } else {
+        _departmentDelete[dept] = previousDept;
+      }
+    } else {
+      _deleteEnabled = previousGlobal;
+    }
+  }
+
+  void _applyDepartmentDelete(dynamic raw) {
+    if (raw is! Map) return;
+    _departmentDelete.clear();
+    for (final entry in raw.entries) {
+      final key = entry.key.toString().trim().toUpperCase();
+      if (key.isEmpty) continue;
+      _departmentDelete[key] = entry.value == true;
+    }
+  }
+
+  void _applyDepartmentMenus(dynamic raw) {
+    if (raw is! Map) return;
+    _departmentMenus.clear();
+    for (final entry in raw.entries) {
+      final key = entry.key.toString().trim().toUpperCase();
+      if (key.isEmpty) continue;
+      final rawRoutes = entry.value;
+      if (rawRoutes is List) {
+        final routes = rawRoutes
+            .map((r) => r.toString())
+            .map(_normalizeClientRoute)
+            .where(
+              (r) => orderedMenuRoutes.contains(r) || r == '/user-register',
+            )
+            .toSet();
+        if (routes.isNotEmpty) {
+          _departmentMenus[key] = routes;
+        }
+      }
+    }
+  }
+
+  /// Department-level menu switch for the Access Provider matrix. Mirrors
+  /// [setMenuAccess] with snapshot + rollback on failure.
+  Future<bool> setDepartmentMenuAccess({
+    required String department,
+    required String route,
+    required bool allowed,
+  }) async {
+    if (department.trim().isEmpty) return false;
+    if (!protectedRoutes.contains(route)) return false;
+
+    final normalizedDept = department.trim().toUpperCase();
+    final snapshot = {
+      for (final entry in _departmentMenus.entries) entry.key: {...entry.value},
+    };
+
+    final target = _departmentMenus.putIfAbsent(
+      normalizedDept,
+      () => Set<String>.from(orderedMenuRoutes),
+    );
+    if (allowed) {
+      target.add(route);
+    } else {
+      target.remove(route);
+    }
+    notifyListeners();
+
+    final saved = await savePermissions();
+    if (!saved) {
+      _departmentMenus
+        ..clear()
+        ..addAll(snapshot);
+      notifyListeners();
+    }
+    return saved;
   }
 
   void resetDefaultsLocal() {
@@ -506,6 +685,8 @@ class AccessProvider extends ChangeNotifier {
     if (rawDelete is bool) {
       _deleteEnabled = rawDelete;
     }
+    _applyDepartmentDelete(response['departments']);
+    _applyDepartmentMenus(response['departmentMenus']);
     _applyAuditLogsPayload(response['logs']);
   }
 
@@ -563,6 +744,7 @@ class AccessProvider extends ChangeNotifier {
 
   void _resetDefaults() {
     _roleRoutes.clear();
+    _departmentMenus.clear();
     _roles = List<String>.from(AppConstants.userRoles);
 
     _roleRoutes[AppConstants.roleArtist] = {..._artistDefaults};

@@ -332,7 +332,7 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
           DynamicTableField(
             key: 'sno',
             label: 'S.No',
-            width: SizeConfig.scaleWidth(context, 55),
+            width: SizeConfig.scaleWidth(context, 75),
             numeric: true,
             filterRequired: false,
           ),

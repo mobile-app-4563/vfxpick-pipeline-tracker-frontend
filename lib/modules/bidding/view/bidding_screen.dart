@@ -149,7 +149,7 @@ class _BiddingScreenState extends State<BiddingScreen> {
                             DynamicTableField(
                               key: 'sno',
                               label: 'S.No',
-                              width: SizeConfig.scaleWidth(context, 60),
+                              width: SizeConfig.scaleWidth(context, 75),
                             ),
                             DynamicTableField(
                               key: 'client',

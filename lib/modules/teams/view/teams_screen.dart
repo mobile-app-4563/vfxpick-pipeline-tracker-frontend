@@ -12,6 +12,7 @@ import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/loading_widget.dart';
+import '../../../shared/widgets/sortable_header.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../controller/teams_controller.dart';
 
@@ -24,6 +25,36 @@ class TeamsScreen extends StatefulWidget {
 
 class _TeamsScreenState extends State<TeamsScreen> {
   int _selectedIndex = 0;
+
+  // Role-table column sorting (0 = Member, 1 = Department, 2 = Level).
+  int? _teamSortIndex;
+  bool _teamSortAscending = true;
+
+  void _toggleTeamSort(int index) {
+    setState(() {
+      if (_teamSortIndex == index) {
+        _teamSortAscending = !_teamSortAscending;
+      } else {
+        _teamSortIndex = index;
+        _teamSortAscending = true;
+      }
+    });
+  }
+
+  List<TeamMember> _sortedTeamMembers(List<TeamMember> members) {
+    final index = _teamSortIndex;
+    if (index == null) return members;
+    final sorted = [...members];
+    sorted.sort((a, b) {
+      final cmp = switch (index) {
+        1 => compareCellValues(a.department, b.department),
+        2 => compareCellValues(a.level, b.level),
+        _ => compareCellValues(a.name, b.name),
+      };
+      return _teamSortAscending ? cmp : -cmp;
+    });
+    return sorted;
+  }
 
   @override
   void initState() {
@@ -374,10 +405,11 @@ class _TeamsScreenState extends State<TeamsScreen> {
     TeamController controller,
     List<TeamMember> members,
   ) {
+    final sortedMembers = _sortedTeamMembers(members);
     // Fixed height: the table scrolls vertically inside this area and
     // horizontally when columns exceed the available width.
     final maxHeight = SizeConfig.scaleHeight(context, 480);
-    final contentHeight = (members.length + 1) * 56.0;
+    final contentHeight = (sortedMembers.length + 1) * 56.0;
 
     return Container(
       decoration: BoxDecoration(
@@ -407,18 +439,44 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   width: 1,
                 ),
               ),
-              columns: const [
-                DataColumn(label: Text('Member')),
-                DataColumn(label: Text('Department')),
-                DataColumn(label: Text('Level')),
-                DataColumn(label: Text('Actions')),
+              columns: [
+                DataColumn(
+                  label: SortableHeader(
+                    label: 'Member',
+                    isSorted: _teamSortIndex == 0,
+                    sortAscending: _teamSortAscending,
+                    onTap: () => _toggleTeamSort(0),
+                  ),
+                ),
+                DataColumn(
+                  label: SortableHeader(
+                    label: 'Department',
+                    isSorted: _teamSortIndex == 1,
+                    sortAscending: _teamSortAscending,
+                    onTap: () => _toggleTeamSort(1),
+                  ),
+                ),
+                DataColumn(
+                  label: SortableHeader(
+                    label: 'Level',
+                    isSorted: _teamSortIndex == 2,
+                    sortAscending: _teamSortAscending,
+                    onTap: () => _toggleTeamSort(2),
+                  ),
+                ),
+                const DataColumn(label: Text('Actions')),
               ],
-              rows: members
+              rows: sortedMembers
                   .map((member) {
                     final roleColor = _roleColor(member.role);
                     final deleteEnabled = context
                         .watch<AccessProvider>()
-                        .deleteEnabled;
+                        .deleteEnabledForDepartment(
+                          context
+                              .read<AuthController>()
+                              .currentUser
+                              ?.department,
+                        );
                     return DataRow(
                       cells: [
                         DataCell(Text(member.name)),
@@ -502,7 +560,11 @@ class _TeamsScreenState extends State<TeamsScreen> {
     TeamMember member,
   ) {
     final roleColor = _roleColor(member.role);
-    final deleteEnabled = context.watch<AccessProvider>().deleteEnabled;
+    final deleteEnabled = context
+        .watch<AccessProvider>()
+        .deleteEnabledForDepartment(
+          context.read<AuthController>().currentUser?.department,
+        );
     return GlassContainer.responsive(
       context: context,
       borderRadius: SizeConfig.scaleWidth(context, 12),
@@ -735,7 +797,12 @@ class _TeamsScreenState extends State<TeamsScreen> {
     TeamController controller,
     TeamMember member,
   ) async {
-    if (!context.read<AccessProvider>().deleteEnabled) return;
+    final user = context.read<AuthController>().currentUser;
+    if (!context.read<AccessProvider>().deleteEnabledForDepartment(
+      user?.department,
+    )) {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(

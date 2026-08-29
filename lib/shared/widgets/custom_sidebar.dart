@@ -79,7 +79,13 @@ class _CustomSidebarState extends State<CustomSidebar> {
   }
 
   List<SidebarItem> _getItemsForRole(String role, AccessProvider access) {
-    final routes = access.allowedMenuRoutes(role);
+    // Role menus are intersected with the user's department menus, so an
+    // admin toggling a menu OFF for a department hides it from every user of
+    // that department (role defaults still apply for new departments).
+    final authController = context.read<AuthController>();
+    final user = authController.currentUser;
+    final department = user?.department;
+    final routes = access.allowedMenuRoutes(role, department: department);
     return routes
         .map(
           (route) => SidebarItem(

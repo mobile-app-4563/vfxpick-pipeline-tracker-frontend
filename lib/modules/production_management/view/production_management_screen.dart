@@ -163,12 +163,11 @@ class _ProductionManagementScreenState
 
   // ─── Row / bulk delete state ──────────────────────────────────────────────
   bool _isDeleting = false;
-  // Delete controls (row delete + bulk select) are Admin-only.
-  bool _isAdmin = false;
-  // Global delete kill-switch from the Access Provider page. When false,
-  // delete controls are hidden for every user across all modules.
+  // Delete controls (row delete + bulk select) follow the per-department
+  // delete switch from the Access Provider page: every user whose department
+  // has delete enabled gets the controls.
   bool _deleteEnabled = true;
-  // Keeps [_deleteEnabled] in sync when an Admin toggles the kill-switch on
+  // Keeps [_deleteEnabled] in sync when an Admin toggles the switch on
   // the Access Provider page while this screen is mounted.
   VoidCallback? _deleteEnabledListener;
   // grid_id (shotId) values checked for bulk delete.
@@ -241,19 +240,22 @@ class _ProductionManagementScreenState
   void initState() {
     super.initState();
     _loadGrid();
-    // Delete options (row delete + bulk delete) are only shown to Admins.
+    // Delete options (row delete + bulk delete) follow the per-department
+    // delete switch — every user whose department has it enabled gets them.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final user = context.read<AuthController>().currentUser;
       final access = context.read<AccessProvider>();
       setState(() {
-        _isAdmin = user?.role == AppConstants.roleAdmin;
-        _deleteEnabled = access.deleteEnabled;
+        _deleteEnabled = access.deleteEnabledForDepartment(user?.department);
       });
-      // Keep the kill-switch fresh if toggled on the Access page.
+      // Keep the delete switch fresh if toggled on the Access page.
       _deleteEnabledListener = () {
         if (!mounted) return;
-        final enabled = context.read<AccessProvider>().deleteEnabled;
+        final currentUser = context.read<AuthController>().currentUser;
+        final enabled = context
+            .read<AccessProvider>()
+            .deleteEnabledForDepartment(currentUser?.department);
         if (enabled != _deleteEnabled) {
           setState(() => _deleteEnabled = enabled);
         }
@@ -1318,6 +1320,7 @@ class _ProductionManagementScreenState
       DynamicTableField(
         key: 'sNo',
         label: 'S No',
+        width: SizeConfig.scaleWidth(context, 75),
         numeric: true,
         filterRequired: false,
       ),
@@ -1752,7 +1755,7 @@ class _ProductionManagementScreenState
             ),
           ),
         ),
-        if (_isAdmin && _deleteEnabled && _filteredRows.isNotEmpty) ...[
+        if (_deleteEnabled && _filteredRows.isNotEmpty) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
@@ -1812,12 +1815,13 @@ class _ProductionManagementScreenState
   // ─── Grid fields (all 20 template columns) ───────────────────────────────
   List<DynamicTableField> _buildFields(BuildContext context) {
     return [
-      if (_isAdmin && _deleteEnabled)
+      if (_deleteEnabled)
         DynamicTableField(
           key: 'select',
           label: '',
           width: SizeConfig.scaleWidth(context, 48),
           filterRequired: false,
+          sortable: false,
           builder: (context, value, row, rowIndex) {
             final gridId = row['shotId']?.toString() ?? '';
             final isSelected = _selectedGridIds.contains(gridId);
@@ -1838,7 +1842,7 @@ class _ProductionManagementScreenState
       DynamicTableField(
         key: 'sNo',
         label: 'S No',
-        // width: SizeConfig.scaleWidth(context, 20),
+        width: SizeConfig.scaleWidth(context, 70),
         numeric: true,
         filterRequired: false,
       ),
@@ -1897,7 +1901,7 @@ class _ProductionManagementScreenState
       ),
       _editableField(context, 'flEta', 'FL ETA', 110, isDate: true),
       _editableField(context, 'flMandays', 'FL Man-days', 110, numeric: true),
-      if (_isAdmin && _deleteEnabled)
+      if (_deleteEnabled)
         DynamicTableField(
           key: 'actions',
           label: 'Actions',

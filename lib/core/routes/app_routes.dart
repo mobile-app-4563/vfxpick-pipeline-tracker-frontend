@@ -35,6 +35,7 @@ class AppRoutes {
 
         final isLoggedIn = authController.isAuthenticated;
         final role = authController.currentUser?.role ?? '';
+        final department = authController.currentUser?.department;
         final path = state.uri.path;
         final isGoingToAuth = path == '/login' || path == '/register';
 
@@ -45,7 +46,8 @@ class AppRoutes {
 
         if (!isLoggedIn && !isGoingToAuth) return '/login';
         if (isLoggedIn && isGoingToAuth) return '/home';
-        if (isLoggedIn && !accessProvider.canAccessPath(role, path)) {
+        if (isLoggedIn &&
+            !accessProvider.canAccessPath(role, path, department: department)) {
           return '/home';
         }
         return null;

@@ -727,7 +727,7 @@ class _ArtistPortalState extends State<_ArtistPortal> {
                     DynamicTableField(
                       key: 'sno',
                       label: 'S.No',
-                      width: SizeConfig.scaleWidth(context, 60),
+                      width: SizeConfig.scaleWidth(context, 75),
                       numeric: true,
                       filterRequired: false,
                     ),
@@ -1185,7 +1185,7 @@ class _DepartmentViewState extends State<_DepartmentView> {
                   DynamicTableField(
                     key: 'sno',
                     label: 'S.No',
-                    width: SizeConfig.scaleWidth(context, 48),
+                    width: SizeConfig.scaleWidth(context, 75),
                     numeric: true,
                     filterRequired: false,
                   ),
@@ -1859,7 +1859,7 @@ class _ProductionViewState extends State<_ProductionView> {
                   DynamicTableField(
                     key: 'sNo',
                     label: 'S No',
-                    width: SizeConfig.scaleWidth(context, 56),
+                    width: SizeConfig.scaleWidth(context, 75),
                     numeric: true,
                     filterRequired: false,
                   ),

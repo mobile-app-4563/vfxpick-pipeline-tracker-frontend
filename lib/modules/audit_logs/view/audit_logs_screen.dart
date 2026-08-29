@@ -6,6 +6,7 @@ import '../../../core/providers/access_provider.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
+import '../../../shared/widgets/sortable_header.dart';
 import '../../auth/controller/auth_controller.dart';
 
 class AuditLogsScreen extends StatefulWidget {
@@ -114,13 +115,71 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
   }
 }
 
-class _AuditLogTable extends StatelessWidget {
+class _AuditLogTable extends StatefulWidget {
   final List<Map<String, dynamic>> logs;
 
   const _AuditLogTable({required this.logs});
 
   @override
+  State<_AuditLogTable> createState() => _AuditLogTableState();
+}
+
+class _AuditLogTableState extends State<_AuditLogTable> {
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
+  void _toggleSort(int index) {
+    setState(() {
+      if (_sortColumnIndex == index) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortColumnIndex = index;
+        _sortAscending = true;
+      }
+    });
+  }
+
+  dynamic _sortValue(int index, Map<String, dynamic> row) {
+    switch (index) {
+      case 0:
+        return row['module'] ?? 'Access Provider';
+      case 1:
+        return row['entityType'] ?? row['route'] ?? '-';
+      case 2:
+        return row['action'] ?? '-';
+      case 3:
+        return row['role'] ?? '-';
+      case 4:
+        return row['changedByUsername'] ?? row['changedByUserId'] ?? '-';
+      case 5:
+        return row['newAllowed'] is bool ? row['newAllowed'] : '-';
+      case 6:
+        if (row['details'] is Map) {
+          return (row['details'] as Map).entries
+              .map((entry) => '${entry.key}: ${entry.value}')
+              .join(', ');
+        }
+        return '-';
+      case 7:
+      default:
+        return row['changedAt'] ?? '';
+    }
+  }
+
+  List<Map<String, dynamic>> get _sortedLogs {
+    final index = _sortColumnIndex;
+    if (index == null) return widget.logs;
+    final sorted = [...widget.logs];
+    sorted.sort((a, b) {
+      final cmp = compareCellValues(_sortValue(index, a), _sortValue(index, b));
+      return _sortAscending ? cmp : -cmp;
+    });
+    return sorted;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final sortedLogs = _sortedLogs;
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
@@ -148,17 +207,73 @@ class _AuditLogTable extends StatelessWidget {
                     width: 1,
                   ),
                 ),
-                columns: const [
-                  DataColumn(label: Text('Module')),
-                  DataColumn(label: Text('Entity')),
-                  DataColumn(label: Text('Action')),
-                  DataColumn(label: Text('Role')),
-                  DataColumn(label: Text('Username')),
-                  DataColumn(label: Text('Change')),
-                  DataColumn(label: Text('Details')),
-                  DataColumn(label: Text('Changed At')),
+                columns: [
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Module',
+                      isSorted: _sortColumnIndex == 0,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(0),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Entity',
+                      isSorted: _sortColumnIndex == 1,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(1),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Action',
+                      isSorted: _sortColumnIndex == 2,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(2),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Role',
+                      isSorted: _sortColumnIndex == 3,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(3),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Username',
+                      isSorted: _sortColumnIndex == 4,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(4),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Change',
+                      isSorted: _sortColumnIndex == 5,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(5),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Details',
+                      isSorted: _sortColumnIndex == 6,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(6),
+                    ),
+                  ),
+                  DataColumn(
+                    label: SortableHeader(
+                      label: 'Changed At',
+                      isSorted: _sortColumnIndex == 7,
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(7),
+                    ),
+                  ),
                 ],
-                rows: logs
+                rows: sortedLogs
                     .map((row) {
                       final hasPermissionChange = row['oldAllowed'] is bool;
                       final enabled = row['newAllowed'] == true;

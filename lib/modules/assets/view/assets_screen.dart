@@ -9,6 +9,7 @@ import '../../../core/services/asset_service.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/loading_widget.dart';
+import '../../auth/controller/auth_controller.dart';
 
 class AssetsScreen extends StatefulWidget {
   const AssetsScreen({super.key});
@@ -47,7 +48,12 @@ class _AssetsScreenState extends State<AssetsScreen> {
   }
 
   Future<void> _delete(AttachmentModel a) async {
-    if (!context.read<AccessProvider>().deleteEnabled) return;
+    final user = context.read<AuthController>().currentUser;
+    if (!context.read<AccessProvider>().deleteEnabledForDepartment(
+      user?.department,
+    )) {
+      return;
+    }
     try {
       await _service.deleteAsset(a.attachmentId);
       await _load();
@@ -100,7 +106,10 @@ class _AssetsScreenState extends State<AssetsScreen> {
         onActionPressed: _load,
       );
     }
-    final deleteEnabled = context.watch<AccessProvider>().deleteEnabled;
+    final user = context.read<AuthController>().currentUser;
+    final deleteEnabled = context
+        .watch<AccessProvider>()
+        .deleteEnabledForDepartment(user?.department);
     if (_assets.isEmpty) {
       return const EmptyStateWidget(
         icon: Icons.folder_outlined,

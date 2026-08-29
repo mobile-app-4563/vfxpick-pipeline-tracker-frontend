@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/utils/size_config.dart';
 import 'filter_icon.dart';
+import 'sortable_header.dart';
 
 typedef DynamicFieldBuilder =
     Widget Function(
@@ -19,6 +20,10 @@ class DynamicTableField {
   final List<FilterOption>? filterOptions;
   final bool? filterRequired;
 
+  /// When false the column header shows no sort arrow and tapping it does
+  /// nothing — used for checkbox/selection columns.
+  final bool sortable;
+
   DynamicTableField({
     required this.key,
     required this.label,
@@ -27,6 +32,7 @@ class DynamicTableField {
     this.builder,
     this.filterOptions,
     this.filterRequired,
+    this.sortable = true,
   });
 }
 
@@ -94,6 +100,21 @@ class DynamicDataTable extends StatefulWidget {
 class _DynamicDataTableState extends State<DynamicDataTable> {
   int _internalPage = 0;
 
+  // Column sorting state: the index (into widget.fields) of the active sort
+  // column and its direction. Tapping a column header toggles ascending /
+  // descending; tapping a different column starts ascending on it.
+  int? _sortColumnIndex;
+  bool _sortAscending = true;
+
+  // Cached sorted row list — recomputed only when the source list, its
+  // length, or the sort state changes, so repeated builds never re-sort the
+  // full row list (sorting is O(n log n), but grid builds are frequent).
+  List<Map<String, dynamic>>? _cachedSortedRows;
+  List<Map<String, dynamic>>? _cachedSortedSource;
+  int _cachedSortedSourceLength = -1;
+  int? _cachedSortedIndex;
+  bool _cachedSortedAscending = true;
+
   // Cached visible-page slice — recomputed only when the page, page size, or
   // the source row list (identity/length) changes, so repeated builds never
   // re-slice/re-parse the full row list (e.g. 10-row pages with hundreds of
@@ -156,10 +177,66 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
       ? (widget.rows.length / widget.rowsPerPage).ceil()
       : 1;
 
+  /// Applies the active column sort to [source], returning a cached sorted
+  /// copy when sorting is active (null-safe, type-aware via [compareCellValues])
+  /// or the original list when no sort column is selected.
+  List<Map<String, dynamic>> _applySort(List<Map<String, dynamic>> source) {
+    final index = _sortColumnIndex;
+    final active =
+        index != null &&
+        index >= 0 &&
+        index < widget.fields.length &&
+        widget.fields[index].sortable;
+    if (!active) {
+      _cachedSortedRows = null;
+      return source;
+    }
+    if (_cachedSortedRows != null &&
+        identical(_cachedSortedSource, source) &&
+        _cachedSortedSourceLength == source.length &&
+        _cachedSortedIndex == index &&
+        _cachedSortedAscending == _sortAscending) {
+      return _cachedSortedRows!;
+    }
+    final field = widget.fields[index];
+    final sorted = [...source]
+      ..sort((a, b) {
+        final cmp = compareCellValues(a[field.key], b[field.key]);
+        return _sortAscending ? cmp : -cmp;
+      });
+    _cachedSortedRows = sorted;
+    _cachedSortedSource = source;
+    _cachedSortedSourceLength = source.length;
+    _cachedSortedIndex = index;
+    _cachedSortedAscending = _sortAscending;
+    return sorted;
+  }
+
+  void _toggleSort(DynamicTableField field) {
+    if (!field.sortable) return;
+    final index = widget.fields.indexOf(field);
+    if (index < 0) return;
+    setState(() {
+      if (_sortColumnIndex == index) {
+        _sortAscending = !_sortAscending;
+      } else {
+        _sortColumnIndex = index;
+        _sortAscending = true;
+      }
+    });
+  }
+
+  bool _isFieldSorted(DynamicTableField field) {
+    if (!field.sortable) return false;
+    return _sortColumnIndex != null &&
+        widget.fields.indexOf(field) == _sortColumnIndex;
+  }
+
   List<Map<String, dynamic>> get _visibleRows {
     final page = _effectivePage;
-    if (widget.rowsPerPage <= 0 || widget.rows.length <= widget.rowsPerPage) {
-      return widget.rows;
+    final source = _applySort(widget.rows);
+    if (widget.rowsPerPage <= 0 || source.length <= widget.rowsPerPage) {
+      return source;
     }
 
     // Cache the sliced page rows: repeated builds (page flips, filter
@@ -169,31 +246,31 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     if (_cachedVisibleRows != null &&
         _cachedVisiblePage == page &&
         _cachedVisibleRowsPerPage == widget.rowsPerPage &&
-        _cachedVisibleSourceLength == widget.rows.length &&
-        identical(_cachedVisibleSourceRows, widget.rows)) {
+        _cachedVisibleSourceLength == source.length &&
+        identical(_cachedVisibleSourceRows, source)) {
       return _cachedVisibleRows!;
     }
 
     final start = page * widget.rowsPerPage;
-    final end = (start + widget.rowsPerPage).clamp(0, widget.rows.length);
+    final end = (start + widget.rowsPerPage).clamp(0, source.length);
     List<Map<String, dynamic>> visible;
-    if (start >= widget.rows.length) {
+    if (start >= source.length) {
       if (widget.currentPage != null && widget.onPageChanged != null) {
         widget.onPageChanged!(0);
-        visible = widget.rows.take(widget.rowsPerPage).toList();
+        visible = source.take(widget.rowsPerPage).toList();
       } else {
         _internalPage = 0;
-        visible = widget.rows.take(widget.rowsPerPage).toList();
+        visible = source.take(widget.rowsPerPage).toList();
       }
     } else {
-      visible = widget.rows.sublist(start, end);
+      visible = source.sublist(start, end);
     }
 
     _cachedVisibleRows = visible;
     _cachedVisiblePage = page;
     _cachedVisibleRowsPerPage = widget.rowsPerPage;
-    _cachedVisibleSourceRows = widget.rows;
-    _cachedVisibleSourceLength = widget.rows.length;
+    _cachedVisibleSourceRows = source;
+    _cachedVisibleSourceLength = source.length;
     return visible;
   }
 
@@ -254,19 +331,27 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         columns: tableFields.map((field) {
           return DataColumn(
             numeric: field.numeric,
-            label: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    field.label,
-                    textAlign: TextAlign.center,
-                    softWrap: false,
-                    overflow: TextOverflow.visible,
+            label: field.sortable
+                ? SortableHeader(
+                    label: field.label,
+                    isSorted: _isFieldSorted(field),
+                    sortAscending: _sortAscending,
+                    onTap: () => _toggleSort(field),
+                    center: true,
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          field.label,
+                          textAlign: TextAlign.center,
+                          softWrap: false,
+                          overflow: TextOverflow.visible,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           );
         }).toList(),
         rows: List<DataRow>.generate(tableRows.length, (index) {
@@ -362,12 +447,22 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
               horizontal: SizeConfig.scaleWidth(context, 6),
               vertical: SizeConfig.scaleHeight(context, 8),
             ),
-            child: Text(
-              field.label,
-              textAlign: TextAlign.center,
-              softWrap: true,
-              style: headerStyle,
-            ),
+            child: field.sortable
+                ? SortableHeader(
+                    label: field.label,
+                    isSorted: _isFieldSorted(field),
+                    sortAscending: _sortAscending,
+                    onTap: () => _toggleSort(field),
+                    style: headerStyle,
+                    center: true,
+                    wrap: true,
+                  )
+                : Text(
+                    field.label,
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: headerStyle,
+                  ),
           ),
       ],
     );
@@ -502,12 +597,22 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
               horizontal: SizeConfig.scaleWidth(context, 6),
               vertical: SizeConfig.scaleHeight(context, 8),
             ),
-            child: Text(
-              field.label,
-              textAlign: TextAlign.center,
-              softWrap: true,
-              style: headerStyle,
-            ),
+            child: field.sortable
+                ? SortableHeader(
+                    label: field.label,
+                    isSorted: _isFieldSorted(field),
+                    sortAscending: _sortAscending,
+                    onTap: () => _toggleSort(field),
+                    style: headerStyle,
+                    center: true,
+                    wrap: true,
+                  )
+                : Text(
+                    field.label,
+                    textAlign: TextAlign.center,
+                    softWrap: true,
+                    style: headerStyle,
+                  ),
           ),
       ],
     );
