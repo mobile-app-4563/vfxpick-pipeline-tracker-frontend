@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_picker/file_picker.dart';
@@ -158,8 +157,11 @@ class _ProductionManagementScreenState
   bool _isSyncing = false;
   bool _isExporting = false;
   int _page = 0;
-  // The grid renders ALL rows on a single page (no pagination); the page
-  // plumbing is kept so DynamicDataTable's controlled-page mode stays intact.
+
+  // Only 10 rows per page — matches the Projects grid. The table slices rows
+  // internally, so every page stays light (filters / sorting still run over
+  // the full list, but only 10 rows are ever rendered at once).
+  static const int _rowsPerPage = 10;
 
   // ─── Row / bulk delete state ──────────────────────────────────────────────
   bool _isDeleting = false;
@@ -1291,9 +1293,13 @@ class _ProductionManagementScreenState
               ],
             ),
           ),
-          _paginationBar(context, _previewPage, previewRows.length, (p) {
-            setState(() => _previewPage = p);
-          }, rowsPerPage: previewRows.length),
+          _paginationBar(
+            context,
+            _previewPage,
+            previewRows.length,
+            (p) => setState(() => _previewPage = p),
+            rowsPerPage: _rowsPerPage,
+          ),
           DynamicDataTable(
             currentPage: _previewPage,
             onPageChanged: (p) => setState(() => _previewPage = p),
@@ -1303,8 +1309,8 @@ class _ProductionManagementScreenState
             dataRowMaxHeight: MediaQuery.of(context).size.height * 62 / 768,
             fields: _buildImportPreviewFields(context),
             rows: previewRows,
-            // Show ALL imported rows at once (N records, no 10-row cap).
-            rowsPerPage: math.max(previewRows.length, 1),
+            // 10 rows per page — same as the Projects grid.
+            rowsPerPage: _rowsPerPage,
             showCellBorders: true,
             // Sit flush against the container's green border (no gap).
             padding: EdgeInsets.zero,
@@ -2000,13 +2006,13 @@ class _ProductionManagementScreenState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // All filtered rows on one page — the bar auto-hides.
+          // 10 rows per page, same as the Projects grid.
           _paginationBar(
             context,
             _page,
             filteredRows.length,
             _changeGridPage,
-            rowsPerPage: filteredRows.length,
+            rowsPerPage: _rowsPerPage,
           ),
           _withGridParsingOverlay(
             isLoading: _isGridChanging,
@@ -2020,8 +2026,8 @@ class _ProductionManagementScreenState
               fields: _buildFields(context),
               rows: filteredRows,
               onFilterChanged: _applyColumnFilter,
-              // No pagination — the full data set is shown at once.
-              rowsPerPage: math.max(filteredRows.length, 1),
+              // 10 rows per page — same as the Projects grid.
+              rowsPerPage: _rowsPerPage,
               showCellBorders: _showCellBorders,
               // Sit flush against the container's green border (no gap).
               padding: EdgeInsets.zero,

@@ -682,7 +682,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
 
     return Wrap(
-      alignment: WrapAlignment.center,
+      alignment: WrapAlignment.start,
       crossAxisAlignment: WrapCrossAlignment.center,
       spacing: SizeConfig.scaleWidth(context, 12),
       runSpacing: SizeConfig.scaleHeight(context, 12),
@@ -691,7 +691,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.brandGreen,
             foregroundColor: Colors.white,
-            fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+            fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
                 SizeConfig.scaleWidth(context, 2),
@@ -709,7 +709,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         ),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+            fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
                 SizeConfig.scaleWidth(context, 2),
@@ -724,7 +724,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         ),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+            fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
                 SizeConfig.scaleWidth(context, 2),
@@ -739,12 +739,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               : const Icon(Icons.upload_file_outlined),
           label: const Text('Import File'),
         ),
-        if (_isBulkDeleteMode) ...[
+        // Delete/Cancel appear as soon as any row is checked — like the
+        // Production module (checkbox column is always visible).
+        if (_isBulkDeleteMode || _selectedShotIds.isNotEmpty) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               backgroundColor: Colors.red.shade50,
               foregroundColor: Colors.red,
-              fixedSize: SizeConfig.buttonFixedSize(context, 180, 40),
+              fixedSize: SizeConfig.buttonFixedSize(context, 130, 40),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(
                   SizeConfig.scaleWidth(context, 2),
@@ -834,7 +836,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandGreen,
               foregroundColor: Colors.white,
-              fixedSize: SizeConfig.buttonFixedSize(context, 200, 40),
+              fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(
                   SizeConfig.scaleWidth(context, 2),
@@ -905,9 +907,33 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
         ),
 
-        // Hidden while bulk-delete mode is active (checkbox column replaces
-        // it in the toolbar with Delete/Cancel actions).
-        if (_deleteEnabled && !_isBulkDeleteMode) ...[
+        // Always visible while delete is enabled — mirrors the Production
+        // module. Toggles every visible row's checkbox (no mode needed).
+        if (_deleteEnabled && (_cachedFilteredRows?.isNotEmpty ?? false)) ...[
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
+              ),
+            ),
+            onPressed:
+                _isDeleting || _isImporting || _isExporting || _isSavingImport
+                ? null
+                : _toggleSelectAllShots,
+            icon: const Icon(Icons.select_all),
+            label: Text(
+              _allFilteredShotsSelected ? 'Deselect All' : 'Select All',
+            ),
+          ),
+        ],
+        // Entry point into bulk-delete mode; hidden once a selection exists
+        // (the Delete/Cancel buttons take over then).
+        if (_deleteEnabled &&
+            !_isBulkDeleteMode &&
+            _selectedShotIds.isEmpty) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.red,
@@ -1303,7 +1329,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   showCellBorders: _showCellBorders,
                   // frozenColumnCount: _isBulkDeleteMode ? 6 : 5,
                   fields: [
-                    if (_isBulkDeleteMode || _isBulkEditMode)
+                    // Single-select checkbox per row — always visible when
+                    // delete is enabled (mirrors the Production module).
+                    if (_deleteEnabled)
                       DynamicTableField(
                         key: 'select',
                         label: '',
@@ -2558,6 +2586,38 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   static String _normalizeChipValue(String s) {
     final t = s.toLowerCase();
     return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
+  }
+
+  /// True when every currently-visible (filtered) shot is selected — drives
+  /// the Select All / Deselect All toggle label.
+  bool get _allFilteredShotsSelected {
+    final rows = _cachedFilteredRows;
+    if (rows == null || rows.isEmpty) return false;
+    return rows.every((row) {
+      final shot = row['shot'] as ShotModel;
+      return _selectedShotIds.contains(shot.shotId);
+    });
+  }
+
+  /// Selects every visible (filtered) shot; when they're all selected already
+  /// it deselects them instead.
+  void _toggleSelectAllShots() {
+    setState(() {
+      final rows = _cachedFilteredRows;
+      if (rows == null || rows.isEmpty) return;
+      final allSelected = rows.every((row) {
+        final shot = row['shot'] as ShotModel;
+        return _selectedShotIds.contains(shot.shotId);
+      });
+      for (final row in rows) {
+        final shot = row['shot'] as ShotModel;
+        if (allSelected) {
+          _selectedShotIds.remove(shot.shotId);
+        } else {
+          _selectedShotIds.add(shot.shotId);
+        }
+      }
+    });
   }
 
   Future<void> _confirmBulkEdit(
