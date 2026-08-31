@@ -675,10 +675,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Widget _importActions(BuildContext context, ProjectController controller) {
-    final canImport =
-        _canCreateShot &&
-        controller.selectedShowId != ProjectController.allOption &&
-        controller.selectedDepartment != ProjectController.allOption;
+    final canImport = _canCreateShot;
 
     if (!_canCreateShot) {
       return const SizedBox.shrink();
@@ -761,7 +758,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             icon: _isDeleting
                 ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
                 : const Icon(Icons.delete_forever_outlined),
-            label: Text('Delete (${_selectedShotIds.length})'),
+            label: Text(
+              'Delete (${_selectedShotIds.length})',
+              style: TextStyle(
+                color: !_deleteEnabled ? Colors.grey : Colors.red,
+              ),
+            ),
           ),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
@@ -903,7 +905,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
         ),
 
-        if (_deleteEnabled) ...[
+        // Hidden while bulk-delete mode is active (checkbox column replaces
+        // it in the toolbar with Delete/Cancel actions).
+        if (_deleteEnabled && !_isBulkDeleteMode) ...[
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: Colors.red,
@@ -1910,7 +1914,37 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
+  /// Resolves the show/department the import rows will be written to.
+  ///
+  /// When the toolbar filter already has a specific show + department the
+  /// import proceeds with those. When either is on "All", a small picker asks
+  /// the user for the target before any parsing/saving happens — so imports
+  /// are never blocked by the current filter selection.
+  Future<_ImportTargetResult?> _resolveImportTarget(
+    ProjectController controller,
+  ) async {
+    final showSpecific =
+        controller.selectedShowId != null &&
+        controller.selectedShowId != ProjectController.allOption;
+    final deptSpecific =
+        controller.selectedDepartment != null &&
+        controller.selectedDepartment != ProjectController.allOption;
+    if (showSpecific && deptSpecific) {
+      return _ImportTargetResult(
+        showId: controller.selectedShowId!,
+        department: controller.selectedDepartment!,
+      );
+    }
+    if (!mounted) return null;
+    return showDialog<_ImportTargetResult>(
+      context: context,
+      builder: (dialogContext) => _ImportTargetDialog(controller: controller),
+    );
+  }
+
   Future<void> _pickAndParseExcel(ProjectController controller) async {
+    final target = await _resolveImportTarget(controller);
+    if (target == null || !mounted) return;
     setState(() => _isImporting = true);
     try {
       final result = await FilePicker.pickFiles(
@@ -1936,8 +1970,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           await compute(_parseAndSaveImportInIsolate, <String, dynamic>{
             'bytes': bytes,
             'extension': extension,
-            'showId': controller.selectedShowId ?? '',
-            'department': controller.selectedDepartment ?? '',
+            'showId': target.showId,
+            'department': target.department,
             'shotStatuses': AppConstants.shotStatuses,
             'baseUrl': ApiConstants.baseUrl,
             'endpoint': ApiConstants.projectShotsBulkUpsert,
@@ -2044,6 +2078,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Future<void> _openPasteCsvDialog(ProjectController controller) async {
+    final target = await _resolveImportTarget(controller);
+    if (target == null || !mounted) return;
     _csvPasteController.clear();
     final shouldImport = await showDialog<bool>(
       context: context,
@@ -2107,8 +2143,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       // Parse the pasted CSV in a background isolate so the UI never janks.
       final rows = await compute(_parseCsvTextInIsolate, <String, dynamic>{
         'text': _csvPasteController.text,
-        'showId': controller.selectedShowId ?? '',
-        'department': controller.selectedDepartment ?? '',
+        'showId': target.showId,
+        'department': target.department,
         'shotStatuses': AppConstants.shotStatuses,
       });
       if (!mounted) return;
@@ -5429,6 +5465,136 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Resolved show/department that imported rows will be saved under.
+class _ImportTargetResult {
+  final String showId;
+  final String department;
+
+  const _ImportTargetResult({required this.showId, required this.department});
+}
+
+/// Asks the user which show (and optionally department) imported rows should
+/// be written to when the toolbar filter is left on "All".
+class _ImportTargetDialog extends StatefulWidget {
+  final ProjectController controller;
+
+  const _ImportTargetDialog({required this.controller});
+
+  @override
+  State<_ImportTargetDialog> createState() => _ImportTargetDialogState();
+}
+
+class _ImportTargetDialogState extends State<_ImportTargetDialog> {
+  /// Sentinel department option: let rows use the file's department column,
+  /// leaving the department blank when the file has no such column.
+  static const String _deptFromFile = '(from file / blank)';
+
+  late String? _showId;
+  late String _department;
+
+  @override
+  void initState() {
+    super.initState();
+    final shows = widget.controller.shows;
+    final curShow = widget.controller.selectedShowId;
+    final hasSpecificShow =
+        curShow != null &&
+        curShow != ProjectController.allOption &&
+        shows.any((s) => s.showId == curShow);
+    _showId = hasSpecificShow
+        ? curShow
+        : (shows.isEmpty ? null : shows.first.showId);
+    final curDept = widget.controller.selectedDepartment;
+    _department = (curDept != null && curDept != ProjectController.allOption)
+        ? curDept
+        : _deptFromFile;
+  }
+
+  String _showLabel(String showId) {
+    try {
+      return widget.controller.shows
+          .firstWhere((s) => s.showId == showId)
+          .showName;
+    } catch (_) {
+      return showId;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shows = widget.controller.shows;
+    final departments = widget.controller.departments;
+    return AlertDialog(
+      title: const Text('Import Target'),
+      content: SizedBox(
+        width: SizeConfig.scaleWidth(context, 400),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'The toolbar filter is on "All" — pick the show the imported '
+              'rows should be saved to:',
+              style: TextStyle(fontSize: 13),
+            ),
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            if (shows.isEmpty)
+              const Text(
+                'No shows available. Create a show first.',
+                style: TextStyle(color: Colors.red, fontSize: 13),
+              )
+            else
+              CustomDropdown<String>(
+                labelText: 'Show',
+                value: _showId,
+                items: shows.map((s) => s.showId).toList(growable: false),
+                itemToString: _showLabel,
+                onChanged: (v) => setState(() => _showId = v),
+              ),
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            CustomDropdown<String>(
+              labelText: 'Department',
+              value: _department,
+              items: [_deptFromFile, ...departments],
+              itemToString: (v) => v,
+              onChanged: (v) =>
+                  setState(() => _department = v ?? _deptFromFile),
+            ),
+            SizedBox(height: SizeConfig.scaleHeight(context, 6)),
+            const Text(
+              'Rows use the department column from the file when present; '
+              'otherwise this department is applied.',
+              style: TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.brandGreen,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: _showId == null
+              ? null
+              : () => Navigator.pop(
+                  context,
+                  _ImportTargetResult(
+                    showId: _showId!,
+                    department: _department == _deptFromFile ? '' : _department,
+                  ),
+                ),
+          child: const Text('Continue'),
+        ),
+      ],
     );
   }
 }

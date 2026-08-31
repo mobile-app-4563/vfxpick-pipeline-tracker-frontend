@@ -1704,7 +1704,7 @@ class _ProductionManagementScreenState
         ),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 170, 40),
+            fixedSize: SizeConfig.buttonFixedSize(context, 100, 40),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(
                 SizeConfig.scaleWidth(context, 2),

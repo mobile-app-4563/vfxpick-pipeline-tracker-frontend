@@ -61,8 +61,15 @@ class HomeController extends ChangeNotifier {
   String? get inventActiveError => _inventActiveError;
   String? get productionError => _productionError;
 
-  /// Fetch today's pickouts from the API
-  Future<void> fetchTodaysPickouts() async {
+  /// Fetch today's pickouts from the API.
+  ///
+  /// [role]/[department] (the current user's) decide whether the production
+  /// concerns request should fire at all: the concerns card is only shown to
+  /// Production-department users and broad-access roles (Admin/Production/
+  /// Management), and the backend returns 403 for everyone else. Firing it
+  /// unconditionally produced a guaranteed 403 on every Home load for other
+  /// roles (Supervisor/Team Lead/Artist), so it is gated here.
+  Future<void> fetchTodaysPickouts({String? role, String? department}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -84,11 +91,16 @@ class HomeController extends ChangeNotifier {
       _todaysPickouts.sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
       _errorMessage = null;
 
-      // ── Fire insights + invent-active + production concerns in PARALLEL ───
+      final canAccessProduction =
+          AppConstants.broadAccessRoles.contains(role) ||
+          department == 'Production';
+
+      // ── Fire insights + invent-active (+ production concerns when the
+      //    user has production access) in PARALLEL ──────────────────────────
       await Future.wait([
         fetchInsights(),
         fetchInventActiveShows(),
-        fetchProductionConcerns(),
+        if (canAccessProduction) fetchProductionConcerns(),
       ]);
     } catch (e) {
       _errorMessage = 'Failed to load today\'s pickouts: $e';

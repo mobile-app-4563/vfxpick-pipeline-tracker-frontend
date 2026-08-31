@@ -10,7 +10,6 @@ import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
 import '../../../shared/widgets/glass_container.dart';
-import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/gradient_button.dart';
 import '../controller/auth_controller.dart';
 
@@ -106,12 +105,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (role == _addRoleOption) {
       final newRole = await _showAddRoleDialog();
       if (!mounted || newRole == null) return;
+
+      // Sync the new role to the backend so it appears in the registration
+      // options and the Access Provider matrix.  Requires a broad-access
+      // session; when not logged in (fresh registration) the role is still
+      // selected locally and gets persisted by the backend on register.
+      var synced = false;
+      try {
+        await ApiController.instance.post(ApiConstants.authAddRole, {
+          'role': newRole,
+        });
+        synced = true;
+        // Cache was busted server-side — refresh global options so all
+        // screens (dropdowns, access matrix) see the new role immediately.
+        final options = await ApiController.instance.get(
+          ApiConstants.authOptions,
+        );
+        AppConstants.applyDynamicOptions(options);
+      } catch (_) {
+        // 401/403 when not signed in — still allow local selection.
+        synced = false;
+      }
+      if (!mounted) return;
+
       setState(() {
         if (!_roleOptions.contains(newRole)) {
           _roleOptions.add(newRole);
         }
         _selectedRole = newRole;
       });
+
+      if (!synced) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Role added locally. It will sync to the server after registration.',
+            ),
+          ),
+        );
+      }
       return;
     }
 
@@ -372,279 +404,150 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  Widget _buildFieldCard({
-    required BuildContext context,
-    required String title,
-    required Widget child,
-    Widget? footer,
-  }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Container(
-      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 14)),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.03),
-        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 14)),
-        border: GradientBoxBorder(gradient: AppColors.brandGradient, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: SizeConfig.fontSize(context, 11),
-              letterSpacing: 1.1,
-              fontWeight: FontWeight.w700,
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.85)
-                  : Colors.black.withValues(alpha: 0.72),
-            ),
-          ),
-          SizedBox(height: SizeConfig.scaleHeight(context, 10)),
-          child,
-          if (footer != null) ...[
-            SizedBox(height: SizeConfig.scaleHeight(context, 10)),
-            footer,
-          ],
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
-    final isDesktop = screenWidth >= 1024;
-    final cardWidth = isDesktop
-        ? 1040.0
+
+    final horizontalPadding = SizeConfig.scaleWidth(
+      context,
+      screenWidth >= 900 ? 40 : 16,
+    );
+
+    final spacing = SizeConfig.scaleWidth(context, 12);
+
+    // Centered glass card that contains the form.
+    final containerWidth = screenWidth >= 900
+        ? 580.0
         : (screenWidth - 32).clamp(300.0, 760.0);
+    final containerPadding = SizeConfig.scaleWidth(
+      context,
+      screenWidth >= 900 ? 36 : 20,
+    );
+
     final authController = Provider.of<AuthController>(context);
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [Color(0xFF040814), Color(0xFF07142A), Color(0xFF0A1F3D)],
-          ),
-        ),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            child: Padding(
-              padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 24)),
-              child: GlassContainer(
-                width: cardWidth,
-                borderRadius: SizeConfig.scaleWidth(context, 20),
-                padding: EdgeInsets.all(
-                  isDesktop
-                      ? SizeConfig.scaleWidth(context, 40)
-                      : SizeConfig.scaleWidth(context, 24),
-                ),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      isDesktop
-                          ? Row(
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.arrow_back),
-                                  onPressed: () => context.go('/login'),
-                                ),
-                                SizedBox(
-                                  width: SizeConfig.scaleWidth(context, 8),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Create Studio Account',
-                                      style: TextStyle(
-                                        fontSize: SizeConfig.fontSize(
-                                          context,
-                                          24,
-                                        ),
-                                        fontWeight: FontWeight.bold,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.onSurface,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Join the production tracking matrix',
-                                      style: TextStyle(
-                                        fontSize: SizeConfig.fontSize(
-                                          context,
-                                          13,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            )
-                          : Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                IconButton(
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(),
-                                  icon: const Icon(Icons.arrow_back),
-                                  onPressed: () => context.go('/login'),
-                                ),
-                                SizedBox(
-                                  height: SizeConfig.scaleHeight(context, 12),
-                                ),
-                                Text(
-                                  'Create Studio Account',
-                                  style: TextStyle(
-                                    fontSize: SizeConfig.fontSize(context, 22),
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.onSurface,
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: SizeConfig.scaleHeight(context, 2),
-                                ),
-                                Text(
-                                  'Join the production tracking matrix',
-                                  style: TextStyle(
-                                    fontSize: SizeConfig.fontSize(context, 13),
-                                  ),
-                                ),
-                              ],
+            padding: EdgeInsets.symmetric(
+              horizontal: horizontalPadding,
+              vertical: SizeConfig.scaleHeight(context, 24),
+            ),
+            child: GlassContainer(
+              width: containerWidth,
+              borderRadius: 20,
+              padding: EdgeInsets.all(containerPadding),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Form fields - responsive: 2 columns when the card has
+                    // room, 1 column on narrow screens ("gradual" alignment).
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = constraints.maxWidth >= 420 ? 2 : 1;
+                        final fieldWidth =
+                            (constraints.maxWidth - (spacing * (columns - 1))) /
+                            columns;
+                        return Wrap(
+                          spacing: spacing,
+                          runSpacing: SizeConfig.scaleHeight(context, 14),
+                          children: [
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomTextField(
+                                controller: _nameController,
+                                labelText: 'FULL NAME',
+                                hintText: 'John',
+                                prefixIcon: Icons.person_outline,
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                    ? 'Enter your full name'
+                                    : null,
+                              ),
                             ),
-                      SizedBox(height: SizeConfig.scaleHeight(context, 30)),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final hasTwoColumns = constraints.maxWidth >= 760;
-                          final tileWidth = hasTwoColumns
-                              ? (constraints.maxWidth - 16) / 2
-                              : constraints.maxWidth;
 
-                          return Wrap(
-                            spacing: SizeConfig.scaleWidth(context, 16),
-                            runSpacing: SizeConfig.scaleHeight(context, 16),
-                            children: [
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'IDENTITY',
-                                  child: CustomTextField(
-                                    controller: _nameController,
-                                    labelText: 'FULL NAME',
-                                    hintText: 'Sarah Connor',
-                                    prefixIcon: Icons.person_outline,
-                                    validator: (value) =>
-                                        value == null || value.isEmpty
-                                        ? 'Enter your full name'
-                                        : null,
-                                  ),
-                                ),
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomTextField(
+                                controller: _emailController,
+                                labelText: 'STUDIO EMAIL',
+                                hintText: 'john.doe@example.com',
+                                prefixIcon: Icons.email_outlined,
+                                validator: (value) =>
+                                    value == null || !value.contains('@')
+                                    ? 'Enter a valid email'
+                                    : null,
                               ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'EMAIL',
-                                  child: CustomTextField(
-                                    controller: _emailController,
-                                    labelText: 'STUDIO EMAIL',
-                                    hintText: 'email@vfxpick.com',
-                                    prefixIcon: Icons.email_outlined,
-                                    validator: (value) =>
-                                        value == null || !value.contains('@')
-                                        ? 'Enter a valid email'
-                                        : null,
-                                  ),
-                                ),
+                            ),
+
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomTextField(
+                                controller: _phoneController,
+                                labelText: 'PHONE NUMBER',
+                                hintText: '+1 555-0199',
+                                prefixIcon: Icons.phone_android_outlined,
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                    ? 'Enter phone number'
+                                    : null,
                               ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'CONTACT',
-                                  child: CustomTextField(
-                                    controller: _phoneController,
-                                    labelText: 'PHONE NUMBER',
-                                    hintText: '+1 555-0199',
-                                    prefixIcon: Icons.phone_android_outlined,
-                                    validator: (value) =>
-                                        value == null || value.isEmpty
-                                        ? 'Enter phone number'
-                                        : null,
-                                  ),
-                                ),
+                            ),
+
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomTextField(
+                                controller: _employeeIdController,
+                                labelText: 'EMPLOYEE ID',
+                                hintText: 'EMP-980',
+                                prefixIcon: Icons.badge_outlined,
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                    ? 'Enter Employee ID'
+                                    : null,
                               ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'ORGANIZATION',
-                                  child: CustomTextField(
-                                    controller: _employeeIdController,
-                                    labelText: 'EMPLOYEE ID',
-                                    hintText: 'EMP-980',
-                                    prefixIcon: Icons.badge_outlined,
-                                    validator: (value) =>
-                                        value == null || value.isEmpty
-                                        ? 'Enter Employee ID'
-                                        : null,
-                                  ),
-                                ),
+                            ),
+
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomDropdown<String>(
+                                labelText: 'DEPARTMENT',
+                                items: [
+                                  ..._departmentOptions,
+                                  _addDepartmentOption,
+                                ],
+                                value: _selectedDept,
+                                onChanged: _onDepartmentChanged,
+                                itemToString: (item) =>
+                                    item == _addDepartmentOption
+                                    ? 'Add New Department...'
+                                    : item,
                               ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'DEPARTMENT',
-                                  child: CustomDropdown<String>(
-                                    labelText: 'DEPARTMENT',
-                                    items: [
-                                      ..._departmentOptions,
-                                      _addDepartmentOption,
-                                    ],
-                                    value: _selectedDept,
-                                    onChanged: _onDepartmentChanged,
-                                    itemToString: (item) =>
-                                        item == _addDepartmentOption
-                                        ? 'Add New Department...'
-                                        : item,
-                                  ),
-                                ),
+                            ),
+
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomDropdown<String>(
+                                labelText: 'ROLE ACCESS LEVEL',
+                                items: [..._roleOptions, _addRoleOption],
+                                value: _selectedRole,
+                                onChanged: _onRoleChanged,
+                                itemToString: (item) => item == _addRoleOption
+                                    ? 'Add New Role...'
+                                    : item,
                               ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'ROLE',
-                                  child: CustomDropdown<String>(
-                                    labelText: 'ROLE ACCESS LEVEL',
-                                    items: [..._roleOptions, _addRoleOption],
-                                    value: _selectedRole,
-                                    onChanged: _onRoleChanged,
-                                    itemToString: (item) =>
-                                        item == _addRoleOption
-                                        ? 'Add New Role...'
-                                        : item,
-                                  ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'SECURITY',
-                                  child: CustomTextField(
+                            ),
+
+                            SizedBox(
+                              width: fieldWidth,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CustomTextField(
                                     controller: _passwordController,
                                     labelText: 'PASSWORD',
                                     hintText: 'Minimum 6 characters',
@@ -656,10 +559,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                         ? 'Password must be >= 6 chars'
                                         : null,
                                   ),
-                                  footer: ClipRRect(
-                                    borderRadius: BorderRadius.circular(
-                                      SizeConfig.scaleWidth(context, 4),
-                                    ),
+
+                                  SizedBox(
+                                    height: SizeConfig.scaleHeight(context, 8),
+                                  ),
+
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
                                     child: LinearProgressIndicator(
                                       value: _passwordStrength,
                                       backgroundColor: Colors.grey.withValues(
@@ -674,94 +580,95 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                             ? Colors.amber
                                             : Colors.green,
                                       ),
-                                      minHeight: SizeConfig.scaleHeight(
-                                        context,
-                                        4,
-                                      ),
+                                      minHeight: 4,
                                     ),
                                   ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: tileWidth,
-                                child: _buildFieldCard(
-                                  context: context,
-                                  title: 'SECURITY',
-                                  child: CustomTextField(
-                                    controller: _confirmPasswordController,
-                                    labelText: 'CONFIRM PASSWORD',
-                                    hintText: 'Re-enter password',
-                                    prefixIcon: Icons.lock_clock_outlined,
-                                    isPassword: true,
-                                    validator: (value) =>
-                                        value == null || value.isEmpty
-                                        ? 'Re-enter password'
-                                        : null,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      SizedBox(height: SizeConfig.scaleHeight(context, 24)),
-
-                      // Terms Agreement
-                      Row(
-                        children: [
-                          Checkbox(
-                            value: _acceptTerms,
-                            onChanged: (val) =>
-                                setState(() => _acceptTerms = val ?? false),
-                            activeColor: AppColors.brandGreen,
-                          ),
-                          Expanded(
-                            child: Text(
-                              'I accept the VFXPICK Production Terms of Service & Privacy Policy',
-                              style: TextStyle(
-                                fontSize: SizeConfig.fontSize(context, 13),
+                                ],
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: SizeConfig.scaleHeight(context, 24)),
 
-                      // Sign Up Button
-                      GradientButton(
-                        text: 'CREATE ACCOUNT',
-                        width: double.infinity,
-                        isLoading: authController.isLoading,
-                        onPressed: _handleRegister,
-                      ),
-                      SizedBox(height: SizeConfig.scaleHeight(context, 16)),
+                            SizedBox(
+                              width: fieldWidth,
+                              child: CustomTextField(
+                                controller: _confirmPasswordController,
+                                labelText: 'CONFIRM PASSWORD',
+                                hintText: 'Re-enter password',
+                                prefixIcon: Icons.lock_clock_outlined,
+                                isPassword: true,
+                                validator: (value) =>
+                                    value == null || value.isEmpty
+                                    ? 'Re-enter password'
+                                    : null,
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
 
-                      // Toggle Login
-                      Wrap(
-                        alignment: WrapAlignment.center,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            'Already have a user account?',
+                    SizedBox(height: SizeConfig.scaleHeight(context, 18)),
+
+                    // Terms
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Checkbox(
+                          value: _acceptTerms,
+                          onChanged: (value) {
+                            setState(() {
+                              _acceptTerms = value ?? false;
+                            });
+                          },
+                          activeColor: AppColors.brandGreen,
+                        ),
+                        Expanded(
+                          child: Text(
+                            'I accept the VFXPICK Production Terms of Service & Privacy Policy',
                             style: TextStyle(
                               fontSize: SizeConfig.fontSize(context, 13),
                             ),
                           ),
-                          TextButton(
-                            onPressed: () => context.go('/login'),
-                            child: Text(
-                              'Sign In',
-                              style: TextStyle(
-                                fontSize: SizeConfig.fontSize(context, 13),
-                                color: AppColors.brandGreen,
-                                fontWeight: FontWeight.bold,
-                              ),
+                        ),
+                      ],
+                    ),
+
+                    SizedBox(height: SizeConfig.scaleHeight(context, 14)),
+
+                    // Create account
+                    GradientButton(
+                      text: 'CREATE ACCOUNT',
+                      width: double.infinity,
+                      isLoading: authController.isLoading,
+                      onPressed: _handleRegister,
+                    ),
+
+                    SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+
+                    // Sign in
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Text(
+                          'Already have a user account?',
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 13),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () => context.go('/login'),
+                          child: Text(
+                            'Sign In',
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 13),
+                              color: AppColors.brandGreen,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),

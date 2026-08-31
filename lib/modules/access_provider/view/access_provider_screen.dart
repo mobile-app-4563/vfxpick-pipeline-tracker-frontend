@@ -20,8 +20,12 @@ class AccessProviderScreen extends StatefulWidget {
 class _AccessProviderScreenState extends State<AccessProviderScreen> {
   bool _loadScheduled = false;
 
-  // Permission-matrix column sorting (0 = Menu, 1..n = roles,
-  // n+1..n+m = departments).
+  // Table scrollbars: dedicated controllers so the Scrollbars inside the
+  // nested horizontal/vertical scroll views attach and render correctly.
+  final ScrollController _tableHScroll = ScrollController();
+  final ScrollController _tableVScroll = ScrollController();
+
+  // Permission-matrix column sorting (0 = Menu, 1..n = departments).
   int? _permissionSortIndex;
   bool _permissionSortAscending = true;
 
@@ -41,7 +45,6 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
 
   List<Map<String, dynamic>> _sortedPermissionRows(
     List<Map<String, dynamic>> rows,
-    List<String> roles,
     List<String> departments,
     AccessProvider access,
   ) {
@@ -54,11 +57,8 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
         final la = access.labelForRoute(a['route'].toString(), role: 'Admin');
         final lb = access.labelForRoute(b['route'].toString(), role: 'Admin');
         cmp = compareCellValues(la, lb);
-      } else if (index <= roles.length) {
-        final role = roles[index - 1];
-        cmp = compareCellValues(a[role] == true, b[role] == true);
       } else {
-        final dept = departments[index - 1 - roles.length];
+        final dept = departments[index - 1];
         final key = _deptKey(dept);
         cmp = compareCellValues(a[key] == true, b[key] == true);
       }
@@ -84,6 +84,13 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
   }
 
   @override
+  void dispose() {
+    _tableHScroll.dispose();
+    _tableVScroll.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthController>();
     final access = context.watch<AccessProvider>();
@@ -99,20 +106,18 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
       );
     }
 
-    final roles = access.roles;
     final departments = List<String>.from(AppConstants.departments);
     final routes = AccessProvider.orderedMenuRoutes;
     final rows = routes
         .map(
           (route) => <String, dynamic>{
             'route': route,
-            for (final item in roles) item: access.hasMenuAccess(item, route),
             for (final dept in departments)
               _deptKey(dept): access.hasDepartmentMenuAccess(dept, route),
           },
         )
         .toList(growable: false);
-    final sortedRows = _sortedPermissionRows(rows, roles, departments, access);
+    final sortedRows = _sortedPermissionRows(rows, departments, access);
 
     return Padding(
       padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
@@ -121,13 +126,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _matrixHeader(
-              context,
-              access,
-              routes.length,
-              roles.length,
-              departments.length,
-            ),
+            _matrixHeader(context, access, routes.length, departments.length),
             SizedBox(height: SizeConfig.scaleHeight(context, 12)),
             Expanded(
               child: rows.isEmpty
@@ -136,13 +135,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                       title: 'No routes configured',
                       description: 'Menu routes are unavailable right now.',
                     )
-                  : _permissionTable(
-                      context,
-                      access,
-                      roles,
-                      departments,
-                      sortedRows,
-                    ),
+                  : _permissionTable(context, access, departments, sortedRows),
             ),
           ],
         ),
@@ -154,7 +147,6 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
     BuildContext context,
     AccessProvider access,
     int routeCount,
-    int roleCount,
     int departmentCount,
   ) {
     return Wrap(
@@ -190,8 +182,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                   ),
                 ),
                 Text(
-                  '$routeCount menus x $roleCount roles + '
-                  '$departmentCount departments',
+                  '$routeCount menus x $departmentCount departments',
                   style: TextStyle(
                     fontSize: SizeConfig.fontSize(context, 12),
                     color: Theme.of(context).textTheme.bodySmall?.color,
@@ -232,7 +223,6 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
   Widget _permissionTable(
     BuildContext context,
     AccessProvider access,
-    List<String> roles,
     List<String> departments,
     List<Map<String, dynamic>> rows,
   ) {
@@ -241,119 +231,118 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
         border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
         borderRadius: BorderRadius.circular(10),
       ),
-      child: Scrollbar(
-        thumbVisibility: true,
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: SingleChildScrollView(
-            child: DataTable(
-              headingRowColor: WidgetStatePropertyAll(
-                AppColors.brandGreen.withValues(alpha: 0.12),
-              ),
-              dataRowMinHeight: 56,
-
-              border: TableBorder(
-                borderRadius: BorderRadius.all(Radius.circular(0)),
-                horizontalInside: BorderSide(
-                  color: Theme.of(context).dividerColor,
-                  width: 1,
-                ),
-              ),
-              dataRowMaxHeight: 64,
-              columnSpacing: SizeConfig.scaleWidth(context, 28),
-              columns: [
-                DataColumn(
-                  columnWidth: FixedColumnWidth(
-                    SizeConfig.scaleWidth(context, 723),
-                  ),
-                  label: SortableHeader(
-                    label: 'Menu',
-                    isSorted: _permissionSortIndex == 0,
-                    sortAscending: _permissionSortAscending,
-                    onTap: () => _togglePermissionSort(0),
-                  ),
-                ),
-                ...roles.map(
-                  (item) => DataColumn(
-                    label: SortableHeader(
-                      label: item,
-                      isSorted: _permissionSortIndex == roles.indexOf(item) + 1,
-                      sortAscending: _permissionSortAscending,
-                      onTap: () =>
-                          _togglePermissionSort(roles.indexOf(item) + 1),
-                    ),
-                  ),
-                ),
-                ...departments.map(
-                  (dept) => DataColumn(
-                    label: SortableHeader(
-                      label: dept,
-                      isSorted:
-                          _permissionSortIndex ==
-                          roles.length + departments.indexOf(dept) + 1,
-                      sortAscending: _permissionSortAscending,
-                      onTap: () => _togglePermissionSort(
-                        roles.length + departments.indexOf(dept) + 1,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Columns hug their content; the table still fills the available
+            // width and scrolls horizontally/vertically inside this box when
+            // the content is wider or taller than the viewport.
+            return Scrollbar(
+              controller: _tableHScroll,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _tableHScroll,
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: Scrollbar(
+                    controller: _tableVScroll,
+                    thumbVisibility: true,
+                    child: SingleChildScrollView(
+                      controller: _tableVScroll,
+                      child: DataTable(
+                        headingRowColor: WidgetStatePropertyAll(
+                          AppColors.brandGreen.withValues(alpha: 0.12),
+                        ),
+                        dataRowMinHeight: 56,
+                        border: TableBorder(
+                          borderRadius: BorderRadius.all(Radius.circular(0)),
+                          horizontalInside: BorderSide(
+                            color: Theme.of(context).dividerColor,
+                            width: 1,
+                          ),
+                        ),
+                        dataRowMaxHeight: 64,
+                        columnSpacing: SizeConfig.scaleWidth(context, 28),
+                        columns: [
+                          DataColumn(
+                            columnWidth: MaxColumnWidth(
+                              IntrinsicColumnWidth(),
+                              FixedColumnWidth(
+                                SizeConfig.scaleWidth(context, 180),
+                              ),
+                            ),
+                            label: SortableHeader(
+                              label: 'Menu',
+                              isSorted: _permissionSortIndex == 0,
+                              sortAscending: _permissionSortAscending,
+                              onTap: () => _togglePermissionSort(0),
+                            ),
+                          ),
+                          ...departments.map(
+                            (dept) => DataColumn(
+                              columnWidth: IntrinsicColumnWidth(),
+                              label: SortableHeader(
+                                label: dept,
+                                isSorted:
+                                    _permissionSortIndex ==
+                                    departments.indexOf(dept) + 1,
+                                sortAscending: _permissionSortAscending,
+                                onTap: () => _togglePermissionSort(
+                                  departments.indexOf(dept) + 1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                        rows: rows
+                            .map((row) {
+                              final route = row['route'].toString();
+                              return DataRow(
+                                cells: [
+                                  DataCell(
+                                    Text(
+                                      access.labelForRoute(
+                                        route,
+                                        role: 'Admin',
+                                      ),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                  ...departments.map((dept) {
+                                    final color = _departmentColor(dept);
+                                    return DataCell(
+                                      Switch(
+                                        value: row[_deptKey(dept)] == true,
+                                        onChanged: (enabled) =>
+                                            _updateDepartmentMenuAccess(
+                                              context,
+                                              access,
+                                              dept,
+                                              route,
+                                              enabled,
+                                            ),
+                                        activeThumbColor: color,
+                                        activeTrackColor: color.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              );
+                            })
+                            .toList(growable: false),
                       ),
                     ),
                   ),
                 ),
-              ],
-              rows: rows
-                  .map((row) {
-                    final route = row['route'].toString();
-                    return DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            access.labelForRoute(route, role: 'Admin'),
-                            style: const TextStyle(fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        ...roles.map((item) {
-                          final canEdit = item != 'Admin';
-                          final color = _roleColor(item);
-                          return DataCell(
-                            Switch(
-                              value: row[item] == true,
-                              onChanged: canEdit
-                                  ? (enabled) => _updateMenuAccess(
-                                      context,
-                                      access,
-                                      item,
-                                      route,
-                                      enabled,
-                                    )
-                                  : null,
-                              activeThumbColor: color,
-                              activeTrackColor: color.withValues(alpha: 0.45),
-                            ),
-                          );
-                        }),
-                        ...departments.map((dept) {
-                          final color = _departmentColor(dept);
-                          return DataCell(
-                            Switch(
-                              value: row[_deptKey(dept)] == true,
-                              onChanged: (enabled) =>
-                                  _updateDepartmentMenuAccess(
-                                    context,
-                                    access,
-                                    dept,
-                                    route,
-                                    enabled,
-                                  ),
-                              activeThumbColor: color,
-                              activeTrackColor: color.withValues(alpha: 0.45),
-                            ),
-                          );
-                        }),
-                      ],
-                    );
-                  })
-                  .toList(growable: false),
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -495,26 +484,6 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
     );
   }
 
-  Future<void> _updateMenuAccess(
-    BuildContext context,
-    AccessProvider access,
-    String role,
-    String route,
-    bool enabled,
-  ) async {
-    final ok = await access.setMenuAccess(
-      role: role,
-      route: route,
-      allowed: enabled,
-    );
-    if (!context.mounted || ok) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(access.errorMessage ?? 'Could not save permissions.'),
-      ),
-    );
-  }
-
   Future<void> _updateDepartmentMenuAccess(
     BuildContext context,
     AccessProvider access,
@@ -537,32 +506,9 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
     );
   }
 
-  Color _roleColor(String role) {
-    switch (role.toLowerCase()) {
-      case 'artist':
-        return const Color(0xFF3B82F6);
-      case 'coordinator':
-        return const Color(0xFF8B5CF6);
-      case 'supervisor':
-        return const Color(0xFFF59E0B);
-      case 'team lead':
-        return const Color(0xFF06B6D4);
-      case 'admin':
-        return const Color(0xFFEF4444);
-      case 'manager':
-        return const Color(0xFF10B981);
-      case 'production':
-        return const Color(0xFFF97316);
-      case 'management':
-        return const Color(0xFFEC4899);
-      default:
-        return AppColors.brandGreen;
-    }
-  }
-
   Color _departmentColor(String department) {
-    // Departments get a distinct tint so the department columns read as a
-    // separate group from the role columns.
+    // Departments get a distinct tint so each department column reads as a
+    // separate group.
     switch (department.toLowerCase()) {
       case 'roto':
         return const Color(0xFF22C55E);

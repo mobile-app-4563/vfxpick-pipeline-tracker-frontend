@@ -21,6 +21,7 @@ class ApiConstants {
   static const String authOptions = '/auth/options';
   static const String authProfile = '/auth/profile';
   static const String authAddDepartment = '/auth/departments';
+  static const String authAddRole = '/auth/roles';
 
   // ───────────────────────────────────────────────────────────────────────────
   // DASHBOARD (/api/dashboard)

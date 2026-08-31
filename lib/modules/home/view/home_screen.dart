@@ -26,7 +26,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<HomeController>().fetchTodaysPickouts();
+      final user = context.read<AuthController>().currentUser;
+      context.read<HomeController>().fetchTodaysPickouts(
+        role: user?.role,
+        department: user?.department,
+      );
     });
   }
 
@@ -83,7 +87,10 @@ class _HomeScreenState extends State<HomeScreen> {
             : null;
 
         return RefreshIndicator(
-          onRefresh: () => controller.fetchTodaysPickouts(),
+          onRefresh: () => controller.fetchTodaysPickouts(
+            role: userRole,
+            department: userDepartment,
+          ),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
