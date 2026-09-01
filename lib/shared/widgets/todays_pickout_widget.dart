@@ -186,7 +186,7 @@ class TodaysPickoutWidget extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Due: ${_formatDate(pickout.shot.dueDate)}',
+                          'Due: ${_formatDate(pickout.shot.dueDate ?? pickout.shot.clientEta)}',
                           style: TextStyle(
                             fontSize: SizeConfig.fontSize(context, 10),
                             color: isDark

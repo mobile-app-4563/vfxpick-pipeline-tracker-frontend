@@ -33,7 +33,9 @@ class TodaysPickoutModel {
   /// Calculate priority based on shot properties
   static TodaysPickoutModel calculatePriority(Map<String, dynamic> json) {
     final shot = ShotModel.fromJson(json);
-    final dueDate = shot.dueDate;
+    // Imported shots may only have an ETA (client_eta) — treat it as the due
+    // date so pickout urgency/rank works even when due_date is not set.
+    final dueDate = shot.dueDate ?? shot.clientEta;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 

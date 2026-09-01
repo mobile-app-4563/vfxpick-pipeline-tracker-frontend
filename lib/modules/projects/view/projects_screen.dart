@@ -3094,7 +3094,19 @@ Map<String, dynamic> _toApiImportRowT(
         'eta',
         'client_due',
         'delivery_date',
-      ], fallbackColumnIndex: 0),
+      ], fallbackColumnIndex: 16),
+    ),
+    // The Excel "ETA" column is the delivery due date — populate BOTH
+    // client_eta and due_date so imported shots appear on the Today's
+    // Pickouts page (which matches on due_date/allocated_date/client_eta).
+    'dueDate': _toIsoDateT(
+      _pickFieldValueT(row, [
+        'due_date',
+        'due',
+        'eta',
+        'client_eta',
+        'delivery_date',
+      ], fallbackColumnIndex: 16),
     ),
     'coordinator':
         (_pickFieldValueT(row, [
