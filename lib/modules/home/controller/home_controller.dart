@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_constants.dart';
 import '../../../core/models/domain_models.dart';
+import '../../../core/models/production_concern_model.dart';
 import '../../../core/models/todays_pickout_model.dart';
 import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/production_service.dart';
@@ -32,6 +33,7 @@ class HomeController extends ChangeNotifier {
 
   // ── Production-specific data (for Production department users) ──
   List<Map<String, dynamic>> _productionConcerns = [];
+  List<ProductionConcernModel> _productionPickouts = [];
   Map<String, int> _concernStatusCount = {};
 
   bool _isLoading = false;
@@ -51,6 +53,7 @@ class HomeController extends ChangeNotifier {
   Map<String, List<InventActiveShow>> get inventActiveShowsByStatus =>
       _inventActiveShowsByStatus;
   List<Map<String, dynamic>> get productionConcerns => _productionConcerns;
+  List<ProductionConcernModel> get productionPickouts => _productionPickouts;
   Map<String, int> get concernStatusCount => _concernStatusCount;
 
   bool get isLoading => _isLoading;
@@ -95,10 +98,10 @@ class HomeController extends ChangeNotifier {
           AppConstants.broadAccessRoles.contains(role) ||
           department == 'Production';
 
-      // ── Fire insights + invent-active (+ production concerns when the
-      //    user has production access) in PARALLEL ──────────────────────────
+      // ── Fire invent-active (+ production concerns when the user has
+      //    production access) in PARALLEL. The mandays chart was removed
+      //    from the home page, so insights are no longer fetched here. ──────
       await Future.wait([
-        fetchInsights(),
         fetchInventActiveShows(),
         if (canAccessProduction) fetchProductionConcerns(),
       ]);
@@ -131,6 +134,14 @@ class HomeController extends ChangeNotifier {
           growable: false,
         );
 
+        // Build priority-ranked pickouts using the same due-date logic as
+        // shot pickouts (Critical -> High -> Medium -> Low).
+        _productionPickouts =
+            _productionConcerns
+                .map(ProductionConcernModel.calculatePriority)
+                .toList()
+              ..sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
+
         // Count concerns by status
         _concernStatusCount = {};
         for (final concern in _productionConcerns) {
@@ -141,11 +152,13 @@ class HomeController extends ChangeNotifier {
         _productionError =
             response['error'] ?? 'Failed to load production concerns';
         _productionConcerns = [];
+        _productionPickouts = [];
         _concernStatusCount = {};
       }
     } catch (e) {
       _productionError = 'Failed to load production concerns: $e';
       _productionConcerns = [];
+      _productionPickouts = [];
       _concernStatusCount = {};
     } finally {
       _isProductionLoading = false;
@@ -275,6 +288,7 @@ class HomeController extends ChangeNotifier {
       'Approved Internal': const [],
     };
     _productionConcerns = [];
+    _productionPickouts = [];
     _concernStatusCount = {};
     _inventActiveError = null;
     _productionError = null;

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:syncfusion_flutter_charts/charts.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
@@ -9,6 +8,7 @@ import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/loading_widget.dart';
+import '../../../shared/widgets/production_pickout_widget.dart';
 import '../../../shared/widgets/todays_pickout_widget.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../controller/home_controller.dart';
@@ -40,36 +40,19 @@ class _HomeScreenState extends State<HomeScreen> {
     final authController = context.read<AuthController>();
     final userDepartment = authController.currentUser?.department ?? '';
     final userRole = authController.currentUser?.role ?? '';
-    final isProduction = userDepartment == 'Production';
-    final isAdmin = userRole == 'Admin';
 
     return Consumer<HomeController>(
       builder: (context, controller, child) {
-        // ── Build cards based on user department ──
+        // Every user gets the same home layout: pickouts shown as two
+        // separate lists (Production Pickouts + Project Pickouts) plus the
+        // InventActive shows card. The mandays chart has been removed.
         final pickoutsCard = _AnimatedEntry(
           order: 0,
           child: _buildPickoutsCard(controller, isDark),
         );
 
-        // For Production department: show production concerns
-        // For others: show reports mandays chart
-        // For Admin: show both
-        final insightCard = isProduction
-            ? _AnimatedEntry(
-                order: 1,
-                child: _buildProductionConcernsCard(controller, isDark),
-              )
-            : _AnimatedEntry(
-                order: 1,
-                child: _buildPieSection(
-                  title: 'Reports Mandays (Current Month)',
-                  data: controller.reportMandaysByDepartment,
-                  isLoading: controller.isInsightsLoading,
-                ),
-              );
-
         final inventCard = _AnimatedEntry(
-          order: 2,
+          order: 1,
           child: _InventActiveShowsCard(
             isLoading: controller.isInventActiveLoading,
             data: controller.inventActiveShowsByStatus,
@@ -77,14 +60,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 controller.inventActiveError ?? controller.errorMessage,
           ),
         );
-
-        // For Admin: add an additional card showing both data types
-        final adminCard = isAdmin
-            ? _AnimatedEntry(
-                order: 3,
-                child: _buildAdminDashboard(controller, isDark),
-              )
-            : null;
 
         return RefreshIndicator(
           onRefresh: () => controller.fetchTodaysPickouts(
@@ -106,24 +81,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SizedBox(width: width * 0.25, child: insightCard),
-                          SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: pickoutsCard),
                           SizedBox(width: SizeConfig.scaleWidth(context, 16)),
                           Expanded(child: inventCard),
-                          if (adminCard != null) ...[
-                            SizedBox(width: SizeConfig.scaleWidth(context, 16)),
-                            Expanded(child: adminCard),
-                          ],
                         ],
                       ),
                     );
                   }
 
-                  final cards = <Widget>[pickoutsCard, insightCard, inventCard];
-                  if (adminCard != null) {
-                    cards.add(adminCard);
-                  }
+                  final cards = <Widget>[pickoutsCard, inventCard];
                   final crossAxisCount = width >= 760 ? 2 : 1;
 
                   return GridView.builder(
@@ -148,6 +114,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildPickoutsCard(HomeController controller, bool isDark) {
+    final isLoading = controller.isLoading || controller.isProductionLoading;
+    final error = controller.errorMessage ?? controller.productionError;
+
     return GlassContainer(
       padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
       child: Column(
@@ -165,375 +134,171 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           SizedBox(height: SizeConfig.scaleHeight(context, 14)),
           Expanded(
-            child: Builder(
-              builder: (_) {
-                if (controller.isLoading) {
-                  return const Center(child: LoadingWidget());
-                }
-                if (controller.errorMessage != null) {
-                  return EmptyStateWidget(
-                    title: "Error Loading Pickouts",
-                    description: controller.errorMessage!,
-                    icon: Icons.error_outline,
-                  );
-                }
-                if (controller.todaysPickouts.isEmpty) {
-                  return const EmptyStateWidget(
-                    title: "No Pickouts Today",
-                    description: "No shots allocated for today.",
-                    icon: Icons.calendar_today,
-                  );
-                }
-                return SingleChildScrollView(
-                  child: Column(
-                    children: controller.todaysPickouts.map((pickout) {
-                      return TodaysPickoutWidget(
-                        pickout: pickout,
-                        onTap: () {
-                          Navigator.of(context).pushNamed(
-                            '/tasks',
-                            arguments: {'selectedShot': pickout.shot.shotId},
-                          );
-                        },
-                      );
-                    }).toList(),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPieSection({
-    required String title,
-    required Map<String, double> data,
-    required bool isLoading,
-  }) {
-    return GlassContainer(
-      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(height: SizeConfig.scaleHeight(context, 4)),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: SizeConfig.fontSize(context, 16),
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          SizedBox(height: SizeConfig.scaleHeight(context, 24)),
-          Expanded(
             child: isLoading
                 ? const Center(child: LoadingWidget())
-                : _DepartmentRadialChart(data: data),
+                : error != null
+                ? EmptyStateWidget(
+                    title: "Error Loading Pickouts",
+                    description: error,
+                    icon: Icons.error_outline,
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ── Left column: production pickouts ──
+                      Expanded(
+                        child: _typeColumn(
+                          controller,
+                          isDark,
+                          title: 'Production Pickouts',
+                          isProduction: true,
+                        ),
+                      ),
+                      SizedBox(width: SizeConfig.scaleWidth(context, 16)),
+                      // ── Right column: project (shot) pickouts ──
+                      Expanded(
+                        child: _typeColumn(
+                          controller,
+                          isDark,
+                          title: 'Project Pickouts',
+                          isProduction: false,
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
-  /// Build production concerns card for Production department users
-  Widget _buildProductionConcernsCard(HomeController controller, bool isDark) {
-    return GlassContainer(
-      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Production Concerns',
-            style: TextStyle(
-              fontSize: SizeConfig.fontSize(context, 18),
-              fontWeight: FontWeight.bold,
-              color: isDark
-                  ? AppColors.darkTextPrimary
-                  : AppColors.lightTextPrimary,
-            ),
+  /// Builds one column of the split pickouts card for a single pickout type
+  /// (production concerns or project shots). Inside the column the items are
+  /// grouped into "Due Today" and "Due Tomorrow" sections so the card shows
+  /// today's and tomorrow's pickouts for both project and production.
+  Widget _typeColumn(
+    HomeController controller,
+    bool isDark, {
+    required String title,
+    required bool isProduction,
+  }) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final dueToday = <Widget>[];
+    final dueTomorrow = <Widget>[];
+
+    if (isProduction) {
+      for (final concern in controller.productionPickouts) {
+        final widget = ProductionPickoutWidget(
+          concern: concern,
+          onTap: () {
+            Navigator.of(context).pushNamed('/production-management');
+          },
+        );
+        if (_isSameDay(concern.dueDate, today)) {
+          dueToday.add(widget);
+        } else if (_isSameDay(concern.dueDate, tomorrow)) {
+          dueTomorrow.add(widget);
+        }
+      }
+    } else {
+      for (final pickout in controller.todaysPickouts) {
+        final widget = TodaysPickoutWidget(
+          pickout: pickout,
+          onTap: () {
+            Navigator.of(context).pushNamed(
+              '/tasks',
+              arguments: {'selectedShot': pickout.shot.shotId},
+            );
+          },
+        );
+        if (_isSameDay(pickout.shot.dueDate, today)) {
+          dueToday.add(widget);
+        } else if (_isSameDay(pickout.shot.dueDate, tomorrow)) {
+          dueTomorrow.add(widget);
+        }
+      }
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _sectionHeader(title, isDark),
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _sectionHeader('Due Today', isDark),
+              if (dueToday.isEmpty)
+                _compactEmpty('Nothing due today.', Icons.today)
+              else
+                ...dueToday,
+              _sectionHeader('Due Tomorrow', isDark),
+              if (dueTomorrow.isEmpty)
+                _compactEmpty('Nothing due tomorrow.', Icons.event)
+              else
+                ...dueTomorrow,
+            ],
           ),
-          SizedBox(height: SizeConfig.scaleHeight(context, 8)),
-          if (controller.isProductionLoading)
-            const Expanded(child: Center(child: LoadingWidget()))
-          else if (controller.productionError != null)
-            Expanded(
-              child: EmptyStateWidget(
-                title: "Error Loading Concerns",
-                description: controller.productionError!,
-                icon: Icons.error_outline,
-              ),
-            )
-          else if (controller.productionConcerns.isEmpty)
-            Expanded(
-              child: const EmptyStateWidget(
-                title: "No Concerns",
-                description: "No production concerns tracked.",
-                icon: Icons.check_circle_outline,
-              ),
-            )
-          else
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    // Show status summary
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: SizeConfig.scaleHeight(context, 8),
-                        bottom: SizeConfig.scaleHeight(context, 12),
-                      ),
-                      child: Wrap(
-                        spacing: SizeConfig.scaleWidth(context, 8),
-                        runSpacing: SizeConfig.scaleHeight(context, 8),
-                        children: controller.concernStatusCount.entries.map((
-                          entry,
-                        ) {
-                          return Container(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: SizeConfig.scaleWidth(context, 8),
-                              vertical: SizeConfig.scaleHeight(context, 4),
-                            ),
-                            decoration: BoxDecoration(
-                              color: _getStatusColor(
-                                entry.key,
-                              ).withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(
-                                SizeConfig.scaleWidth(context, 4),
-                              ),
-                              border: Border.all(
-                                color: _getStatusColor(entry.key),
-                                width: 1,
-                              ),
-                            ),
-                            child: Text(
-                              '${entry.key}: ${entry.value}',
-                              style: TextStyle(
-                                fontSize: SizeConfig.fontSize(context, 12),
-                                fontWeight: FontWeight.w600,
-                                color: _getStatusColor(entry.key),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    // Show first 5 concerns
-                    ...controller.productionConcerns.take(5).map((concern) {
-                      return Card(
-                        margin: EdgeInsets.only(
-                          bottom: SizeConfig.scaleHeight(context, 8),
-                        ),
-                        child: ListTile(
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              SizeConfig.scaleWidth(context, 8),
-                            ),
-                            side: BorderSide(
-                              color: _getStatusColor(
-                                concern['status'] as String?,
-                              ),
-                              width: 1,
-                            ),
-                          ),
-                          dense: true,
-                          leading: Icon(
-                            _getPriorityIcon(concern['priority'] as String?),
-                            size: SizeConfig.iconSize(context, 16),
-                            color: _getPriorityColor(
-                              concern['priority'] as String?,
-                            ),
-                          ),
-                          title: Text(
-                            concern['concernType'] ?? 'Unknown',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: SizeConfig.fontSize(context, 13),
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          subtitle: Text(
-                            concern['concernDescription'] ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: SizeConfig.fontSize(context, 11),
-                            ),
-                          ),
-                          trailing: Chip(
-                            label: Text(
-                              concern['status'] ?? 'Unknown',
-                              style: TextStyle(
-                                fontSize: SizeConfig.fontSize(context, 10),
-                              ),
-                            ),
-                            backgroundColor: _getStatusColor(
-                              concern['status'] as String?,
-                            ).withValues(alpha: 0.2),
-                          ),
-                        ),
-                      );
-                    }),
-                  ],
-                ),
-              ),
-            ),
-        ],
+        ),
+      ],
+    );
+  }
+
+  /// True when [due] is on the same calendar day as [day].
+  bool _isSameDay(DateTime? due, DateTime day) {
+    if (due == null) return false;
+    return due.year == day.year && due.month == day.month && due.day == day.day;
+  }
+
+  /// Compact section header inside the pickouts card.
+  Widget _sectionHeader(String title, bool isDark) {
+    return Padding(
+      padding: EdgeInsets.only(
+        top: SizeConfig.scaleHeight(context, 10),
+        bottom: SizeConfig.scaleHeight(context, 4),
+      ),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: SizeConfig.fontSize(context, 13),
+          fontWeight: FontWeight.w700,
+          color: isDark
+              ? AppColors.darkTextSecondary
+              : AppColors.lightTextSecondary,
+        ),
       ),
     );
   }
 
-  /// Build admin dashboard showing both production concerns and reports
-  Widget _buildAdminDashboard(HomeController controller, bool isDark) {
-    return GlassContainer(
-      padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  /// Compact inline empty message used inside the two pickout sections.
+  Widget _compactEmpty(String message, IconData icon) {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: SizeConfig.scaleHeight(context, 16),
+      ),
+      child: Row(
         children: [
-          Text(
-            'Admin Dashboard (All Data)',
-            style: TextStyle(
-              fontSize: SizeConfig.fontSize(context, 18),
-              fontWeight: FontWeight.bold,
-              color: isDark
-                  ? AppColors.darkTextPrimary
-                  : AppColors.lightTextPrimary,
-            ),
+          Icon(
+            icon,
+            size: SizeConfig.iconSize(context, 18),
+            color: Colors.grey,
           ),
-          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+          SizedBox(width: SizeConfig.scaleWidth(context, 8)),
           Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Production Concerns Summary
-                  Text(
-                    'Production Concerns',
-                    style: TextStyle(
-                      fontSize: SizeConfig.fontSize(context, 14),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: SizeConfig.scaleHeight(context, 6)),
-                  Text(
-                    '${controller.productionConcerns.length} total concerns',
-                    style: TextStyle(
-                      fontSize: SizeConfig.fontSize(context, 12),
-                    ),
-                  ),
-                  if (controller.concernStatusCount.isNotEmpty)
-                    Padding(
-                      padding: EdgeInsets.only(
-                        top: SizeConfig.scaleHeight(context, 6),
-                      ),
-                      child: Wrap(
-                        spacing: SizeConfig.scaleWidth(context, 6),
-                        children: controller.concernStatusCount.entries
-                            .map(
-                              (e) => Text(
-                                '${e.key}: ${e.value}',
-                                style: TextStyle(
-                                  fontSize: SizeConfig.fontSize(context, 11),
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ),
-                  Divider(
-                    height: SizeConfig.scaleHeight(context, 24),
-                    color: isDark
-                        ? AppColors.darkTextPrimary.withValues(alpha: 0.2)
-                        : AppColors.lightTextPrimary.withValues(alpha: 0.2),
-                  ),
-                  Text(
-                    'Reports Mandays (Current Month)',
-                    style: TextStyle(
-                      fontSize: SizeConfig.fontSize(context, 14),
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  SizedBox(height: SizeConfig.scaleHeight(context, 6)),
-                  if (controller.reportMandaysByDepartment.isEmpty)
-                    Text(
-                      'No report data available',
-                      style: TextStyle(
-                        fontSize: SizeConfig.fontSize(context, 12),
-                      ),
-                    )
-                  else
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: controller.reportMandaysByDepartment.entries
-                          .map(
-                            (e) => Padding(
-                              padding: EdgeInsets.only(
-                                bottom: SizeConfig.scaleHeight(context, 4),
-                              ),
-                              child: Text(
-                                '${e.key}: ${e.value.toStringAsFixed(2)} MD',
-                                style: TextStyle(
-                                  fontSize: SizeConfig.fontSize(context, 11),
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                ],
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: SizeConfig.fontSize(context, 13),
+                color: Colors.grey,
               ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  Color _getStatusColor(String? status) {
-    switch (status?.toLowerCase()) {
-      case 'open':
-        return Colors.blue;
-      case 'in progress':
-        return Colors.orange;
-      case 'resolved':
-        return Colors.green;
-      case 'on hold':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  Color _getPriorityColor(String? priority) {
-    switch (priority?.toLowerCase()) {
-      case 'low':
-        return Colors.blue;
-      case 'medium':
-        return Colors.orange;
-      case 'high':
-        return Colors.red;
-      case 'critical':
-        return Colors.deepOrange;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  IconData _getPriorityIcon(String? priority) {
-    switch (priority?.toLowerCase()) {
-      case 'low':
-        return Icons.trending_down;
-      case 'medium':
-        return Icons.trending_flat;
-      case 'high':
-        return Icons.trending_up;
-      case 'critical':
-        return Icons.warning;
-      default:
-        return Icons.priority_high;
-    }
   }
 }
 
@@ -572,210 +337,6 @@ class _AnimatedEntryState extends State<_AnimatedEntry> {
       ),
     );
   }
-}
-
-class _DepartmentRadialChart extends StatelessWidget {
-  final Map<String, double> data;
-  const _DepartmentRadialChart({required this.data});
-
-  @override
-  Widget build(BuildContext context) {
-    final items = data.entries.toList(growable: false)
-      ..sort((a, b) => b.value.compareTo(a.value));
-    if (items.isEmpty) {
-      return const EmptyStateWidget(
-        icon: Icons.pie_chart_outline,
-        title: 'No chart data',
-        description: 'No mandays available for the selected period.',
-      );
-    }
-
-    final topItems = items.take(4).toList(growable: false);
-    final maxValue = topItems.first.value <= 0 ? 1.0 : topItems.first.value;
-    final textColor = Theme.of(context).brightness == Brightness.dark
-        ? AppColors.darkTextPrimary
-        : AppColors.lightTextPrimary;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    const palette = [
-      _RingPalette(
-        fill: Color(0xFF90E2E0),
-        balanceDark: Color(0xFF2C3438),
-        balanceLight: Color(0xFFD7DDDF),
-      ),
-      _RingPalette(
-        fill: Color(0xFFAED8EC),
-        balanceDark: Color(0xFF2D363D),
-        balanceLight: Color(0xFFDCE1E5),
-      ),
-      _RingPalette(
-        fill: Color(0xFFF3C2CF),
-        balanceDark: Color(0xFF3A3135),
-        balanceLight: Color(0xFFE5DCDF),
-      ),
-      _RingPalette(
-        fill: Color(0xFFF2DBAF),
-        balanceDark: Color(0xFF3E3930),
-        balanceLight: Color(0xFFE7E0D3),
-      ),
-    ];
-
-    final radialData = List.generate(topItems.length, (index) {
-      final entry = topItems[index];
-      final percent = (entry.value / maxValue) * 100;
-      final colors = palette[index % palette.length];
-      return _DepartmentRadialData(
-        name: entry.key,
-        value: percent.clamp(0, 100),
-        color: colors.fill,
-        balanceColor: isDark ? colors.balanceDark : colors.balanceLight,
-      );
-    });
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: radialData
-                .map((item) {
-                  return Padding(
-                    padding: EdgeInsets.only(
-                      bottom: SizeConfig.scaleHeight(context, 8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: SizeConfig.scaleWidth(context, 8),
-                          height: SizeConfig.scaleHeight(context, 8),
-                          margin: EdgeInsets.only(
-                            top: SizeConfig.scaleHeight(context, 3),
-                          ),
-                          decoration: BoxDecoration(
-                            color: item.color,
-                            borderRadius: BorderRadius.circular(
-                              SizeConfig.scaleWidth(context, 2),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: SizeConfig.scaleWidth(context, 8)),
-                        Expanded(
-                          child: RichText(
-                            text: TextSpan(
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: SizeConfig.fontSize(context, 14),
-                                fontWeight: FontWeight.w500,
-                              ),
-                              children: [
-                                TextSpan(text: '${item.name} '),
-                                TextSpan(
-                                  text: '${item.value.round()}%',
-                                  style: TextStyle(
-                                    color: item.color,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                })
-                .toList(growable: false),
-          ),
-          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
-          Expanded(
-            flex: 5,
-            child: Align(
-              alignment: Alignment.center,
-              child: SizedBox(
-                width: SizeConfig.scaleWidth(context, 455),
-                height: SizeConfig.scaleHeight(context, 455),
-                child: SfCircularChart(
-                  margin: EdgeInsets.zero,
-                  series: List.generate(radialData.length, (index) {
-                    final item = radialData[index];
-                    return DoughnutSeries<_ChartSlice, String>(
-                      dataSource: [
-                        _ChartSlice(item.name, item.value, item.color),
-                        _ChartSlice(
-                          '${item.name} Balance',
-                          100 - item.value,
-                          item.balanceColor,
-                        ),
-                      ],
-                      xValueMapper: (_ChartSlice point, _) => point.label,
-                      yValueMapper: (_ChartSlice point, _) => point.value,
-                      pointColorMapper: (_ChartSlice point, _) => point.color,
-                      radius: '${100 - (index * 15)}%',
-                      innerRadius: '${91 - (index * 15)}%',
-                      startAngle: 0,
-                      endAngle: 270,
-                      explode: false,
-                      animationDuration: 900,
-                      strokeColor: isDark
-                          ? Colors.white.withValues(alpha: 0.04)
-                          : Colors.white,
-                      strokeWidth: 1.5,
-                      dataLabelSettings: const DataLabelSettings(
-                        isVisible: false,
-                      ),
-                    );
-                  }),
-                  tooltipBehavior: TooltipBehavior(
-                    enable: true,
-                    format: 'point.x\npoint.y%',
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DepartmentRadialData {
-  final String name;
-  final double value;
-  final Color color;
-  final Color balanceColor;
-
-  const _DepartmentRadialData({
-    required this.name,
-    required this.value,
-    required this.color,
-    required this.balanceColor,
-  });
-}
-
-class _RingPalette {
-  final Color fill;
-  final Color balanceDark;
-  final Color balanceLight;
-
-  const _RingPalette({
-    required this.fill,
-    required this.balanceDark,
-    required this.balanceLight,
-  });
-}
-
-class _ChartSlice {
-  final String label;
-  final double value;
-  final Color color;
-
-  const _ChartSlice(this.label, this.value, this.color);
 }
 
 class _InventActiveShowsCard extends StatefulWidget {
