@@ -19,6 +19,7 @@ import '../../../core/providers/access_provider.dart';
 import '../../../core/services/api_controller.dart';
 import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/excel_export_utils.dart';
+import '../../../core/utils/show_resolver.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
@@ -131,6 +132,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   String _allocationEtaFilter = '';
   String _startingDateFilter = '';
   String _completeDateFilter = '';
+  String _clientEtaFilter = '';
+  String _dueDateFilter = '';
   String _dailyWipFilter = '';
   String _mandaysFilter = '';
   String _consumedMandaysFilter = '';
@@ -373,6 +376,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       _allocationEtaFilter,
       _startingDateFilter,
       _completeDateFilter,
+      _clientEtaFilter,
+      _dueDateFilter,
       _dailyWipFilter,
       _mandaysFilter,
       _consumedMandaysFilter,
@@ -1097,6 +1102,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         initialAllocationEta: _allocationEtaFilter,
         initialStartingDate: _startingDateFilter,
         initialCompleteDate: _completeDateFilter,
+        initialClientEta: _clientEtaFilter,
+        initialDueDate: _dueDateFilter,
         initialDailyWip: _dailyWipFilter,
         initialMandays: _mandaysFilter,
         initialConsumedMandays: _consumedMandaysFilter,
@@ -1139,6 +1146,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       _allocationEtaFilter = result.allocationEta;
       _startingDateFilter = result.startingDate;
       _completeDateFilter = result.completeDate;
+      _clientEtaFilter = result.clientEta;
+      _dueDateFilter = result.dueDate;
       _dailyWipFilter = result.dailyWip;
       _mandaysFilter = result.mandays;
       _consumedMandaysFilter = result.consumedMandays;
@@ -1201,6 +1210,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             'allocationEta': _fmtDate(shot.allocationEta),
             'startingDate': _fmtDate(shot.startingDate),
             'completeDate': _fmtDate(shot.completeDate),
+            'clientEta': _fmtDate(shot.clientEta),
+            'dueDate': _fmtDate(shot.dueDate),
             'dailyWip': shot.dailyWip.toStringAsFixed(1),
             'mandays': shot.mandays.toStringAsFixed(1),
             'consumedMandays': shot.consumedMandays.toStringAsFixed(1),
@@ -1275,6 +1286,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 contains('allocationEta', _allocationEtaFilter) &&
                 contains('startingDate', _startingDateFilter) &&
                 contains('completeDate', _completeDateFilter) &&
+                contains('clientEta', _clientEtaFilter) &&
+                contains('dueDate', _dueDateFilter) &&
                 contains('dailyWip', _dailyWipFilter) &&
                 contains('mandays', _mandaysFilter) &&
                 contains('consumedMandays', _consumedMandaysFilter) &&
@@ -1491,6 +1504,22 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     _editableField(
                       context,
                       controller,
+                      'clientEta',
+                      'Client ETA',
+                      110,
+                      isDate: true,
+                    ),
+                    _editableField(
+                      context,
+                      controller,
+                      'dueDate',
+                      'Due Date',
+                      100,
+                      isDate: true,
+                    ),
+                    _editableField(
+                      context,
+                      controller,
                       'dailyWip',
                       'Daily WIP %',
                       100,
@@ -1646,6 +1675,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           break;
                         case 'completeDate':
                           _completeDateFilter = v;
+                          break;
+                        case 'clientEta':
+                          _clientEtaFilter = v;
+                          break;
+                        case 'dueDate':
+                          _dueDateFilter = v;
                           break;
                         case 'dailyWip':
                           _dailyWipFilter = v;
@@ -1948,9 +1983,18 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   /// import proceeds with those. When either is on "All", a small picker asks
   /// the user for the target before any parsing/saving happens — so imports
   /// are never blocked by the current filter selection.
+  /// Resolves the show/department that import rows are written to.
+  ///
+  /// When the toolbar filter already has a specific show + department the
+  /// import proceeds with those.  When [promptIfUnresolved] is true and either
+  /// is on "All", a small picker asks the user for the target — kept only for
+  /// the paste-CSV flow, whose rows carry no client/show columns.  Excel
+  /// imports pass `false`: client + show are resolved per row from the file
+  /// itself, so the user is never asked.
   Future<_ImportTargetResult?> _resolveImportTarget(
-    ProjectController controller,
-  ) async {
+    ProjectController controller, {
+    bool promptIfUnresolved = true,
+  }) async {
     final showSpecific =
         controller.selectedShowId != null &&
         controller.selectedShowId != ProjectController.allOption;
@@ -1963,6 +2007,15 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         department: controller.selectedDepartment!,
       );
     }
+    if (!promptIfUnresolved) {
+      // No dialog: rows resolve client/show from the file.  The toolbar
+      // selection (if any) is only used as a fallback for rows whose file
+      // has no usable client/show value.
+      return _ImportTargetResult(
+        showId: showSpecific ? controller.selectedShowId! : '',
+        department: deptSpecific ? controller.selectedDepartment! : '',
+      );
+    }
     if (!mounted) return null;
     return showDialog<_ImportTargetResult>(
       context: context,
@@ -1971,7 +2024,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Future<void> _pickAndParseExcel(ProjectController controller) async {
-    final target = await _resolveImportTarget(controller);
+    // Never ask the user for client/show — everything comes from the file.
+    final target = await _resolveImportTarget(
+      controller,
+      promptIfUnresolved: false,
+    );
     if (target == null || !mounted) return;
     setState(() => _isImporting = true);
     try {
@@ -1994,17 +2051,42 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       // Heavy decode + parse + API upload all happen in a background isolate.
       // Only a compact summary + capped preview come back to the UI thread, so
       // large files never block the UI or transfer thousands of row Maps.
-      final outcome =
-          await compute(_parseAndSaveImportInIsolate, <String, dynamic>{
-            'bytes': bytes,
-            'extension': extension,
-            'showId': target.showId,
-            'department': target.department,
-            'shotStatuses': AppConstants.shotStatuses,
-            'baseUrl': ApiConstants.baseUrl,
-            'endpoint': ApiConstants.projectShotsBulkUpsert,
-            'token': ApiController.instance.getToken(),
-          });
+      final outcome = await compute(
+        _parseAndSaveImportInIsolate,
+        <String, dynamic>{
+          'bytes': bytes,
+          'extension': extension,
+          'showId': target.showId,
+          'department': target.department,
+          'shotStatuses': AppConstants.shotStatuses,
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.projectShotsBulkUpsert,
+          'token': ApiController.instance.getToken(),
+          // Pass the user's shows (id + name) so each imported row can
+          // resolve its own show from the file's "Show" column instead of
+          // blindly stamping the toolbar's selected show on every row.
+          'shows': controller.shows
+              .map(
+                (s) => <String, String>{
+                  'showId': s.showId,
+                  'showName': s.showName,
+                  'clientId': s.clientId,
+                },
+              )
+              .toList(),
+          // Pass the user's clients (id + name) so each imported row can
+          // resolve its own client from the file's "Client" column.
+          'clients': controller.clients
+              .map(
+                (c) => <String, String>{
+                  'clientId': c.clientId,
+                  'clientName': c.clientName,
+                },
+              )
+              .toList(),
+          'targetShowId': target.showId,
+        },
+      );
 
       if (!mounted) return;
 
@@ -2174,6 +2256,28 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         'showId': target.showId,
         'department': target.department,
         'shotStatuses': AppConstants.shotStatuses,
+        // Same shows list as the file import — lets pasted rows with a
+        // header that includes a Show column resolve per-row too.
+        'shows': controller.shows
+            .map(
+              (s) => <String, String>{
+                'showId': s.showId,
+                'showName': s.showName,
+                'clientId': s.clientId,
+              },
+            )
+            .toList(),
+        // Same clients list as the file import — lets pasted rows with a
+        // header that includes a Client column resolve per-row too.
+        'clients': controller.clients
+            .map(
+              (c) => <String, String>{
+                'clientId': c.clientId,
+                'clientName': c.clientName,
+              },
+            )
+            .toList(),
+        'targetShowId': target.showId,
       });
       if (!mounted) return;
       setState(() {
@@ -2999,12 +3103,103 @@ dynamic _pickFieldValueT(
   return null;
 }
 
+/// Header aliases recognised for the file's "Client" column.
+const List<String> _clientHeaderAliases = [
+  'client',
+  'client_name',
+  'clientname',
+  'client_name_2',
+  'customer',
+  'customer_name',
+];
+
+/// Header aliases recognised for the file's "Show" column.
+const List<String> _showHeaderAliases = [
+  'show',
+  'show_name',
+  'showname',
+  'show_name_2',
+  'program',
+  'project_name',
+];
+
+/// Whether the file actually HAS a column matching any of [aliases] (an empty
+/// value in that column is still "present", so callers can enforce the
+/// skip-if-empty rule).  Mirrors `_pickFieldValueT`'s fuzzy key scoring so
+/// header spelling variants like "Client Name" / "client_name" both count.
+bool _hasHeaderKeyT(Map<String, dynamic> row, List<String> aliases) {
+  final aliasKeys = aliases
+      .map(_sanitizeHeaderKeyT)
+      .where((k) => k.isNotEmpty)
+      .toList(growable: false);
+  if (aliasKeys.isEmpty) return false;
+  for (final entry in row.entries) {
+    final key = entry.key.toString();
+    if (key.startsWith('col_')) continue;
+    final normalizedKey = _sanitizeHeaderKeyT(key);
+    if (normalizedKey.isEmpty) continue;
+    for (final alias in aliasKeys) {
+      if (normalizedKey == alias ||
+          normalizedKey.contains(alias) ||
+          alias.contains(normalizedKey)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 Map<String, dynamic> _toApiImportRowT(
   Map<String, dynamic> row,
   String showId,
   String department,
-  List<String> shotStatuses,
-) {
+  List<String> shotStatuses, {
+  List<Map<String, String>>? showsList,
+  List<Map<String, String>>? clientsList,
+  String targetShowId = '',
+}) {
+  // Client + Show come from the file — the user is never asked.  Rules:
+  //  * If the file HAS a Client column but the row's value is empty → skip
+  //    the row (empty showId signals the caller).
+  //  * Same for an empty Show value when the file has a Show column.
+  //  * When the file names BOTH a client and a show, the show must resolve
+  //    under that client — the toolbar's show is never stamped over the
+  //    file's values (no match → skip).
+  //  * Otherwise the toolbar-selected show (if any) is only a fallback.
+  var resolvedShowId = showId;
+  var resolvedClientId = '';
+  final hasClientColumn = _hasHeaderKeyT(row, _clientHeaderAliases);
+  final hasShowColumn = _hasHeaderKeyT(row, _showHeaderAliases);
+  final fileClientRaw = (_pickFieldValueT(row, _clientHeaderAliases) ?? '')
+      .toString()
+      .trim();
+  final fileShowRaw = (_pickFieldValueT(row, _showHeaderAliases) ?? '')
+      .toString()
+      .trim();
+  if (hasClientColumn && fileClientRaw.isEmpty) {
+    // The file demands a client but this row has none → skip.
+    resolvedShowId = '';
+  } else if (hasShowColumn && fileShowRaw.isEmpty) {
+    // The file demands a show but this row has none → skip.
+    resolvedShowId = '';
+  } else if (fileShowRaw.isNotEmpty && showsList != null) {
+    resolvedClientId = fileClientRaw.isNotEmpty && clientsList != null
+        ? resolveClientId(fileClientRaw, clientsList)
+        : '';
+    // Strict when the file names BOTH a client and a show: the show must
+    // match under that client.  Non-strict keeps the toolbar fallback for
+    // files that have a Show column but no (resolvable) Client column.
+    final strict = resolvedClientId.isNotEmpty;
+    final matched = resolveShowId(
+      fileShowRaw,
+      showsList,
+      clientScopeId: strict ? resolvedClientId : null,
+      targetShowId: targetShowId,
+      fallbackShowId: strict ? '' : showId,
+    );
+    if (matched.isNotEmpty) resolvedShowId = matched;
+    // strict && no match → resolvedShowId stays '' → row skipped.
+  }
   final shotCode =
       (_pickFieldValueT(row, [
                 'shot_id',
@@ -3048,7 +3243,8 @@ Map<String, dynamic> _toApiImportRowT(
       .toList()
       .join(',');
   return {
-    'showId': showId,
+    'showId': resolvedShowId,
+    'clientId': resolvedClientId,
     'department': dept,
     'shotCode': shotCode,
     'frameIn': _toIntValueT(
@@ -3078,7 +3274,7 @@ Map<String, dynamic> _toApiImportRowT(
         'supervisorbid',
         'sup_bid',
         'supervisor_estimate',
-      ], fallbackColumnIndex: 0),
+      ]),
     ),
     'clientBid': _toDoubleValueT(
       _pickFieldValueT(row, [
@@ -3086,7 +3282,7 @@ Map<String, dynamic> _toApiImportRowT(
         'clientbid',
         'cli_bid',
         'client_estimate',
-      ], fallbackColumnIndex: 0),
+      ]),
     ),
     'clientEta': _toIsoDateT(
       _pickFieldValueT(row, [
@@ -3210,17 +3406,11 @@ Map<String, dynamic> _toApiImportRowT(
                   'priority',
                   'shot_priority',
                   'pipeline_priority',
-                ], fallbackColumnIndex: 0) ??
+                ]) ??
                 '')
             .toString(),
-    'notes':
-        (_pickFieldValueT(row, [
-                  'notes',
-                  'description',
-                  'remarks',
-                ], fallbackColumnIndex: 0) ??
-                '')
-            .toString(),
+    'notes': (_pickFieldValueT(row, ['notes', 'description', 'remarks']) ?? '')
+        .toString(),
     'status': status,
     'artistId':
         (_pickFieldValueT(row, [
@@ -3276,6 +3466,11 @@ Map<String, dynamic> _toApiImportRowT(
   };
 }
 
+/// Extracts the serializable shows list (id + name + client) that the caller
+/// passed into the isolate args, as a plain list of string maps.
+List<Map<String, String>> _showsListFromArgsT(dynamic rawShows) =>
+    showsListFromArgs(rawShows);
+
 /// Entry point for `compute()`.  Parses Excel/CSV bytes in a background isolate
 /// AND uploads every row to the API in 100-row chunks.
 /// Only a compact summary + a capped preview are transferred back to the UI
@@ -3295,11 +3490,31 @@ Future<Map<String, dynamic>> _parseAndSaveImportInIsolate(
   final endpoint = (args['endpoint'] as String?) ?? '';
   final token = args['token'] as String?;
 
+  final showsList = _showsListFromArgsT(args['shows']);
+  final clientsList = clientsListFromArgs(args['clients']);
+  final targetShowId = (args['targetShowId'] as String?) ?? '';
+
   final List<Map<String, dynamic>> rows;
   if (extension == 'xlsx') {
-    rows = _parseExcelRowsT(bytes, showId, department, shotStatuses);
+    rows = _parseExcelRowsT(
+      bytes,
+      showId,
+      department,
+      shotStatuses,
+      showsList: showsList,
+      clientsList: clientsList,
+      targetShowId: targetShowId,
+    );
   } else if (extension == 'csv') {
-    rows = _parseCsvRowsT(bytes, showId, department, shotStatuses);
+    rows = _parseCsvRowsT(
+      bytes,
+      showId,
+      department,
+      shotStatuses,
+      showsList: showsList,
+      clientsList: clientsList,
+      targetShowId: targetShowId,
+    );
   } else {
     throw Exception('Unsupported format: .$extension');
   }
@@ -3416,7 +3631,18 @@ List<Map<String, dynamic>> _parseCsvTextInIsolate(Map<String, dynamic> args) {
   final shotStatuses = ((args['shotStatuses'] as List<dynamic>?) ?? const [])
       .map((e) => e.toString())
       .toList(growable: false);
-  return _parseCsvTextRowsT(text, showId, department, shotStatuses);
+  final showsList = _showsListFromArgsT(args['shows']);
+  final clientsList = clientsListFromArgs(args['clients']);
+  final targetShowId = (args['targetShowId'] as String?) ?? '';
+  return _parseCsvTextRowsT(
+    text,
+    showId,
+    department,
+    shotStatuses,
+    showsList: showsList,
+    clientsList: clientsList,
+    targetShowId: targetShowId,
+  );
 }
 
 /// Isolate-safe paste parser: locates the header row, splits the CSV, maps
@@ -3425,8 +3651,11 @@ List<Map<String, dynamic>> _parseCsvTextRowsT(
   String csvText,
   String showId,
   String department,
-  List<String> shotStatuses,
-) {
+  List<String> shotStatuses, {
+  List<Map<String, String>>? showsList,
+  List<Map<String, String>>? clientsList,
+  String targetShowId = '',
+}) {
   final lines = const LineSplitter().convert(csvText.trim());
   if (lines.isEmpty) {
     return const [];
@@ -3441,7 +3670,10 @@ List<Map<String, dynamic>> _parseCsvTextRowsT(
       : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
-  final seenShotCodes = <String>{};
+  // Rows are unique per (show, department, shot code) — matching the server's
+  // upsert key — so the same shot code in different shows/departments imports
+  // as separate records instead of being silently collapsed.
+  final seenKeys = <String>{};
 
   // Data-only pastes (no header row) start at line 0 and map columns
   // positionally through [_projectPositionalTemplate].
@@ -3473,11 +3705,25 @@ List<Map<String, dynamic>> _parseCsvTextRowsT(
       }
     }
 
-    final apiRow = _toApiImportRowT(raw, showId, department, shotStatuses);
+    final apiRow = _toApiImportRowT(
+      raw,
+      showId,
+      department,
+      shotStatuses,
+      showsList: showsList,
+      clientsList: clientsList,
+      targetShowId: targetShowId,
+    );
     final shotCode = (apiRow['shotCode'] ?? '').toString().trim();
-    if (shotCode.isEmpty) continue;
-    if (seenShotCodes.contains(shotCode)) continue;
-    seenShotCodes.add(shotCode);
+    // Skip rows with no shot code, and rows whose client/show couldn't be
+    // resolved from the file (empty showId) — the rest are processed.
+    if (shotCode.isEmpty ||
+        (apiRow['showId'] ?? '').toString().trim().isEmpty) {
+      continue;
+    }
+    final key = '${apiRow['showId']}|${apiRow['department']}|$shotCode';
+    if (seenKeys.contains(key)) continue;
+    seenKeys.add(key);
     out.add(apiRow);
   }
 
@@ -3488,8 +3734,11 @@ List<Map<String, dynamic>> _parseExcelRowsT(
   Uint8List bytes,
   String showId,
   String department,
-  List<String> shotStatuses,
-) {
+  List<String> shotStatuses, {
+  List<Map<String, String>>? showsList,
+  List<Map<String, String>>? clientsList,
+  String targetShowId = '',
+}) {
   final excel = Excel.decodeBytes(bytes);
   if (excel.tables.isEmpty) return const [];
   final firstSheet = excel.tables.values.first;
@@ -3501,7 +3750,7 @@ List<Map<String, dynamic>> _parseExcelRowsT(
       .toList();
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
-  final seenShotCodes = <String>{};
+  final seenKeys = <String>{};
   for (var i = headerIndex + 1; i < rows.length; i++) {
     final r = rows[i];
     if (r.every((c) => (c?.value?.toString().trim() ?? '').isEmpty)) continue;
@@ -3515,11 +3764,24 @@ List<Map<String, dynamic>> _parseExcelRowsT(
       if (key.isEmpty) continue;
       raw[key] = cell?.value;
     }
-    final apiRow = _toApiImportRowT(raw, showId, department, shotStatuses);
+    final apiRow = _toApiImportRowT(
+      raw,
+      showId,
+      department,
+      shotStatuses,
+      showsList: showsList,
+      clientsList: clientsList,
+      targetShowId: targetShowId,
+    );
     final code = (apiRow['shotCode'] ?? '').toString().trim();
-    if (code.isEmpty) continue;
-    if (seenShotCodes.contains(code)) continue;
-    seenShotCodes.add(code);
+    // Skip rows with no shot code, and rows whose client/show couldn't be
+    // resolved from the file (empty showId) — the rest are processed.
+    if (code.isEmpty || (apiRow['showId'] ?? '').toString().trim().isEmpty) {
+      continue;
+    }
+    final key = '${apiRow['showId']}|${apiRow['department']}|$code';
+    if (seenKeys.contains(key)) continue;
+    seenKeys.add(key);
     out.add(apiRow);
   }
   return out;
@@ -3529,8 +3791,11 @@ List<Map<String, dynamic>> _parseCsvRowsT(
   Uint8List bytes,
   String showId,
   String department,
-  List<String> shotStatuses,
-) {
+  List<String> shotStatuses, {
+  List<Map<String, String>>? showsList,
+  List<Map<String, String>>? clientsList,
+  String targetShowId = '',
+}) {
   final csv = utf8.decode(bytes, allowMalformed: true);
   final lines = const LineSplitter().convert(csv);
   if (lines.length < 2) return const [];
@@ -3540,7 +3805,7 @@ List<Map<String, dynamic>> _parseCsvRowsT(
   ).map(_normalizeHeaderT).toList(growable: false);
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
-  final seenShotCodes = <String>{};
+  final seenKeys = <String>{};
   for (var i = headerIndex + 1; i < lines.length; i++) {
     final line = lines[i].trim();
     if (line.isEmpty) continue;
@@ -3554,11 +3819,24 @@ List<Map<String, dynamic>> _parseCsvRowsT(
       if (key.isEmpty) continue;
       raw[key] = value;
     }
-    final apiRow = _toApiImportRowT(raw, showId, department, shotStatuses);
+    final apiRow = _toApiImportRowT(
+      raw,
+      showId,
+      department,
+      shotStatuses,
+      showsList: showsList,
+      clientsList: clientsList,
+      targetShowId: targetShowId,
+    );
     final code = (apiRow['shotCode'] ?? '').toString().trim();
-    if (code.isEmpty) continue;
-    if (seenShotCodes.contains(code)) continue;
-    seenShotCodes.add(code);
+    // Skip rows with no shot code, and rows whose client/show couldn't be
+    // resolved from the file (empty showId) — the rest are processed.
+    if (code.isEmpty || (apiRow['showId'] ?? '').toString().trim().isEmpty) {
+      continue;
+    }
+    final key = '${apiRow['showId']}|${apiRow['department']}|$code';
+    if (seenKeys.contains(key)) continue;
+    seenKeys.add(key);
     out.add(apiRow);
   }
   return out;
@@ -4577,6 +4855,8 @@ class _ProjectFilterResult {
   final String allocationEta;
   final String startingDate;
   final String completeDate;
+  final String clientEta;
+  final String dueDate;
   final String dailyWip;
   final String mandays;
   final String consumedMandays;
@@ -4608,6 +4888,8 @@ class _ProjectFilterResult {
     required this.allocationEta,
     required this.startingDate,
     required this.completeDate,
+    required this.clientEta,
+    required this.dueDate,
     required this.dailyWip,
     required this.mandays,
     required this.consumedMandays,
@@ -4644,6 +4926,8 @@ class _ProjectFilterDialog extends StatefulWidget {
   final String initialAllocationEta;
   final String initialStartingDate;
   final String initialCompleteDate;
+  final String initialClientEta;
+  final String initialDueDate;
   final String initialDailyWip;
   final String initialMandays;
   final String initialConsumedMandays;
@@ -4673,6 +4957,8 @@ class _ProjectFilterDialog extends StatefulWidget {
     required this.initialAllocationEta,
     required this.initialStartingDate,
     required this.initialCompleteDate,
+    required this.initialClientEta,
+    required this.initialDueDate,
     required this.initialDailyWip,
     required this.initialMandays,
     required this.initialConsumedMandays,
@@ -4756,6 +5042,8 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
       'allocationEta': TextEditingController(text: widget.initialAllocationEta),
       'startingDate': TextEditingController(text: widget.initialStartingDate),
       'completeDate': TextEditingController(text: widget.initialCompleteDate),
+      'clientEta': TextEditingController(text: widget.initialClientEta),
+      'dueDate': TextEditingController(text: widget.initialDueDate),
       'dailyWip': TextEditingController(text: widget.initialDailyWip),
       'mandays': TextEditingController(text: widget.initialMandays),
       'consumedMandays': TextEditingController(
@@ -4874,6 +5162,8 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
         allocationEta: _controllers['allocationEta']!.text,
         startingDate: _controllers['startingDate']!.text,
         completeDate: _controllers['completeDate']!.text,
+        clientEta: _controllers['clientEta']!.text,
+        dueDate: _controllers['dueDate']!.text,
         dailyWip: _controllers['dailyWip']!.text,
         mandays: _controllers['mandays']!.text,
         consumedMandays: _controllers['consumedMandays']!.text,

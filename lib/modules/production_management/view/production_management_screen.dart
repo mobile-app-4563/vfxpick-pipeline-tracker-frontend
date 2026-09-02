@@ -3537,7 +3537,10 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
   return idx < 0 ? 0 : idx;
 }
 
-String? _toIsoDateT(dynamic value) => excelDateToIso(value);
+/// Grid date cells come from the template's `mmm-yy` format, so a 2-digit
+/// value ("May-25") is ALWAYS a year (the 1st of the month), never a day.
+String? _toGridIsoDateT(dynamic value) =>
+    excelDateToIso(value, monthYearFirst: true);
 
 int _toIntValueT(dynamic value) {
   if (value == null) return 0;
@@ -3721,18 +3724,18 @@ Map<String, dynamic> _toGridApiRowT(
     'tasks': str('tasks').toUpperCase(),
     'coordinator': str('coordinator'),
     'month': str('month'),
-    'shotsReceivedDate': _toIsoDateT(valueFor('shotsReceivedDate')),
+    'shotsReceivedDate': _toGridIsoDateT(valueFor('shotsReceivedDate')),
     'clientForRef': str('clientForRef'),
-    'wipEta': _toIsoDateT(valueFor('wipEta')),
-    'eta': _toIsoDateT(valueFor('eta')),
+    'wipEta': _toGridIsoDateT(valueFor('wipEta')),
+    'eta': _toGridIsoDateT(valueFor('eta')),
     'frames': _toIntValueT(valueFor('frames')),
     'reviewNotes': str('reviewNotes'),
     'status': status,
-    'deliveredOn': _toIsoDateT(valueFor('deliveredOn')),
+    'deliveredOn': _toGridIsoDateT(valueFor('deliveredOn')),
     'workStation': str('workStation'),
     'shotMandays': _toDoubleValueT(valueFor('shotMandays')),
     'approvedClientMd': _toDoubleValueT(valueFor('approvedClientMd')),
-    'flEta': _toIsoDateT(valueFor('flEta')),
+    'flEta': _toGridIsoDateT(valueFor('flEta')),
     'flMandays': _toDoubleValueT(valueFor('flMandays')),
   };
 }

@@ -171,6 +171,11 @@ class _GridEditableCellState extends State<GridEditableCell> {
       ),
     );
     if (!mounted || result == null) return;
+    // Date cells skip the normal onStartEdit path (double-tap opens the
+    // picker directly), so mark the cell as editing now.  Hosts like Projects
+    // guard commits on the editing key; without this the guard fails and the
+    // picked date is silently dropped.  onCommit clears the key afterwards.
+    widget.onStartEdit();
     widget.onCommit(result!);
   }
 

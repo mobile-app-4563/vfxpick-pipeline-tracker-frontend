@@ -6,6 +6,36 @@ import '../services/api_controller.dart';
 class ProductionService {
   final ApiController _api = ApiController.instance;
 
+  /// Fetch production-grid rows whose ETA is today or tomorrow.
+  ///
+  /// These power the Home page's "Production Pickouts" list — the shots
+  /// imported from the Jan-Dec Excel file that are due today/tomorrow.
+  Future<Map<String, dynamic>> getGridPickouts({
+    required String today,
+    required String tomorrow,
+  }) async {
+    try {
+      final response = await _api.get(
+        '${ApiConstants.production}/pickouts?today=$today&tomorrow=$tomorrow',
+      );
+
+      if (response['success'] == true) {
+        return response;
+      } else {
+        return {
+          'success': false,
+          'error': response['error'] ?? 'Failed to fetch production pickouts',
+        };
+      }
+    } catch (e) {
+      debugPrint('ProductionService.getGridPickouts error: $e');
+      return {
+        'success': false,
+        'error': 'Failed to fetch production pickouts: $e',
+      };
+    }
+  }
+
   /// Fetch production concerns for a show
   Future<Map<String, dynamic>> getProductionConcerns({
     String showId = '',

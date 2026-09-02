@@ -54,10 +54,46 @@ void main() {
     });
 
     test('month-year text (mmm-yy) becomes the 1st of the month', () {
-      expect(excelDateToIso('May-25'), '2025-05-01');
-      expect(excelDateToIso('May 2025'), '2025-05-01');
-      expect(excelDateToIso('Mar-30'), '1930-03-01');
-      expect(excelDateToIso('may-25'), '2025-05-01');
+      // Production template mode: 2-digit values are YEARS (May-25 = May 2025).
+      expect(excelDateToIso('May-25', monthYearFirst: true), '2025-05-01');
+      expect(excelDateToIso('May 2025', monthYearFirst: true), '2025-05-01');
+      expect(excelDateToIso('Mar-30', monthYearFirst: true), '1930-03-01');
+      expect(excelDateToIso('may-25', monthYearFirst: true), '2025-05-01');
+      expect(excelDateToIso('March-25', monthYearFirst: true), '2025-03-01');
+      // 4-digit year → 1st of month regardless of mode.
+      expect(excelDateToIso('May-2025'), '2025-05-01');
+    });
+
+    test('numeric month-year text becomes the 1st of the month', () {
+      expect(excelDateToIso('05-25'), '2025-05-01');
+      expect(excelDateToIso('05-2025'), '2025-05-01');
+      expect(excelDateToIso('5/2025'), '2025-05-01');
+      expect(excelDateToIso('05/2025'), '2025-05-01');
+    });
+
+    test('2-digit-year day-first formats are resolved (never null)', () {
+      expect(excelDateToIso('01-05-25'), '2025-05-01');
+      expect(excelDateToIso('1-5-25'), '2025-05-01');
+      expect(excelDateToIso('25-05-25'), '2025-05-25');
+      expect(excelDateToIso('05/05/25'), '2025-05-05');
+      expect(excelDateToIso('25/5/25'), '2025-05-25');
+      expect(excelDateToIso('1/1/25'), '2025-01-01');
+    });
+
+    test('slash/dot ISO and year-month formats are parsed', () {
+      expect(excelDateToIso('2025/05/01'), '2025-05-01');
+      expect(excelDateToIso('2025.05.01'), '2025-05-01');
+      expect(excelDateToIso('2025-05'), '2025-05-01');
+      expect(excelDateToIso('2025/05'), '2025-05-01');
+      // Year-first with dots must NOT become a 1905-era Excel serial.
+      expect(excelDateToIso('2025.05'), '2025-05-01');
+      expect(excelDateToIso('2025'), '2025-01-01');
+    });
+
+    test('day + named month without year → current year (daily pickout)', () {
+      final now = DateTime.now();
+      expect(excelDateToIso('5-May'), '${now.year}-05-05');
+      expect(excelDateToIso('01-May'), '${now.year}-05-01');
     });
 
     test('garbage returns null (never raw text)', () {

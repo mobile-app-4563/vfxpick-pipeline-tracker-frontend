@@ -10,12 +10,6 @@ import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/production_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../core/services/review_service.dart';
-
-/// Home page controller for Today's Pickouts and dashboard data.
-/// Supports department-based filtering:
-/// - Production department: shows concern data from production_data table
-/// - Other departments: shows actual data (reports/performance)
-/// - Admin: shows both data types
 class HomeController extends ChangeNotifier {
   final DashboardService _dashboardService = DashboardService();
   final ReportService _reportService = ReportService();
@@ -98,18 +92,86 @@ class HomeController extends ChangeNotifier {
           AppConstants.broadAccessRoles.contains(role) ||
           department == 'Production';
 
-      // ── Fire invent-active (+ production concerns when the user has
-      //    production access) in PARALLEL. The mandays chart was removed
-      //    from the home page, so insights are no longer fetched here. ──────
+      // ── Fire invent-active (+ production grid pickouts when the user has
+      //    production access) in PARALLEL. The mandays chart was removed from
+      //    the home page, so insights are no longer fetched here. ───────────
       await Future.wait([
         fetchInventActiveShows(),
-        if (canAccessProduction) fetchProductionConcerns(),
+        if (canAccessProduction) fetchGridPickouts(today: today),
       ]);
     } catch (e) {
       _errorMessage = 'Failed to load today\'s pickouts: $e';
       _todaysPickouts = [];
     } finally {
       _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Fetch production-grid rows whose ETA is today or tomorrow and build
+  /// priority-ranked pickouts (same due-date logic as shot pickouts).
+  ///
+  /// The Production Pickouts list on Home is sourced from the imported
+  /// Jan-Dec Excel file (production_grid table), so an imported ETA that
+  /// matches today/tomorrow shows up here exactly like shot pickouts.
+  /// Only called if the user's department is 'Production' or user is Admin.
+  Future<void> fetchGridPickouts({required String today}) async {
+    _isProductionLoading = true;
+    _productionError = null;
+    notifyListeners();
+
+    try {
+      final now = DateTime.now();
+      final tomorrowDate = now.add(const Duration(days: 1));
+      final tomorrow =
+          '${tomorrowDate.year.toString().padLeft(4, '0')}-${tomorrowDate.month.toString().padLeft(2, '0')}-${tomorrowDate.day.toString().padLeft(2, '0')}';
+
+      final response = await _productionService.getGridPickouts(
+        today: today,
+        tomorrow: tomorrow,
+      );
+
+      if (response['success'] == true) {
+        final pickouts =
+            (response['pickouts'] as List<dynamic>?) ?? const <dynamic>[];
+
+        // Map each grid row into a pickout model. The grid rows carry the
+        // imported ETA (dueDate) plus show/shot/task/status fields, so they
+        // reuse the exact same urgency ranking as shot pickouts.
+        _productionPickouts = pickouts.whereType<Map<String, dynamic>>().map((
+          row,
+        ) {
+          return ProductionConcernModel.calculatePriority({
+            'productionId': row['shotId'],
+            'showId': row['show'],
+            'shotId': row['shotCode'],
+            'concernType': row['tasks'],
+            'concernDescription': row['reviewNotes'],
+            'status': row['status'],
+            'dueDate': row['eta'],
+            'priority': '',
+          });
+        }).toList()..sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
+
+        // Keep status counts on the source rows for any consumer that still
+        // reads them.
+        _concernStatusCount = {};
+        for (final p in _productionPickouts) {
+          final status = p.status.isEmpty ? 'Unknown' : p.status;
+          _concernStatusCount[status] = (_concernStatusCount[status] ?? 0) + 1;
+        }
+      } else {
+        _productionError =
+            response['error'] ?? 'Failed to load production pickouts';
+        _productionPickouts = [];
+        _concernStatusCount = {};
+      }
+    } catch (e) {
+      _productionError = 'Failed to load production pickouts: $e';
+      _productionPickouts = [];
+      _concernStatusCount = {};
+    } finally {
+      _isProductionLoading = false;
       notifyListeners();
     }
   }
