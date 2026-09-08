@@ -215,13 +215,15 @@ class _HomeScreenState extends State<HomeScreen> {
           },
         );
         // Imported shots may only carry an ETA (client_eta) — fall back to it
-        // so they still land in Due Today / Due Tomorrow.
-        if (_isSameDay(pickout.shot.dueDate ?? pickout.shot.clientEta, today)) {
+        // so they still land in Due Today / Due Tomorrow. The backend also
+        // matches allocated_date, so include it as the last fallback.
+        final dueDay =
+            pickout.shot.dueDate ??
+            pickout.shot.clientEta ??
+            pickout.shot.allocatedDate;
+        if (_isSameDay(dueDay, today)) {
           dueToday.add(widget);
-        } else if (_isSameDay(
-          pickout.shot.dueDate ?? pickout.shot.clientEta,
-          tomorrow,
-        )) {
+        } else if (_isSameDay(dueDay, tomorrow)) {
           dueTomorrow.add(widget);
         }
       }

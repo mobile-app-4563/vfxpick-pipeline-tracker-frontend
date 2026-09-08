@@ -10,6 +10,7 @@ import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/production_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../core/services/review_service.dart';
+
 class HomeController extends ChangeNotifier {
   final DashboardService _dashboardService = DashboardService();
   final ReportService _reportService = ReportService();
@@ -73,19 +74,35 @@ class HomeController extends ChangeNotifier {
 
     try {
       final now = DateTime.now();
-      final today =
-          '${now.year.toString().padLeft(4, '0')}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+      String toIso(DateTime d) =>
+          '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+      final today = toIso(now);
+      final tomorrow = toIso(now.add(const Duration(days: 1)));
 
-      final response = await _dashboardService.fetchTodaysPickouts(date: today);
-      final pickoutsData = (response['pickouts'] as List<dynamic>?) ?? [];
+      // Fetch project (shot) pickouts for BOTH today and tomorrow so the
+      // Home card's "Due Tomorrow" section works for project shots exactly
+      // like it does for production-grid rows (the grid endpoint returns
+      // today + tomorrow). A shot that is due tomorrow but has no date equal
+      // to today would otherwise never appear in this list.
+      final responses = await Future.wait([
+        _dashboardService.fetchTodaysPickouts(date: today),
+        _dashboardService.fetchTodaysPickouts(date: tomorrow),
+      ]);
 
-      _todaysPickouts = pickoutsData.map((item) {
-        return TodaysPickoutModel.calculatePriority(
-          item as Map<String, dynamic>,
-        );
-      }).toList();
+      final seenShotIds = <String>{};
+      final merged = <TodaysPickoutModel>[];
+      for (final response in responses) {
+        final pickoutsData = (response['pickouts'] as List<dynamic>?) ?? [];
+        for (final item in pickoutsData) {
+          final model = TodaysPickoutModel.calculatePriority(
+            item as Map<String, dynamic>,
+          );
+          if (seenShotIds.add(model.shot.shotId)) merged.add(model);
+        }
+      }
 
-      _todaysPickouts.sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
+      _todaysPickouts = merged
+        ..sort((a, b) => a.priorityRank.compareTo(b.priorityRank));
       _errorMessage = null;
 
       final canAccessProduction =
