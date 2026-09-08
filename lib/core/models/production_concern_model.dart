@@ -63,7 +63,13 @@ class ProductionConcernModel {
     String priorityReason = 'Standard';
 
     if (dueDate != null) {
-      final daysDue = dueDate.difference(today).inDays;
+      // Imported Excel dates carry meaningless years, so the stored year is
+      // ignored: rank against the NEXT occurrence of the month/day today.
+      var nextDue = DateTime(now.year, dueDate.month, dueDate.day);
+      if (nextDue.isBefore(today)) {
+        nextDue = DateTime(now.year + 1, dueDate.month, dueDate.day);
+      }
+      final daysDue = nextDue.difference(today).inDays;
       if (daysDue == 0) {
         priorityRank = 1;
         priorityLabel = 'Critical';

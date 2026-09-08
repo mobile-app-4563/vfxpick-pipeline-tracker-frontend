@@ -10,6 +10,7 @@ import '../../../core/services/dashboard_service.dart';
 import '../../../core/services/production_service.dart';
 import '../../../core/services/report_service.dart';
 import '../../../core/services/review_service.dart';
+import 'home_pickout_item.dart';
 
 class HomeController extends ChangeNotifier {
   final DashboardService _dashboardService = DashboardService();
@@ -50,6 +51,42 @@ class HomeController extends ChangeNotifier {
   List<Map<String, dynamic>> get productionConcerns => _productionConcerns;
   List<ProductionConcernModel> get productionPickouts => _productionPickouts;
   Map<String, int> get concernStatusCount => _concernStatusCount;
+
+  /// Merged view of project shots + production-grid pickouts for the Home
+  /// card: one [HomePickoutItem] per shot (deduped by shot code), carrying
+  /// whichever module(s) reported it, sorted by urgency.
+  List<HomePickoutItem> get combinedPickouts {
+    final byKey = <String, HomePickoutItem>{};
+
+    void addShot(TodaysPickoutModel p) {
+      final raw = p.shot.shotCode.isNotEmpty ? p.shot.shotCode : p.shot.shotId;
+      final key = raw.trim().toLowerCase();
+      if (key.isEmpty) return;
+      final item = byKey.putIfAbsent(key, () => HomePickoutItem());
+      item.shot ??= p;
+    }
+
+    void addConcern(ProductionConcernModel c) {
+      final raw = (c.shotId?.isNotEmpty ?? false) ? c.shotId! : c.productionId;
+      final key = raw.trim().toLowerCase();
+      if (key.isEmpty) return;
+      final item = byKey.putIfAbsent(key, () => HomePickoutItem());
+      item.concern ??= c;
+    }
+
+    for (final p in _todaysPickouts) {
+      addShot(p);
+    }
+    for (final c in _productionPickouts) {
+      addConcern(c);
+    }
+
+    return byKey.values.toList()..sort((a, b) {
+      final byRank = a.priorityRank.compareTo(b.priorityRank);
+      if (byRank != 0) return byRank;
+      return a.shotCode.toLowerCase().compareTo(b.shotCode.toLowerCase());
+    });
+  }
 
   bool get isLoading => _isLoading;
   bool get isInsightsLoading => _isInsightsLoading;

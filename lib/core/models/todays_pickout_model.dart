@@ -46,7 +46,14 @@ class TodaysPickoutModel {
     // Priority calculation:
     // 1. Due date urgency (critical if today, high if tomorrow, etc.)
     if (dueDate != null) {
-      final daysDue = dueDate.difference(today).inDays;
+      // Imported Excel dates carry meaningless years (e.g. 2022-09-09 for a
+      // shot due 09-Sep), so the stored year is ignored: rank against the
+      // NEXT occurrence of the shot's month/day from today.
+      var nextDue = DateTime(now.year, dueDate.month, dueDate.day);
+      if (nextDue.isBefore(today)) {
+        nextDue = DateTime(now.year + 1, dueDate.month, dueDate.day);
+      }
+      final daysDue = nextDue.difference(today).inDays;
       if (daysDue == 0) {
         priorityRank = 1;
         priorityLabel = 'Critical';

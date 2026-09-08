@@ -8,10 +8,9 @@ import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/loading_widget.dart';
-import '../../../shared/widgets/production_pickout_widget.dart';
-import '../../../shared/widgets/todays_pickout_widget.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../controller/home_controller.dart';
+import '../controller/home_pickout_item.dart';
 
 /// Home page with pickouts, department quick filter and analytics cards.
 class HomeScreen extends StatefulWidget {
@@ -142,46 +141,19 @@ class _HomeScreenState extends State<HomeScreen> {
                     description: error,
                     icon: Icons.error_outline,
                   )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ── Left column: production pickouts ──
-                      Expanded(
-                        child: _typeColumn(
-                          controller,
-                          isDark,
-                          title: 'Production Pickouts',
-                          isProduction: true,
-                        ),
-                      ),
-                      SizedBox(width: SizeConfig.scaleWidth(context, 16)),
-                      // ── Right column: project (shot) pickouts ──
-                      Expanded(
-                        child: _typeColumn(
-                          controller,
-                          isDark,
-                          title: 'Project Pickouts',
-                          isProduction: false,
-                        ),
-                      ),
-                    ],
-                  ),
+                : _buildCombinedPickouts(controller, isDark),
           ),
         ],
       ),
     );
   }
 
-  /// Builds one column of the split pickouts card for a single pickout type
-  /// (production concerns or project shots). Inside the column the items are
-  /// grouped into "Due Today" and "Due Tomorrow" sections so the card shows
-  /// today's and tomorrow's pickouts for both project and production.
-  Widget _typeColumn(
-    HomeController controller,
-    bool isDark, {
-    required String title,
-    required bool isProduction,
-  }) {
+  /// Builds the single merged pickouts list inside the card. Project shots
+  /// and production-grid rows are combined per shot (see
+  /// [HomeController.combinedPickouts]) and bucketed into Due Today / Due
+  /// Tomorrow. Each tile shows the data the API returned for that shot from
+  /// whichever module(s) reported it.
+  Widget _buildCombinedPickouts(HomeController controller, bool isDark) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
@@ -189,75 +161,50 @@ class _HomeScreenState extends State<HomeScreen> {
     final dueToday = <Widget>[];
     final dueTomorrow = <Widget>[];
 
-    if (isProduction) {
-      for (final concern in controller.productionPickouts) {
-        final widget = ProductionPickoutWidget(
-          concern: concern,
-          onTap: () {
+    for (final item in controller.combinedPickouts) {
+      final tile = _CombinedPickoutTile(
+        item: item,
+        onTap: () {
+          final shotId = item.shot?.shot.shotId;
+          if (shotId != null && shotId.isNotEmpty) {
+            Navigator.of(
+              context,
+            ).pushNamed('/tasks', arguments: {'selectedShot': shotId});
+          } else {
             Navigator.of(context).pushNamed('/production-management');
-          },
-        );
-        if (_isSameDay(concern.dueDate, today)) {
-          dueToday.add(widget);
-        } else if (_isSameDay(concern.dueDate, tomorrow)) {
-          dueTomorrow.add(widget);
-        }
-      }
-    } else {
-      for (final pickout in controller.todaysPickouts) {
-        final widget = TodaysPickoutWidget(
-          pickout: pickout,
-          onTap: () {
-            Navigator.of(context).pushNamed(
-              '/tasks',
-              arguments: {'selectedShot': pickout.shot.shotId},
-            );
-          },
-        );
-        // Imported shots may only carry an ETA (client_eta) — fall back to it
-        // so they still land in Due Today / Due Tomorrow. The backend also
-        // matches allocated_date, so include it as the last fallback.
-        final dueDay =
-            pickout.shot.dueDate ??
-            pickout.shot.clientEta ??
-            pickout.shot.allocatedDate;
-        if (_isSameDay(dueDay, today)) {
-          dueToday.add(widget);
-        } else if (_isSameDay(dueDay, tomorrow)) {
-          dueTomorrow.add(widget);
-        }
+          }
+        },
+      );
+      if (_isSameDay(item.dueDate, today)) {
+        dueToday.add(tile);
+      } else if (_isSameDay(item.dueDate, tomorrow)) {
+        dueTomorrow.add(tile);
       }
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        _sectionHeader(title, isDark),
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              _sectionHeader('Due Today', isDark),
-              if (dueToday.isEmpty)
-                _compactEmpty('Nothing due today.', Icons.today)
-              else
-                ...dueToday,
-              _sectionHeader('Due Tomorrow', isDark),
-              if (dueTomorrow.isEmpty)
-                _compactEmpty('Nothing due tomorrow.', Icons.event)
-              else
-                ...dueTomorrow,
-            ],
-          ),
-        ),
+        _sectionHeader('Due Today', isDark),
+        if (dueToday.isEmpty)
+          _compactEmpty('Nothing due today.', Icons.today)
+        else
+          ...dueToday,
+        _sectionHeader('Due Tomorrow', isDark),
+        if (dueTomorrow.isEmpty)
+          _compactEmpty('Nothing due tomorrow.', Icons.event)
+        else
+          ...dueTomorrow,
       ],
     );
   }
 
-  /// True when [due] is on the same calendar day as [day].
+  /// True when [due] falls on the same MONTH+DAY as [day]. Imported Excel
+  /// dates carry meaningless years, so the year is deliberately ignored
+  /// (a 2022-09-09 ETA still counts as "Due Tomorrow" for 2026-09-09).
   bool _isSameDay(DateTime? due, DateTime day) {
     if (due == null) return false;
-    return due.year == day.year && due.month == day.month && due.day == day.day;
+    return due.month == day.month && due.day == day.day;
   }
 
   /// Compact section header inside the pickouts card.
@@ -304,6 +251,213 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A single merged pickout card. Displays all the data the API returned for
+/// the shot — whichever module(s) it came from (project shots and/or the
+/// production grid row).
+class _CombinedPickoutTile extends StatelessWidget {
+  final HomePickoutItem item;
+  final VoidCallback? onTap;
+
+  const _CombinedPickoutTile({required this.item, this.onTap});
+
+  Color _priorityColor() {
+    switch (item.priorityRank) {
+      case 1:
+        return AppColors.priorityCritical; // Red for critical
+      case 2:
+        return AppColors.priorityHigh; // Orange for high
+      case 3:
+        return AppColors.priorityMedium; // Amber for medium
+      default:
+        return AppColors.priorityLow; // Blue for low
+    }
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'N/A';
+    final mm = date.month.toString().padLeft(2, '0');
+    final dd = date.day.toString().padLeft(2, '0');
+    return '$dd/$mm/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final priorityColor = _priorityColor();
+    final textPrimary = isDark
+        ? AppColors.darkTextPrimary
+        : AppColors.lightTextPrimary;
+    final textSecondary = isDark
+        ? AppColors.darkTextSecondary
+        : AppColors.lightTextSecondary;
+
+    final metaChips = <Widget>[
+      if (item.hasProject) _chip(context, 'Project', AppColors.brandGreen),
+      if (item.hasProduction)
+        _chip(context, 'Production', AppColors.statusAssigned),
+      if ((item.department ?? '').isNotEmpty)
+        _chip(context, item.department!, AppColors.priorityLow),
+      if ((item.task ?? '').isNotEmpty)
+        _chip(context, item.task!, AppColors.statusReview),
+      if ((item.status ?? '').isNotEmpty)
+        _chip(context, item.status!, AppColors.statusApproved),
+    ];
+
+    return Card(
+      margin: SizeConfig.paddingSymmetric(context, horizontal: 16, vertical: 8),
+      elevation: 0,
+      color: isDark ? AppColors.darkCardFill : AppColors.lightCardFill,
+      shape: GradientBoxBorder(
+        gradient: AppColors.brandGradient,
+        width: SizeConfig.scaleWidth(context, 1),
+        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 8)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 8)),
+        child: Container(
+          padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
+          child: Row(
+            children: [
+              // Priority badge
+              Container(
+                width: SizeConfig.scaleWidth(context, 4),
+                height: SizeConfig.scaleHeight(context, 76),
+                decoration: BoxDecoration(
+                  color: priorityColor,
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 2),
+                  ),
+                ),
+              ),
+              SizeConfig.sizedBoxW(context, 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Row 1: Shot code + Priority label
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.shotCode.isEmpty
+                                ? (item.shot?.shot.shotCode ??
+                                      item.concern?.shotId ??
+                                      'Shot')
+                                : item.shotCode,
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 14),
+                              fontWeight: FontWeight.bold,
+                              color: textPrimary,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: SizeConfig.paddingSymmetric(
+                            context,
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: priorityColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(
+                              SizeConfig.scaleWidth(context, 4),
+                            ),
+                            border: Border.all(
+                              color: priorityColor,
+                              width: SizeConfig.scaleWidth(context, 0.5),
+                            ),
+                          ),
+                          child: Text(
+                            item.priorityLabel,
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 10),
+                              fontWeight: FontWeight.bold,
+                              color: priorityColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 4)),
+                    // Row 2: Show name + module/department/task/status chips
+                    if (item.showName.isNotEmpty)
+                      Padding(
+                        padding: EdgeInsets.only(
+                          bottom: SizeConfig.scaleHeight(context, 4),
+                        ),
+                        child: Text(
+                          item.showName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 12),
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
+                    if (metaChips.isNotEmpty)
+                      Wrap(
+                        spacing: SizeConfig.scaleWidth(context, 6),
+                        runSpacing: SizeConfig.scaleHeight(context, 4),
+                        children: metaChips,
+                      ),
+                    SizedBox(height: SizeConfig.scaleHeight(context, 4)),
+                    // Row 3: Priority reason + Due date
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.priorityReason,
+                            style: TextStyle(
+                              fontSize: SizeConfig.fontSize(context, 11),
+                              color: priorityColor,
+                              fontStyle: FontStyle.italic,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Text(
+                          'Due: ${_formatDate(item.dueDate)}',
+                          style: TextStyle(
+                            fontSize: SizeConfig.fontSize(context, 10),
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chip(BuildContext context, String label, Color color) {
+    return Container(
+      padding: SizeConfig.paddingSymmetric(context, horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(SizeConfig.scaleWidth(context, 3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: SizeConfig.fontSize(context, 10),
+          fontWeight: FontWeight.w500,
+          color: color,
+        ),
       ),
     );
   }
