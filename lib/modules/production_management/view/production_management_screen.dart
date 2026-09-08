@@ -3537,10 +3537,12 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
   return idx < 0 ? 0 : idx;
 }
 
-/// Grid date cells come from the template's `mmm-yy` format, so a 2-digit
-/// value ("May-25") is ALWAYS a year (the 1st of the month), never a day.
-String? _toGridIsoDateT(dynamic value) =>
-    excelDateToIso(value, monthYearFirst: true);
+/// Grid date cells are typed as MONTH + DAY ("Sep-01" = 1 Sep of the current
+/// year), and the template also carries real `mmm-yy` date cells (exact).
+/// Real date cells decode exactly; TEXT cells ("Sep-01", "Aug-28") are
+/// day-of-month values whose year is the CURRENT year — never a year token,
+/// so `monthYearFirst` must stay OFF (default mode).
+String? _toGridIsoDateT(dynamic value) => excelDateToIso(value);
 
 int _toIntValueT(dynamic value) {
   if (value == null) return 0;
