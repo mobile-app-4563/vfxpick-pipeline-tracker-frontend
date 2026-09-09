@@ -25,7 +25,8 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
   final ScrollController _tableHScroll = ScrollController();
   final ScrollController _tableVScroll = ScrollController();
 
-  // Permission-matrix column sorting (0 = Menu, 1..n = departments).
+  // Permission-matrix column sorting (0 = Menu, 1..n = roles,
+  // n+1..n+m = departments).
   int? _permissionSortIndex;
   bool _permissionSortAscending = true;
 
@@ -45,6 +46,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
 
   List<Map<String, dynamic>> _sortedPermissionRows(
     List<Map<String, dynamic>> rows,
+    List<String> roles,
     List<String> departments,
     AccessProvider access,
   ) {
@@ -57,8 +59,11 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
         final la = access.labelForRoute(a['route'].toString(), role: 'Admin');
         final lb = access.labelForRoute(b['route'].toString(), role: 'Admin');
         cmp = compareCellValues(la, lb);
+      } else if (index <= roles.length) {
+        final role = roles[index - 1];
+        cmp = compareCellValues(a[role] == true, b[role] == true);
       } else {
-        final dept = departments[index - 1];
+        final dept = departments[index - 1 - roles.length];
         final key = _deptKey(dept);
         cmp = compareCellValues(a[key] == true, b[key] == true);
       }
@@ -106,18 +111,20 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
       );
     }
 
+    final roles = access.roles;
     final departments = List<String>.from(AppConstants.departments);
     final routes = AccessProvider.orderedMenuRoutes;
     final rows = routes
         .map(
           (route) => <String, dynamic>{
             'route': route,
+            for (final item in roles) item: access.hasMenuAccess(item, route),
             for (final dept in departments)
               _deptKey(dept): access.hasDepartmentMenuAccess(dept, route),
           },
         )
         .toList(growable: false);
-    final sortedRows = _sortedPermissionRows(rows, departments, access);
+    final sortedRows = _sortedPermissionRows(rows, roles, departments, access);
 
     return Padding(
       padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
@@ -126,7 +133,13 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _matrixHeader(context, access, routes.length, departments.length),
+            _matrixHeader(
+              context,
+              access,
+              routes.length,
+              roles.length,
+              departments.length,
+            ),
             SizedBox(height: SizeConfig.scaleHeight(context, 12)),
             Expanded(
               child: rows.isEmpty
@@ -135,7 +148,13 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                       title: 'No routes configured',
                       description: 'Menu routes are unavailable right now.',
                     )
-                  : _permissionTable(context, access, departments, sortedRows),
+                  : _permissionTable(
+                      context,
+                      access,
+                      roles,
+                      departments,
+                      sortedRows,
+                    ),
             ),
           ],
         ),
@@ -147,6 +166,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
     BuildContext context,
     AccessProvider access,
     int routeCount,
+    int roleCount,
     int departmentCount,
   ) {
     return Wrap(
@@ -182,7 +202,8 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                   ),
                 ),
                 Text(
-                  '$routeCount menus x $departmentCount departments',
+                  '$routeCount menus x $roleCount roles + '
+                  '$departmentCount departments',
                   style: TextStyle(
                     fontSize: SizeConfig.fontSize(context, 12),
                     color: Theme.of(context).textTheme.bodySmall?.color,
@@ -223,6 +244,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
   Widget _permissionTable(
     BuildContext context,
     AccessProvider access,
+    List<String> roles,
     List<String> departments,
     List<Map<String, dynamic>> rows,
   ) {
@@ -280,6 +302,21 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                               onTap: () => _togglePermissionSort(0),
                             ),
                           ),
+                          ...roles.map(
+                            (item) => DataColumn(
+                              columnWidth: IntrinsicColumnWidth(),
+                              label: SortableHeader(
+                                label: item,
+                                isSorted:
+                                    _permissionSortIndex ==
+                                    roles.indexOf(item) + 1,
+                                sortAscending: _permissionSortAscending,
+                                onTap: () => _togglePermissionSort(
+                                  roles.indexOf(item) + 1,
+                                ),
+                              ),
+                            ),
+                          ),
                           ...departments.map(
                             (dept) => DataColumn(
                               columnWidth: IntrinsicColumnWidth(),
@@ -287,10 +324,12 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                                 label: dept,
                                 isSorted:
                                     _permissionSortIndex ==
-                                    departments.indexOf(dept) + 1,
+                                    roles.length +
+                                        departments.indexOf(dept) +
+                                        1,
                                 sortAscending: _permissionSortAscending,
                                 onTap: () => _togglePermissionSort(
-                                  departments.indexOf(dept) + 1,
+                                  roles.length + departments.indexOf(dept) + 1,
                                 ),
                               ),
                             ),
@@ -312,6 +351,28 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                                       ),
                                     ),
                                   ),
+                                  ...roles.map((item) {
+                                    final canEdit = !access.isAdminRole(item);
+                                    final color = _roleColor(item);
+                                    return DataCell(
+                                      Switch(
+                                        value: row[item] == true,
+                                        onChanged: canEdit
+                                            ? (enabled) => _updateMenuAccess(
+                                                context,
+                                                access,
+                                                item,
+                                                route,
+                                                enabled,
+                                              )
+                                            : null,
+                                        activeThumbColor: color,
+                                        activeTrackColor: color.withValues(
+                                          alpha: 0.45,
+                                        ),
+                                      ),
+                                    );
+                                  }),
                                   ...departments.map((dept) {
                                     final color = _departmentColor(dept);
                                     return DataCell(
@@ -504,6 +565,51 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _updateMenuAccess(
+    BuildContext context,
+    AccessProvider access,
+    String role,
+    String route,
+    bool enabled,
+  ) async {
+    final ok = await access.setMenuAccess(
+      role: role,
+      route: route,
+      allowed: enabled,
+    );
+    if (!context.mounted || ok) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(access.errorMessage ?? 'Could not save permissions.'),
+      ),
+    );
+  }
+
+  Color _roleColor(String role) {
+    // Roles get their own tint so the role columns read as a separate group
+    // from the department columns in the matrix.
+    switch (role.toLowerCase()) {
+      case 'artist':
+        return const Color(0xFF3B82F6);
+      case 'coordinator':
+        return const Color(0xFF8B5CF6);
+      case 'supervisor':
+        return const Color(0xFFF59E0B);
+      case 'team lead':
+        return const Color(0xFF06B6D4);
+      case 'admin':
+        return const Color(0xFFEF4444);
+      case 'manager':
+        return const Color(0xFF10B981);
+      case 'production':
+        return const Color(0xFFF97316);
+      case 'management':
+        return const Color(0xFFEC4899);
+      default:
+        return AppColors.brandGreen;
+    }
   }
 
   Color _departmentColor(String department) {
