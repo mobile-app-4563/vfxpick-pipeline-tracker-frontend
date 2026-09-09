@@ -222,6 +222,20 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
               icon: const Icon(Icons.refresh_rounded),
             ),
             IconButton(
+              tooltip: 'Import options by department',
+              onPressed: access.isSavingSettings
+                  ? null
+                  : () => _showImportOptionsDialog(context, access),
+              icon: Icon(
+                _allDepartmentsImportEnabled(access)
+                    ? Icons.upload_file_outlined
+                    : Icons.block_outlined,
+                color: _allDepartmentsImportEnabled(access)
+                    ? AppColors.brandGreen
+                    : Colors.red,
+              ),
+            ),
+            IconButton(
               tooltip: 'Delete options by department',
               onPressed: access.isSavingSettings
                   ? null
@@ -419,6 +433,128 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
           ok
               ? 'Permissions reset and saved.'
               : (access.errorMessage ?? 'Reset failed.'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showImportOptionsDialog(
+    BuildContext context,
+    AccessProvider access,
+  ) async {
+    final departments = List<String>.from(AppConstants.departments);
+    if (departments.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No departments available yet.')),
+      );
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(Icons.upload_file_outlined, color: AppColors.brandGreen),
+                const SizedBox(width: 10),
+                const Expanded(child: Text('Import Options by Department')),
+              ],
+            ),
+            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+            content: SizedBox(
+              width: 460,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Text(
+                      'Enable or disable Import File / Paste CSV and '
+                      'New Shot / create actions for each department. Users '
+                      'see import and create buttons only when their '
+                      'department is enabled.',
+                      style: TextStyle(
+                        fontSize: SizeConfig.fontSize(context, 13),
+                        color: Theme.of(context).textTheme.bodySmall?.color,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Flexible(
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final dept in departments)
+                          SwitchListTile(
+                            dense: true,
+                            title: Text(
+                              dept,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              access.importEnabledForDepartment(dept)
+                                  ? 'Import enabled'
+                                  : 'Import disabled',
+                            ),
+                            activeThumbColor: AppColors.brandGreen,
+                            activeTrackColor: AppColors.brandGreen.withValues(
+                              alpha: 0.45,
+                            ),
+                            value: access.importEnabledForDepartment(dept),
+                            onChanged: (enabled) async {
+                              await _setDepartmentImportOption(
+                                dialogContext,
+                                access,
+                                dept,
+                                enabled,
+                              );
+                              if (dialogContext.mounted) {
+                                setDialogState(() {});
+                              }
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Close'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  bool _allDepartmentsImportEnabled(AccessProvider access) {
+    final departments = AppConstants.departments;
+    if (departments.isEmpty) return access.importEnabled;
+    return departments.every((dept) => access.importEnabledForDepartment(dept));
+  }
+
+  Future<void> _setDepartmentImportOption(
+    BuildContext context,
+    AccessProvider access,
+    String department,
+    bool enabled,
+  ) async {
+    final ok = await access.setImportEnabled(enabled, department: department);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          ok
+              ? '$department import ${enabled ? 'enabled' : 'disabled'}'
+              : (access.errorMessage ?? 'Could not update import options.'),
         ),
       ),
     );

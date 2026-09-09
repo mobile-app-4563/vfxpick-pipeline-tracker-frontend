@@ -172,6 +172,14 @@ class _ProductionManagementScreenState
   // Keeps [_deleteEnabled] in sync when an Admin toggles the switch on
   // the Access Provider page while this screen is mounted.
   VoidCallback? _deleteEnabledListener;
+  // Per-department import switch from the Access Provider page: when the
+  // user's department is disabled, Import File / Paste CSV / Save Imported
+  // Data and New Grid Row (create) are hidden for them.
+  bool _importEnabled = true;
+  // Keeps [_importEnabled] (and the create FAB that follows it) in sync when
+  // an Admin toggles the import switch on the Access Provider page while this
+  // screen is mounted.
+  VoidCallback? _importEnabledListener;
   // grid_id (shotId) values checked for bulk delete.
   final Set<String> _selectedGridIds = {};
 
@@ -250,6 +258,7 @@ class _ProductionManagementScreenState
       final access = context.read<AccessProvider>();
       setState(() {
         _deleteEnabled = access.deleteEnabledForDepartment(user?.department);
+        _importEnabled = access.importEnabledForDepartment(user?.department);
       });
       // Keep the delete switch fresh if toggled on the Access page.
       _deleteEnabledListener = () {
@@ -263,6 +272,20 @@ class _ProductionManagementScreenState
         }
       };
       access.addListener(_deleteEnabledListener!);
+      // Import switch drives Paste CSV / Import File / Save Imported Data AND
+      // the New Grid Row (create) FAB — mirror the delete listener so toggling
+      // it live hides/shows the affordances.
+      _importEnabledListener = () {
+        if (!mounted) return;
+        final currentUser = context.read<AuthController>().currentUser;
+        final enabled = context
+            .read<AccessProvider>()
+            .importEnabledForDepartment(currentUser?.department);
+        if (enabled != _importEnabled) {
+          setState(() => _importEnabled = enabled);
+        }
+      };
+      access.addListener(_importEnabledListener!);
     });
   }
 
@@ -271,6 +294,10 @@ class _ProductionManagementScreenState
     final listener = _deleteEnabledListener;
     if (listener != null) {
       context.read<AccessProvider>().removeListener(listener);
+    }
+    final importListener = _importEnabledListener;
+    if (importListener != null) {
+      context.read<AccessProvider>().removeListener(importListener);
     }
     _csvPasteController.dispose();
     super.dispose();
@@ -1399,6 +1426,9 @@ class _ProductionManagementScreenState
 
   // ─── Manual creation ─────────────────────────────────────────────────────
   void _openCreateMenu() {
+    // Create actions (New Grid Row) follow the department import switch —
+    // same gate the backend applies to create_production_grid_row.
+    if (!_importEnabled) return;
     if (_isSyncing || _isSavingImport || _isImporting) return;
     showDialog<void>(
       context: context,
@@ -1639,41 +1669,46 @@ class _ProductionManagementScreenState
               : const Icon(Icons.download_outlined),
           label: const Text('Export Excel'),
         ),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                SizeConfig.scaleWidth(context, 2),
+        // Import File / Paste CSV only exist while the department import
+        // switch is ON — toggling it off in the Access Provider removes the
+        // importing headers for this department entirely.
+        if (_importEnabled) ...[ // import-or-create enabled
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
               ),
             ),
+            onPressed: _isImporting || _isSavingImport
+                ? null
+                : _openPasteCsvDialog,
+            icon: _isImporting
+                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                : const Icon(Icons.content_paste_outlined),
+            label: const Text('Paste CSV'),
           ),
-          onPressed: _isImporting || _isSavingImport
-              ? null
-              : _openPasteCsvDialog,
-          icon: _isImporting
-              ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-              : const Icon(Icons.content_paste_outlined),
-          label: const Text('Paste CSV'),
-        ),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                SizeConfig.scaleWidth(context, 2),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
               ),
             ),
+            onPressed: _isImporting || _isSavingImport
+                ? null
+                : _pickAndParseExcel,
+            icon: _isImporting
+                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                : const Icon(Icons.upload_file_outlined),
+            label: const Text('Import File'),
           ),
-          onPressed: _isImporting || _isSavingImport
-              ? null
-              : _pickAndParseExcel,
-          icon: _isImporting
-              ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-              : const Icon(Icons.upload_file_outlined),
-          label: const Text('Import File'),
-        ),
-        if (_importDraftRows.isNotEmpty)
+        ],
+        if (_importEnabled && _importDraftRows.isNotEmpty)
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandGreen,
@@ -2241,15 +2276,17 @@ class _ProductionManagementScreenState
       children: [
         Scaffold(
           backgroundColor: Colors.transparent,
-          floatingActionButton: FloatingActionButton.extended(
-            backgroundColor: AppColors.brandGreen,
-            foregroundColor: Colors.white,
-            onPressed: (_isSyncing || _isSavingImport || _isImporting)
-                ? null
-                : _openCreateMenu,
-            icon: const Icon(Icons.add),
-            label: const Text('Create'),
-          ),
+          floatingActionButton: _importEnabled
+              ? FloatingActionButton.extended(
+                  backgroundColor: AppColors.brandGreen,
+                  foregroundColor: Colors.white,
+                  onPressed: (_isSyncing || _isSavingImport || _isImporting)
+                      ? null
+                      : _openCreateMenu,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Create'),
+                )
+              : null,
           body: LayoutBuilder(
             builder: (context, constraints) {
               return SingleChildScrollView(

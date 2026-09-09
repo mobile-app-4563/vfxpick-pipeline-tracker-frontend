@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/controllers/theme_controller.dart';
+import '../../core/providers/access_provider.dart';
 import '../../core/utils/size_config.dart';
 import '../../modules/auth/controller/auth_controller.dart';
 import '../../modules/notifications/controller/notification_controller.dart';
@@ -50,6 +51,17 @@ class _MainLayoutState extends State<MainLayout> {
     return 'VFXPICK Pipeline';
   }
 
+  void _openNavigation() {
+    // Re-fetch permissions before opening so the drawer never shows a menu
+    // that was switched OFF for the current user's role/department after
+    // their session started (no full reload needed).
+    final access = context.read<AccessProvider>();
+    if (!access.isLoading) {
+      access.loadPermissions();
+    }
+    _scaffoldKey.currentState?.openDrawer();
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = SizeConfig.isMobile(context);
@@ -92,7 +104,7 @@ class _MainLayoutState extends State<MainLayout> {
                       ? AppColors.darkTextPrimary
                       : AppColors.lightTextPrimary,
                 ),
-                onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+                onPressed: _openNavigation,
               ),
               title: Text(
                 pageTitle,

@@ -27,14 +27,19 @@ class CustomSidebar extends StatefulWidget {
 class _CustomSidebarState extends State<CustomSidebar> {
   bool _loadScheduled = false;
 
+  void _schedulePermissionLoad() {
+    if (_loadScheduled) return;
+    _loadScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<AccessProvider>().ensureLoaded();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _loadScheduled) return;
-      _loadScheduled = true;
-      context.read<AccessProvider>().ensureLoaded();
-    });
+    _schedulePermissionLoad();
   }
 
   IconData _iconForRoute(String route) {
@@ -107,6 +112,17 @@ class _CustomSidebarState extends State<CustomSidebar> {
     final items = _getItemsForRole(role, accessProvider);
     final String currentRoute = GoRouterState.of(context).uri.path;
 
+    if (!accessProvider.loadedFromApi &&
+        !accessProvider.isLoading &&
+        !_loadScheduled) {
+      _schedulePermissionLoad();
+    }
+    // While permissions are still being fetched, avoid flashing the
+    // default (every-menu) list — only render entries we know are granted.
+    final permissionsPending =
+        !accessProvider.loadedFromApi &&
+        (accessProvider.isLoading || !_loadScheduled);
+
     return GlassContainer(
       borderRadius: 0,
       blur: 15.0,
@@ -154,74 +170,89 @@ class _CustomSidebarState extends State<CustomSidebar> {
             ),
             SizedBox(height: SizeConfig.scaleHeight(context, 30)),
             Expanded(
-              child: ListView.builder(
-                itemCount: items.length,
-                itemBuilder: (context, index) {
-                  final item = items[index];
-                  final isActive = currentRoute == item.route;
-                  return Padding(
-                    padding: SizeConfig.paddingSymmetric(
-                      context,
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    child: InkWell(
-                      onTap: () {
-                        widget.scaffoldKey.currentState?.closeDrawer();
-                        context.go(item.route);
-                      },
-                      borderRadius: BorderRadius.circular(
-                        SizeConfig.scaleWidth(context, 8),
+              child: permissionsPending
+                  ? Center(
+                      child: SizedBox(
+                        width: SizeConfig.iconSize(context, 30),
+                        height: SizeConfig.iconSize(context, 30),
+                        child: const CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                        ),
                       ),
-                      child: Container(
-                        padding: SizeConfig.paddingSymmetric(
-                          context,
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(
-                            SizeConfig.scaleWidth(context, 8),
+                    )
+                  : ListView.builder(
+                      itemCount: items.length,
+                      itemBuilder: (context, index) {
+                        final item = items[index];
+                        final isActive = currentRoute == item.route;
+                        return Padding(
+                          padding: SizeConfig.paddingSymmetric(
+                            context,
+                            horizontal: 12,
+                            vertical: 4,
                           ),
-                          gradient: isActive ? AppColors.brandGradient : null,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              item.icon,
-                              color: isActive
-                                  ? Colors.white
-                                  : (isDark
-                                        ? AppColors.darkTextSecondary
-                                        : AppColors.lightTextSecondary),
-                              size: SizeConfig.iconSize(context, 22),
+                          child: InkWell(
+                            onTap: () {
+                              widget.scaffoldKey.currentState?.closeDrawer();
+                              context.go(item.route);
+                            },
+                            borderRadius: BorderRadius.circular(
+                              SizeConfig.scaleWidth(context, 8),
                             ),
-                            SizeConfig.sizedBoxW(context, 16),
-                            Expanded(
-                              child: Text(
-                                item.title,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: isActive
-                                      ? Colors.white
-                                      : (isDark
-                                            ? AppColors.darkTextPrimary
-                                            : AppColors.lightTextPrimary),
-                                  fontWeight: isActive
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
-                                  fontSize: SizeConfig.fontSize(context, 14),
+                            child: Container(
+                              padding: SizeConfig.paddingSymmetric(
+                                context,
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(
+                                  SizeConfig.scaleWidth(context, 8),
                                 ),
+                                gradient: isActive
+                                    ? AppColors.brandGradient
+                                    : null,
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    item.icon,
+                                    color: isActive
+                                        ? Colors.white
+                                        : (isDark
+                                              ? AppColors.darkTextSecondary
+                                              : AppColors.lightTextSecondary),
+                                    size: SizeConfig.iconSize(context, 22),
+                                  ),
+                                  SizeConfig.sizedBoxW(context, 16),
+                                  Expanded(
+                                    child: Text(
+                                      item.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isActive
+                                            ? Colors.white
+                                            : (isDark
+                                                  ? AppColors.darkTextPrimary
+                                                  : AppColors.lightTextPrimary),
+                                        fontWeight: isActive
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                        fontSize: SizeConfig.fontSize(
+                                          context,
+                                          14,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     ),
-                  );
-                },
-              ),
             ),
             Padding(
               padding: EdgeInsets.symmetric(

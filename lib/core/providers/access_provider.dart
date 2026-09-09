@@ -79,10 +79,15 @@ class AccessProvider extends ChangeNotifier {
   bool _loadedFromApi = false;
   bool _auditLoaded = false;
   bool _deleteEnabled = true;
+  bool _importEnabled = true;
   bool _isSavingSettings = false;
   // Per-department delete switches from the Access Provider page. Keys are
   // normalized to upper case so lookups are case-insensitive.
   final Map<String, bool> _departmentDelete = {};
+  // Per-department import switches from the Access Provider page. Keys are
+  // normalized to upper case. Unconfigured departments stay ENABLED so
+  // nobody regresses until an Admin explicitly turns the switch off.
+  final Map<String, bool> _departmentImport = {};
   // Per-department menu switches from the Access Provider matrix. Keys are
   // normalized to upper case. A department with no entry yet defaults to
   // EVERY menu, so brand-new departments keep their users on role defaults.
@@ -96,8 +101,10 @@ class AccessProvider extends ChangeNotifier {
   bool get loadedFromApi => _loadedFromApi;
   bool get auditLoaded => _auditLoaded;
   bool get deleteEnabled => _deleteEnabled;
+  bool get importEnabled => _importEnabled;
   bool get isSavingSettings => _isSavingSettings;
   Map<String, bool> get departmentDelete => Map.unmodifiable(_departmentDelete);
+  Map<String, bool> get departmentImport => Map.unmodifiable(_departmentImport);
   Map<String, Set<String>> get departmentMenus => Map.unmodifiable({
     for (final entry in _departmentMenus.entries)
       entry.key: Set<String>.unmodifiable(entry.value),
@@ -127,6 +134,25 @@ class AccessProvider extends ChangeNotifier {
   }
 
   String _normalizeRole(String role) => role.trim().toLowerCase();
+
+  /// Resolves the configured route set for [role] case-insensitively so a
+  /// casing/whitespace mismatch in the stored user role can never fall
+  /// through to the every-menu default (which is reserved for brand-new,
+  /// never-configured roles). Returns null only when the role has no entry
+  /// at all.
+  Set<String>? _roleRoutesFor(String role) {
+    final trimmed = role.trim();
+    if (trimmed.isEmpty) return null;
+    final direct = _roleRoutes[trimmed];
+    if (direct != null) return direct;
+    final normalized = trimmed.toLowerCase();
+    for (final entry in _roleRoutes.entries) {
+      if (entry.key.trim().toLowerCase() == normalized) {
+        return entry.value;
+      }
+    }
+    return null;
+  }
 
   Set<String> get _safeServerRoutes =>
       _serverRoutes ??= Set<String>.from(orderedMenuRoutes);
@@ -176,13 +202,29 @@ class AccessProvider extends ChangeNotifier {
     return _deleteEnabled;
   }
 
+  /// Per-department import permission: an explicit department switch wins,
+  /// otherwise falls back to the global import switch.
+  bool importEnabledForDepartment(String? department) {
+    final key = (department ?? '').trim().toUpperCase();
+    if (key.isNotEmpty) {
+      final direct = _departmentImport[key];
+      if (direct != null) return direct;
+      final normalized = _departmentImport.entries
+          .where((e) => e.key.toUpperCase() == key)
+          .toList(growable: false);
+      if (normalized.isNotEmpty) return normalized.first.value;
+    }
+    return _importEnabled;
+  }
+
   Set<String> _effectiveAllowedRoutes(String role, {String? department}) {
     // Unconfigured roles (e.g. a user registered with a brand-new role, often
     // alongside a new department) default to EVERY menu so they are never
     // locked out, regardless of department; the admin can fine-tune in the
-    // Access Provider screen.
+    // Access Provider screen. A role that HAS been configured keeps its
+    // exact route set (menus switched OFF stay hidden from the drawer).
     final allowed = {
-      ...(_roleRoutes[role] ?? Set<String>.from(orderedMenuRoutes)),
+      ...(_roleRoutesFor(role) ?? Set<String>.from(orderedMenuRoutes)),
     };
     if (isAdminRole(role)) {
       allowed.addAll(orderedMenuRoutes);
@@ -314,7 +356,12 @@ class AccessProvider extends ChangeNotifier {
         if (rawDelete is bool) {
           _deleteEnabled = rawDelete;
         }
+        final rawImport = response['importEnabled'];
+        if (rawImport is bool) {
+          _importEnabled = rawImport;
+        }
         _applyDepartmentDelete(response['departments']);
+        _applyDepartmentImport(response['importDepartments']);
         _applyDepartmentMenus(response['departmentMenus']);
         _loadedFromApi = true;
         _errorMessage = null;
@@ -510,7 +557,12 @@ class AccessProvider extends ChangeNotifier {
       if (raw is bool) {
         _deleteEnabled = raw;
       }
+      final rawImport = response['importEnabled'];
+      if (rawImport is bool) {
+        _importEnabled = rawImport;
+      }
       _applyDepartmentDelete(response['departments']);
+      _applyDepartmentImport(response['importDepartments']);
       notifyListeners();
       return true;
     } on ApiException catch (e) {
@@ -576,6 +628,78 @@ class AccessProvider extends ChangeNotifier {
     }
   }
 
+  void _rollbackImport(
+    bool perDepartment,
+    String dept,
+    bool? previousDept,
+    bool previousGlobal,
+  ) {
+    if (perDepartment) {
+      if (previousDept == null) {
+        _departmentImport.remove(dept);
+      } else {
+        _departmentImport[dept] = previousDept;
+      }
+    } else {
+      _importEnabled = previousGlobal;
+    }
+  }
+
+  /// Import switch. Without [department] it acts as the global import
+  /// switch; with [department] it toggles import for that department only.
+  /// Persisted server-side (admin-only endpoint). Import covers Import File /
+  /// Paste CSV and New Shot / create actions for that department.
+  Future<bool> setImportEnabled(bool enabled, {String? department}) async {
+    final normalizedDept = (department ?? '').trim().toUpperCase();
+    final perDepartment = normalizedDept.isNotEmpty;
+    final previousGlobal = _importEnabled;
+    final previousDept = perDepartment
+        ? _departmentImport[normalizedDept]
+        : null;
+    if (perDepartment) {
+      _departmentImport[normalizedDept] = enabled;
+    } else {
+      _importEnabled = enabled;
+    }
+    _isSavingSettings = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _api.put(ApiConstants.accessSettings, {
+        if (perDepartment) 'department': department,
+        'importEnabled': enabled,
+      });
+      _applyDepartmentImport(response['importDepartments']);
+      final raw = response['importEnabled'];
+      if (raw is bool) {
+        _importEnabled = raw;
+      }
+      _errorMessage = null;
+      return true;
+    } on ApiException catch (e) {
+      _rollbackImport(
+        perDepartment,
+        normalizedDept,
+        previousDept,
+        previousGlobal,
+      );
+      _errorMessage = e.message;
+      return false;
+    } catch (e) {
+      _rollbackImport(
+        perDepartment,
+        normalizedDept,
+        previousDept,
+        previousGlobal,
+      );
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isSavingSettings = false;
+      notifyListeners();
+    }
+  }
+
   void _rollbackDelete(
     bool perDepartment,
     String dept,
@@ -600,6 +724,16 @@ class AccessProvider extends ChangeNotifier {
       final key = entry.key.toString().trim().toUpperCase();
       if (key.isEmpty) continue;
       _departmentDelete[key] = entry.value == true;
+    }
+  }
+
+  void _applyDepartmentImport(dynamic raw) {
+    if (raw is! Map) return;
+    _departmentImport.clear();
+    for (final entry in raw.entries) {
+      final key = entry.key.toString().trim().toUpperCase();
+      if (key.isEmpty) continue;
+      _departmentImport[key] = entry.value == true;
     }
   }
 
@@ -685,7 +819,12 @@ class AccessProvider extends ChangeNotifier {
     if (rawDelete is bool) {
       _deleteEnabled = rawDelete;
     }
+    final rawImport = response['importEnabled'];
+    if (rawImport is bool) {
+      _importEnabled = rawImport;
+    }
     _applyDepartmentDelete(response['departments']);
+    _applyDepartmentImport(response['importDepartments']);
     _applyDepartmentMenus(response['departmentMenus']);
     _applyAuditLogsPayload(response['logs']);
   }

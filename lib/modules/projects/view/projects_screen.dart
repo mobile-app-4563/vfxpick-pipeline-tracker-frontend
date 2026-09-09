@@ -183,6 +183,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   // Keeps [_deleteEnabled] in sync when an Admin toggles the kill-switch on
   // the Access Provider page while this screen is mounted.
   VoidCallback? _deleteEnabledListener;
+  // Per-department import switch from the Access Provider page. When the
+  // user's department is disabled, Import File / Paste CSV / New Shot are
+  // hidden for them.
+  bool _importEnabled = true;
+  // Keeps [_importEnabled] (and the create FAB that follows it) in sync when
+  // an Admin toggles the import switch on the Access Provider page while this
+  // screen is mounted.
+  VoidCallback? _importEnabledListener;
   // Inline cell-edit state (double-click-to-edit, same as Production
   // Management): tracks which cell is showing an editor ("shotId|fieldKey").
   String? _editingCellKey;
@@ -414,6 +422,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     if (listener != null) {
       context.read<AccessProvider>().removeListener(listener);
     }
+    final importListener = _importEnabledListener;
+    if (importListener != null) {
+      context.read<AccessProvider>().removeListener(importListener);
+    }
     _csvPasteController.dispose();
     super.dispose();
   }
@@ -431,6 +443,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     _deleteEnabled = context.read<AccessProvider>().deleteEnabledForDepartment(
       user?.department,
     );
+    _importEnabled = context.read<AccessProvider>().importEnabledForDepartment(
+      user?.department,
+    );
     final access = context.read<AccessProvider>();
     _deleteEnabledListener = () {
       if (!mounted) return;
@@ -442,12 +457,27 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       }
     };
     access.addListener(_deleteEnabledListener!);
+    // Import switch drives Import File / Paste CSV AND New Shot — mirror the
+    // delete listener so toggling it live hides/shows the affordances.
+    _importEnabledListener = () {
+      if (!mounted) return;
+      final enabled = context.read<AccessProvider>().importEnabledForDepartment(
+        user?.department,
+      );
+      if (enabled != _importEnabled) {
+        setState(() {
+          _importEnabled = enabled;
+          _canCreateShot = enabled;
+        });
+      }
+    };
+    access.addListener(_importEnabledListener!);
 
     _canCreateClientShow = _isBroadAccess;
-    _canCreateShot =
-        _isBroadAccess ||
-        user?.role == AppConstants.roleSupervisor ||
-        user?.role == AppConstants.roleTeamLead;
+    // Import switch is the data-entry gate: users granted the module (via the
+    // Access Provider matrix) whose department has import enabled can create
+    // shots, and see the Import File / Paste CSV toolbar.
+    _canCreateShot = _importEnabled;
 
     final controller = context.read<ProjectController>();
     final query = GoRouterState.of(context).uri.queryParameters;
@@ -682,7 +712,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Widget _importActions(BuildContext context, ProjectController controller) {
     final canImport = _canCreateShot;
 
-    if (!_canCreateShot) {
+    // Toolbar shows whenever the user has ANY data affordance in this module:
+    // import/create shots (department import switch) or delete rows
+    // (department delete switch). Export / Filters / Cell Borders ride along.
+    if (!_canCreateShot && !_deleteEnabled) {
       return const SizedBox.shrink();
     }
 
@@ -712,38 +745,44 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               : const Icon(Icons.download_outlined),
           label: const Text('Export Excel'),
         ),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                SizeConfig.scaleWidth(context, 2),
+        // Import File / Paste CSV only exist while the department import
+        // switch is ON — toggling it off in the Access Provider removes the
+        // importing headers for this department entirely.
+        if (_canCreateShot) ...[
+          // import-or-create enabled
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
               ),
             ),
+            onPressed: _isImporting || !canImport
+                ? null
+                : () => _openPasteCsvDialog(controller),
+            icon: const Icon(Icons.content_paste_go_outlined),
+            label: const Text('Paste CSV'),
           ),
-          onPressed: _isImporting || !canImport
-              ? null
-              : () => _openPasteCsvDialog(controller),
-          icon: const Icon(Icons.content_paste_go_outlined),
-          label: const Text('Paste CSV'),
-        ),
-        OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(
-                SizeConfig.scaleWidth(context, 2),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              fixedSize: SizeConfig.buttonFixedSize(context, 140, 40),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(
+                  SizeConfig.scaleWidth(context, 2),
+                ),
               ),
             ),
+            onPressed: _isImporting || !canImport
+                ? null
+                : () => _pickAndParseExcel(controller),
+            icon: _isImporting
+                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                : const Icon(Icons.upload_file_outlined),
+            label: const Text('Import File'),
           ),
-          onPressed: _isImporting || !canImport
-              ? null
-              : () => _pickAndParseExcel(controller),
-          icon: _isImporting
-              ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-              : const Icon(Icons.upload_file_outlined),
-          label: const Text('Import File'),
-        ),
+        ],
         // Delete/Cancel appear as soon as any row is checked — like the
         // Production module (checkbox column is always visible).
         if (_isBulkDeleteMode || _selectedShotIds.isNotEmpty) ...[
@@ -834,36 +873,43 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
         ] else
           ...[],
-        // SizeConfig.sizedBoxW(context, 8),
-        SizedBox(
-          width: SizeConfig.scaleWidth(context, 200),
-          child: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandGreen,
-              foregroundColor: Colors.white,
-              fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  SizeConfig.scaleWidth(context, 2),
+        // Save Imported Data only exists while the import switch is ON — a
+        // save is a bulk create/upsert, which the backend gates on the same
+        // per-department import switch.
+        if (_canCreateShot) ...[
+          // import-or-create enabled
+          SizedBox(
+            width: SizeConfig.scaleWidth(context, 200),
+            child: ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandGreen,
+                foregroundColor: Colors.white,
+                fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(
+                    SizeConfig.scaleWidth(context, 2),
+                  ),
                 ),
               ),
-            ),
-            onPressed:
-                _isSavingImport || _importDraftRows.isEmpty || _importAutoSaved
-                ? null
-                : () => _saveImportedRows(controller),
-            icon: _isSavingImport
-                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-                : Icon(
-                    _importAutoSaved
-                        ? Icons.check_circle_outline
-                        : Icons.save_outlined,
-                  ),
-            label: Text(
-              _importAutoSaved ? 'Saved to Server' : 'Save Imported Data',
+              onPressed:
+                  _isSavingImport ||
+                      _importDraftRows.isEmpty ||
+                      _importAutoSaved
+                  ? null
+                  : () => _saveImportedRows(controller),
+              icon: _isSavingImport
+                  ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
+                  : Icon(
+                      _importAutoSaved
+                          ? Icons.check_circle_outline
+                          : Icons.save_outlined,
+                    ),
+              label: Text(
+                _importAutoSaved ? 'Saved to Server' : 'Save Imported Data',
+              ),
             ),
           ),
-        ),
+        ],
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             fixedSize: SizeConfig.buttonFixedSize(context, 100, 40),
