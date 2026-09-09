@@ -4,22 +4,6 @@ import '../../core/utils/excel_date_utils.dart';
 import '../../core/utils/size_config.dart';
 import 'custom_dropdown.dart';
 
-/// Short month names used to render date cells as "Aug 20" (no year).
-const List<String> _monthAbbreviations = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-];
-
 /// A single editable grid cell (shared by Production Management and Projects).
 ///
 /// Displays the value normally; on double-click it swaps to an editor:
@@ -88,9 +72,11 @@ class _GridEditableCellState extends State<GridEditableCell> {
 
   /// Text shown in the cell when not editing. Month-level dates (day == 1,
   /// i.e. the Excel template's `mmm-yy` cells) render as "May-25" exactly
-  /// like Excel shows them; genuine day-level dates render as "Aug 20"
-  /// (month + day, no year). The raw ISO value is kept in [_initialText] so
-  /// double-click editing (date picker) still works from the full date.
+  /// like Excel shows them; genuine day-level dates render as "Aug-20"
+  /// (month + day, no year) — always with a '-' between the month and the
+  /// day, matching the month-day labels the read-only grids show. The raw
+  /// ISO value is kept in [_initialText] so double-click editing (date
+  /// picker) still works from the full date.
   String get _displayText {
     final value = widget.displayValue;
     if (value == null) return '-';
@@ -100,7 +86,7 @@ class _GridEditableCellState extends State<GridEditableCell> {
       final d = DateTime.tryParse(text);
       if (d != null) {
         if (d.day == 1) return monthYearLabel(d); // "May-25" like Excel
-        return '${_monthAbbreviations[d.month - 1]} ${d.day}';
+        return monthDayLabel(d); // "Aug-20" — dash between month and day
       }
     }
     return text;

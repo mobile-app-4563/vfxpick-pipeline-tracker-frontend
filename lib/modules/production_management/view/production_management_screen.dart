@@ -17,6 +17,7 @@ import '../../../core/services/api_controller.dart';
 import '../../../core/services/production_service.dart';
 import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/excel_export_utils.dart';
+import '../../../core/utils/grid_filter_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
 import '../../../shared/widgets/custom_text_field.dart';
@@ -432,29 +433,12 @@ class _ProductionManagementScreenState
       _filterSignature = signature;
       _cachedFilteredRows = _rows
           .where((row) {
-            bool contains(String key, String query) {
-              if (query.trim().isEmpty) return true;
-              final q = query.trim().toLowerCase();
-              final value = (row[key] ?? '').toString();
-              if (value.toLowerCase().contains(q)) return true;
-              // Date columns render as Excel-style labels ("May-25"); also
-              // match the formatted label so users can search what they see.
-              const dateKeys = {
-                'shotsReceivedDate',
-                'wipEta',
-                'eta',
-                'deliveredOn',
-                'flEta',
-              };
-              if (dateKeys.contains(key)) {
-                final formatted = formatDateLikeExcel(value);
-                if (formatted.isNotEmpty &&
-                    formatted.toLowerCase().contains(q)) {
-                  return true;
-                }
-              }
-              return false;
-            }
+            // Case-insensitive + date-aware matching shared by every grid:
+            // matches the raw cell value, the rendered Excel-style label
+            // ("May-25"), and punctuation/whitespace variants the user may
+            // type for both text and date columns.
+            bool contains(String key, String query) =>
+                gridTextContains(row[key], query);
 
             bool chipMatch(String key, Set<String> selected) {
               if (selected.isEmpty) return true;
@@ -1672,7 +1656,8 @@ class _ProductionManagementScreenState
         // Import File / Paste CSV only exist while the department import
         // switch is ON — toggling it off in the Access Provider removes the
         // importing headers for this department entirely.
-        if (_importEnabled) ...[ // import-or-create enabled
+        if (_importEnabled) ...[
+          // import-or-create enabled
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),

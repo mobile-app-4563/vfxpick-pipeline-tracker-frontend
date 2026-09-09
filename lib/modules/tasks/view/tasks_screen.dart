@@ -13,6 +13,7 @@ import 'package:vfxpick_pipeline/shared/widgets/filter_icon.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/excel_date_utils.dart';
+import '../../../core/utils/grid_filter_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../core/models/domain_models.dart';
 import '../../../core/models/shot_model.dart';
@@ -571,12 +572,8 @@ class _ArtistPortalState extends State<_ArtistPortal> {
   String _artistEtaFilter = '';
   String _clientEtaFilter = '';
 
-  bool _contains(dynamic value, String query) {
-    if (query.trim().isEmpty) return true;
-    return (value ?? '').toString().toLowerCase().contains(
-      query.trim().toLowerCase(),
-    );
-  }
+  // Case-insensitive + date-aware matching (see grid_filter_utils).
+  bool _contains(dynamic value, String query) => gridTextContains(value, query);
 
   /// Frame ranges are displayed as "100 - 200"; match regardless of whether
   /// the user types "100-200" or "100 - 200" (whitespace is ignored).
@@ -624,11 +621,11 @@ class _ArtistPortalState extends State<_ArtistPortal> {
                 shot.supervisorStatus ?? '—',
                 _supervisorStatusFilter,
               ) &&
-              _contains(
-                formatDateLikeExcelD(shot.artistEta),
-                _artistEtaFilter,
-              ) &&
-              _contains(formatDateLikeExcelD(shot.clientEta), _clientEtaFilter);
+              // ETA cells display Excel-style labels ("May-25"); passing the
+              // raw DateTime lets the matcher also accept ISO queries ("2025-05")
+              // and case/punctuation variants of the visible label.
+              _contains(shot.artistEta, _artistEtaFilter) &&
+              _contains(shot.clientEta, _clientEtaFilter);
         })
         .toList(growable: false);
 
@@ -929,12 +926,8 @@ class _DepartmentViewState extends State<_DepartmentView> {
   String _fromMmFilter = '';
   String _fromCompFilter = '';
 
-  bool _contains(dynamic value, String query) {
-    if (query.trim().isEmpty) return true;
-    return (value ?? '').toString().toLowerCase().contains(
-      query.trim().toLowerCase(),
-    );
-  }
+  // Case-insensitive + date-aware matching (see grid_filter_utils).
+  bool _contains(dynamic value, String query) => gridTextContains(value, query);
 
   List<FilterOption> _buildOptions(List<String> values, String selected) {
     return values
@@ -1122,10 +1115,18 @@ class _DepartmentViewState extends State<_DepartmentView> {
               _contains(row['artist'], _artistFilter) &&
               _contains(row['artistBid'], _artistBidFilter) &&
               _contains(row['artistEta'], _artistEtaFilter) &&
+              // Status filters must not be case-sensitive: "wip" matches
+              // "WIP", "hold" matches "Hold", etc.
               (_supervisorStatusFilter.isEmpty ||
-                  _supervisorStatusFilter.contains(row['supervisorStatus'])) &&
+                  gridSetContainsIgnoreCase(
+                    row['supervisorStatus'],
+                    _supervisorStatusFilter,
+                  )) &&
               (_artistStatusFilter.isEmpty ||
-                  _artistStatusFilter.contains(row['artistStatus'])) &&
+                  gridSetContainsIgnoreCase(
+                    row['artistStatus'],
+                    _artistStatusFilter,
+                  )) &&
               _contains(row['coordinator'], _coordinatorFilter) &&
               _contains(row['levelOfShot'], _levelOfShotFilter) &&
               _contains(row['complexity'], _complexityFilter) &&

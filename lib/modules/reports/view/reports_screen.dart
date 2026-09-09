@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/grid_filter_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
@@ -294,12 +295,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
     }
 
-    bool contains(dynamic value, String query) {
-      if (query.trim().isEmpty) return true;
-      return (value ?? '').toString().toLowerCase().contains(
-        query.trim().toLowerCase(),
-      );
-    }
+    // Case-insensitive + date-aware matching (see grid_filter_utils).
+    bool contains(dynamic value, String query) =>
+        gridTextContains(value, query);
 
     final rows = controller.items
         .map(

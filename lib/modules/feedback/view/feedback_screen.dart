@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/grid_filter_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../core/models/shot_model.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
@@ -507,17 +508,12 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
   List<Map<String, dynamic>> _buildTableRows(List<ShotModel> shots) {
     final filtered = shots.where((shot) {
       final query = _searchQuery.trim().toLowerCase();
-      if (query.isNotEmpty) {
-        final client = (shot.clientName ?? '').toLowerCase();
-        final show = (shot.showName ?? '').toLowerCase();
-        final shotCode = shot.shotCode.toLowerCase();
-        final feedback = (shot.clientFeedback ?? '').toLowerCase();
-        if (!client.contains(query) &&
-            !show.contains(query) &&
-            !shotCode.contains(query) &&
-            !feedback.contains(query)) {
-          return false;
-        }
+      if (query.isNotEmpty &&
+          !gridTextContains(shot.clientName, query) &&
+          !gridTextContains(shot.showName, query) &&
+          !gridTextContains(shot.shotCode, query) &&
+          !gridTextContains(shot.clientFeedback, query)) {
+        return false;
       }
 
       if (_departmentFilter.isNotEmpty &&
@@ -525,35 +521,34 @@ class _FeedbackScreenState extends State<FeedbackScreen> {
         return false;
       }
       if (_clientFilter.isNotEmpty &&
-          (shot.clientName ?? '').toLowerCase() !=
-              _clientFilter.toLowerCase()) {
+          !gridEqualsIgnoreCase(shot.clientName, _clientFilter)) {
         return false;
       }
       if (_showFilter.isNotEmpty &&
-          (shot.showName ?? '').toLowerCase() != _showFilter.toLowerCase()) {
+          !gridEqualsIgnoreCase(shot.showName, _showFilter)) {
         return false;
       }
-      if (_statusFilter.isNotEmpty && shot.status != _statusFilter) {
+      if (_statusFilter.isNotEmpty &&
+          !gridEqualsIgnoreCase(shot.status, _statusFilter)) {
         return false;
       }
       if (_artistFilter.isNotEmpty &&
-          !(shot.artistName ?? 'Unassigned').toLowerCase().contains(
-            _artistFilter.toLowerCase(),
-          )) {
+          !gridTextContains(shot.artistName ?? 'Unassigned', _artistFilter)) {
         return false;
       }
       if (_artistEtaFilter.isNotEmpty &&
-          !_fmtDate(
-            shot.artistEta,
-          ).toLowerCase().contains(_artistEtaFilter.toLowerCase())) {
+          !gridTextContains(shot.artistEta, _artistEtaFilter)) {
         return false;
       }
       if (_supervisorStatusFilter.isNotEmpty &&
-          shot.supervisorStatus != _supervisorStatusFilter) {
+          !gridEqualsIgnoreCase(
+            shot.supervisorStatus,
+            _supervisorStatusFilter,
+          )) {
         return false;
       }
       if (_artistStatusFilter.isNotEmpty &&
-          shot.artistStatus != _artistStatusFilter) {
+          !gridEqualsIgnoreCase(shot.artistStatus, _artistStatusFilter)) {
         return false;
       }
 

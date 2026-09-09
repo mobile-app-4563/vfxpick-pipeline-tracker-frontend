@@ -19,6 +19,7 @@ import '../../../core/providers/access_provider.dart';
 import '../../../core/services/api_controller.dart';
 import '../../../core/utils/excel_date_utils.dart';
 import '../../../core/utils/excel_export_utils.dart';
+import '../../../core/utils/grid_filter_utils.dart';
 import '../../../core/utils/show_resolver.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/custom_dropdown.dart';
@@ -1293,12 +1294,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       _filterSignature = signature;
       _cachedFilteredRows = cachedRows
           .where((row) {
-            bool contains(String key, String query) {
-              if (query.trim().isEmpty) return true;
-              return (row[key] ?? '').toString().toLowerCase().contains(
-                query.trim().toLowerCase(),
-              );
-            }
+            // Case-insensitive + date-aware matching (see grid_filter_utils).
+            bool contains(String key, String query) =>
+                gridTextContains(row[key], query);
 
             bool chipMatch(String key, Set<String> selected) {
               if (selected.isEmpty) return true;
@@ -1817,12 +1815,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     final filteredPreviewRows = hasActiveImportFilter
         ? previewRows
               .where((row) {
-                bool contains(String key, String query) {
-                  if (query.trim().isEmpty) return true;
-                  return (row[key] ?? '').toString().toLowerCase().contains(
-                    query.trim().toLowerCase(),
-                  );
-                }
+                // Case-insensitive + date-aware matching (see grid_filter_utils).
+                bool contains(String key, String query) =>
+                    gridTextContains(row[key], query);
 
                 return contains('shotCode', _importShotFilter) &&
                     contains('frameIn', _importFrameInFilter) &&

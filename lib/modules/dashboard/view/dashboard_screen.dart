@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/models/domain_models.dart';
+import '../../../core/utils/grid_filter_utils.dart';
 import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/dynamic_data_table.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
@@ -77,12 +78,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final filteredRows = flatRows
         .where((row) {
-          bool contains(String key, String query) {
-            if (query.trim().isEmpty) return true;
-            return (row[key] ?? '').toString().toLowerCase().contains(
-              query.trim().toLowerCase(),
-            );
-          }
+          // Case-insensitive + date-aware matching (see grid_filter_utils).
+          bool contains(String key, String query) =>
+              gridTextContains(row[key], query);
 
           return contains('department', _departmentFilter) &&
               contains('client', _clientFilter) &&

@@ -52,7 +52,8 @@ class _FilterIconState extends State<FilterIcon> {
     final seen = <String>{};
     final unique = <FilterOption>[];
     for (final option in widget.options) {
-      final key = option.value?.toString() ?? '';
+      // De-duplicate case-insensitively ("WIP" and "wip" are the same value).
+      final key = (option.value?.toString() ?? '').toLowerCase();
       if (key.isEmpty || seen.add(key)) {
         unique.add(option);
       }
