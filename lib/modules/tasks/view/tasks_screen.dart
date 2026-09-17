@@ -501,9 +501,11 @@ class _TasksScreenState extends State<TasksScreen> {
   }
 }
 
-// Only 10 rows per page — matches the Production & Projects grids. Every
-// table slices rows internally, so each page renders just 10 rows.
-const int _tasksRowsPerPage = 10;
+// Rows per page — one shared cap for every grid (see
+// [AppConstants.gridRowsPerPage]). Every table slices rows internally, so
+// normal datasets fit on a single page and the pagination bar only appears
+// when there are more rows than the page size.
+const int _tasksRowsPerPage = AppConstants.gridRowsPerPage;
 
 int _tasksTotalPages(int totalRows) =>
     _tasksRowsPerPage > 0 ? (totalRows / _tasksRowsPerPage).ceil() : 1;

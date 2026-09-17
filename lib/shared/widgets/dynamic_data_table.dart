@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/utils/size_config.dart';
 import 'filter_icon.dart';
 import 'sortable_header.dart';
@@ -85,7 +86,7 @@ class DynamicDataTable extends StatefulWidget {
     this.showDesktopFilterButton = false,
     this.mobileBreakpoint = 900,
     this.frozenColumnCount = 0,
-    this.rowsPerPage = 50,
+    this.rowsPerPage = AppConstants.gridRowsPerPage,
     this.currentPage,
     this.onPageChanged,
     this.fitToWidth = false,
@@ -117,8 +118,8 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
 
   // Cached visible-page slice — recomputed only when the page, page size, or
   // the source row list (identity/length) changes, so repeated builds never
-  // re-slice/re-parse the full row list (e.g. 10-row pages with hundreds of
-  // rows only ever build 10 rows, and only once per page/filter change).
+  // re-slice/re-parse the full row list (only one page of rows is ever built,
+  // and only once per page/filter change).
   List<Map<String, dynamic>>? _cachedVisibleRows;
   int _cachedVisiblePage = -1;
   int _cachedVisibleRowsPerPage = -1;

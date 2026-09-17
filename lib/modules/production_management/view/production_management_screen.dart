@@ -159,10 +159,11 @@ class _ProductionManagementScreenState
   bool _isExporting = false;
   int _page = 0;
 
-  // Only 10 rows per page — matches the Projects grid. The table slices rows
-  // internally, so every page stays light (filters / sorting still run over
-  // the full list, but only 10 rows are ever rendered at once).
-  static const int _rowsPerPage = 10;
+  // Rows per page — one shared cap for every grid (see
+  // [AppConstants.gridRowsPerPage]). The table slices rows internally, so
+  // normal datasets fit on a single page and the pagination bar only appears
+  // when there are more rows than the page size.
+  static const int _rowsPerPage = AppConstants.gridRowsPerPage;
 
   // ─── Row / bulk delete state ──────────────────────────────────────────────
   bool _isDeleting = false;
@@ -1320,7 +1321,7 @@ class _ProductionManagementScreenState
             dataRowMaxHeight: MediaQuery.of(context).size.height * 62 / 768,
             fields: _buildImportPreviewFields(context),
             rows: previewRows,
-            // 10 rows per page — same as the Projects grid.
+            // Shared grid page size (see [AppConstants.gridRowsPerPage]).
             rowsPerPage: _rowsPerPage,
             showCellBorders: true,
             // Sit flush against the container's green border (no gap).
@@ -2026,7 +2027,7 @@ class _ProductionManagementScreenState
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 10 rows per page, same as the Projects grid.
+          // Shared grid page size (see [AppConstants.gridRowsPerPage]).
           _paginationBar(
             context,
             _page,
@@ -2046,7 +2047,7 @@ class _ProductionManagementScreenState
               fields: _buildFields(context),
               rows: filteredRows,
               onFilterChanged: _applyColumnFilter,
-              // 10 rows per page — same as the Projects grid.
+              // Shared grid page size (see [AppConstants.gridRowsPerPage]).
               rowsPerPage: _rowsPerPage,
               showCellBorders: _showCellBorders,
               // Sit flush against the container's green border (no gap).

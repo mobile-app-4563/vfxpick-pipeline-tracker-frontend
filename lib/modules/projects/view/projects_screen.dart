@@ -232,10 +232,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   int _projectPage = 0;
   int _previewPage = 0;
 
-  // Only 10 rows per page — matches the Production grid. The table slices
-  // rows internally, so this keeps every page light (filters / sorting still
-  // run over the full list, but only 10 rows are ever rendered).
-  static const int _rowsPerPage = 10;
+  // Rows per page — one shared cap for every grid (see
+  // [AppConstants.gridRowsPerPage]). The table slices rows internally, so
+  // normal datasets fit on a single page and the pagination bar only appears
+  // when there are more rows than the page size.
+  static const int _rowsPerPage = AppConstants.gridRowsPerPage;
 
   int _totalPages(int totalRows) =>
       _rowsPerPage > 0 ? (totalRows / _rowsPerPage).ceil() : 1;
@@ -5062,7 +5063,11 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
 
   /// When non-null a sub-page is shown inside the dialog instead of the main
   /// ListTile list.  Values: 'status', 'personnel', 'classification',
-  /// 'crossDept', 'search', 'frames', 'dates', 'metrics'.
+  /// 'crossDept', 'search'.
+  ///
+  /// Keep this list in sync with the tiles built in [_buildMainList] and the
+  /// cases handled by [_buildSubPageBody]; every key in [_controllers] must be
+  /// reachable from the 'search' sub-page or its filter UI would be dead.
   String? _subPageKey;
 
   @override
@@ -5182,6 +5187,15 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
     });
   }
 
+  /// Number of freeform Search sub-page fields that currently hold a value.
+  int get _textFilterCount {
+    var count = 0;
+    for (final c in _controllers.values) {
+      if (c.text.trim().isNotEmpty) count++;
+    }
+    return count;
+  }
+
   void _apply() {
     Navigator.pop(
       context,
@@ -5263,6 +5277,8 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
         return 'Classification';
       case 'crossDept':
         return 'Cross-Department';
+      case 'search':
+        return 'Search';
       default:
         return 'Filter Projects';
     }
@@ -5278,6 +5294,8 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
         return 'Filter by level of shot & complexity';
       case 'crossDept':
         return 'Filter by cross-department work notes';
+      case 'search':
+        return 'Shot ID, frames, ETA / dates & numbers';
       default:
         return '';
     }
@@ -5444,6 +5462,18 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
               _fromCompChips.length,
           onTap: () => setState(() => _subPageKey = 'crossDept'),
         ),
+
+        // ── Search (freeform text / ETA / date / number columns) ──
+        // Mirrors the Production module's Search sub-page so every column
+        // that has no chip list (Allocation ETA, Client ETA, Due Date, …)
+        // stays filterable.
+        _filterListTile(
+          'Search',
+          subtitle: 'Shot ID, frames, ETA / dates & numbers',
+          activeCount: _textFilterCount,
+          hasText: _textFilterCount > 0,
+          onTap: () => setState(() => _subPageKey = 'search'),
+        ),
       ],
     );
   }
@@ -5529,9 +5559,71 @@ class _ProjectFilterDialogState extends State<_ProjectFilterDialog> {
             onChanged: (v) => setState(() => _fromCompChips = v),
           ),
         ]);
+
+      // Freeform Search — same single-page pattern as the Production filter
+      // dialog's Search page: every text / ETA / date / number column is a
+      // case-insensitive substring filter.
+      case 'search':
+        return _buildSearchBody();
+
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  /// Freeform fields shown on the Search sub-page, in grid-column order.
+  static const List<(String, String)> _searchFields = [
+    ('shotId', 'Shot ID'),
+    ('startFrame', 'Start Frame'),
+    ('endFrame', 'End Frame'),
+    ('totalFrames', 'Total Frames'),
+    ('allocationDate', 'Allocation Date'),
+    ('allocationEta', 'Allocation ETA'),
+    ('startingDate', 'Starting Date'),
+    ('completeDate', 'Complete Date'),
+    ('clientEta', 'Client ETA'),
+    ('dueDate', 'Due Date'),
+    ('dailyWip', 'Daily WIP %'),
+    ('mandays', 'Mandays'),
+    ('consumedMandays', 'Consumed Mandays'),
+    ('savedMandays', 'Saved Mandays'),
+    ('approvedVersion', 'Approved Version'),
+    ('comments', 'Comments'),
+  ];
+
+  Widget _buildSearchBody() {
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(
+        horizontal: SizeConfig.scaleWidth(context, 4),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Type part of any value — rows match as a case-insensitive '
+            'substring.',
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 12),
+              color: Colors.white54,
+            ),
+          ),
+          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+          for (final (key, label) in _searchFields) ...[
+            TextField(
+              controller: _controllers[key],
+              style: TextStyle(fontSize: SizeConfig.fontSize(context, 13)),
+              decoration: InputDecoration(
+                labelText: label,
+                isDense: true,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: SizeConfig.scaleHeight(context, 10)),
+          ],
+        ],
+      ),
+    );
   }
 
   // ── Searchable chip-grid sub-page body ──
