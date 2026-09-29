@@ -24,6 +24,7 @@ class GridEditableCell extends StatefulWidget {
   final bool isDirty;
   final bool numeric;
   final bool isDate;
+  final int? maxLines;
   final List<String>? options;
   final VoidCallback onStartEdit;
   final ValueChanged<String> onCommit;
@@ -38,6 +39,7 @@ class GridEditableCell extends StatefulWidget {
     required this.isDirty,
     required this.numeric,
     this.isDate = false,
+    this.maxLines,
     this.options,
     required this.onStartEdit,
     required this.onCommit,
@@ -227,6 +229,7 @@ class _GridEditableCellState extends State<GridEditableCell> {
         keyboardType: widget.numeric
             ? const TextInputType.numberWithOptions(decimal: true)
             : TextInputType.text,
+        maxLines: widget.maxLines,
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: SizeConfig.fontSize(context, 12),
@@ -266,8 +269,8 @@ class _GridEditableCellState extends State<GridEditableCell> {
 
     return Tooltip(
       message: widget.isDate
-          ? 'Double-click to pick date'
-          : 'Double-click to edit',
+          ? _tooltipMessage('Double-click to pick date')
+          : _tooltipMessage('Double-click to edit'),
       waitDuration: const Duration(milliseconds: 600),
       // Keep the hint out of the semantics tree so it never merges into the
       // cell's label (cells must read as their value only).
@@ -296,7 +299,10 @@ class _GridEditableCellState extends State<GridEditableCell> {
             // text never overlaps the neighboring cells. No maxLines — the
             // full value always stays visible.
             softWrap: true,
-            overflow: TextOverflow.clip,
+            maxLines: widget.maxLines,
+            overflow: widget.maxLines == null
+                ? TextOverflow.clip
+                : TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: SizeConfig.fontSize(context, 12),
               color: widget.isDirty ? Colors.amber.shade900 : scheme.onSurface,
@@ -307,4 +313,7 @@ class _GridEditableCellState extends State<GridEditableCell> {
       ),
     );
   }
+
+  String _tooltipMessage(String hint) =>
+      widget.maxLines == null ? hint : '$_displayText\n$hint';
 }

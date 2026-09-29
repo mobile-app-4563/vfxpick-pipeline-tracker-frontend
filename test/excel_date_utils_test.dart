@@ -104,6 +104,26 @@ void main() {
     });
   });
 
+  group('excelDateToCurrentYearIso', () {
+    final now = DateTime(2026, 9, 29);
+
+    test('rebases Excel date cells and ISO text but preserves month/day', () {
+      expect(
+        excelDateToCurrentYearIso(
+          DateCellValue(year: 2012, month: 1, day: 1),
+          now: now,
+        ),
+        '2026-01-01',
+      );
+      expect(excelDateToCurrentYearIso('2012-01-12', now: now), '2026-01-12');
+      expect(excelDateToCurrentYearIso('Sept 30', now: now), '2026-09-30');
+    });
+
+    test('rejects month/day combinations invalid in the current year', () {
+      expect(excelDateToCurrentYearIso('2024-02-29', now: now), isNull);
+    });
+  });
+
   group('display formatting', () {
     test('day == 1 renders like Excel mmm-yy', () {
       expect(formatDateLikeExcel('2025-05-01'), 'May-25');

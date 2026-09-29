@@ -300,6 +300,21 @@ String? excelDateToIso(dynamic value, {bool monthYearFirst = false}) {
   return null;
 }
 
+/// Parses an Excel/CSV date and replaces its year with the current year while
+/// preserving its month and day. Returns null when that month/day is invalid
+/// in the current year (for example, February 29 in a non-leap year).
+String? excelDateToCurrentYearIso(dynamic value, {DateTime? now}) {
+  final parsed = excelDateToIso(value);
+  if (parsed == null) return null;
+  final date = DateTime.tryParse(parsed);
+  if (date == null) return null;
+
+  final year = now?.year ?? DateTime.now().year;
+  final rebased = DateTime(year, date.month, date.day);
+  if (rebased.month != date.month || rebased.day != date.day) return null;
+  return _iso(rebased);
+}
+
 String monthYearLabel(DateTime d) =>
     '${_monthAbbreviations[d.month - 1]}-${d.year.toString().padLeft(2, '0').substring(2)}';
 

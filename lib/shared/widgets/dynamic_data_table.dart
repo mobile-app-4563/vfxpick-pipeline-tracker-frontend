@@ -1,16 +1,18 @@
+import 'package:data_table_2/data_table_2.dart' as dt2;
 import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart' as mui;
+
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/size_config.dart';
 import 'filter_icon.dart';
 import 'sortable_header.dart';
 
-typedef DynamicFieldBuilder =
-    Widget Function(
-      BuildContext context,
-      dynamic value,
-      Map<String, dynamic> row,
-      int rowIndex,
-    );
+typedef DynamicFieldBuilder = Widget Function(
+  BuildContext context,
+  dynamic value,
+  Map<String, dynamic> row,
+  int rowIndex,
+);
 
 class DynamicTableField {
   final String key;
@@ -63,6 +65,7 @@ class DynamicDataTable extends StatefulWidget {
   final ValueChanged<int>? onPageChanged;
   final bool fitToWidth;
   final bool showCellBorders;
+  final bool useDataTable2;
 
   /// Called when a data row is double-tapped (plain-text cells only — cells
   /// with a custom [builder] keep their own interaction, e.g. dropdowns).
@@ -91,6 +94,7 @@ class DynamicDataTable extends StatefulWidget {
     this.onPageChanged,
     this.fitToWidth = false,
     this.showCellBorders = false,
+    this.useDataTable2 = false,
     this.onRowDoubleTap,
   });
 
@@ -305,6 +309,10 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     List<Map<String, dynamic>> tableRows, {
     bool enableSwipe = true,
   }) {
+    if (widget.useDataTable2) {
+      return _buildDataTable2(context, tableFields, tableRows);
+    }
+
     // Fit-to-width mode: stretch columns proportionally instead of using a
     // horizontal scroll view.
     if (widget.fitToWidth) {
@@ -402,6 +410,105 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         onHorizontalDragEnd: (_) => _setDragging(false),
         onHorizontalDragCancel: () => _setDragging(false),
         child: table,
+      ),
+    );
+  }
+
+  Widget _buildDataTable2(
+    BuildContext context,
+    List<DynamicTableField> tableFields,
+    List<Map<String, dynamic>> tableRows,
+  ) {
+    const rowHeight = 56.0;
+    final scheme = Theme.of(context).colorScheme;
+    final widths = tableFields
+        .map((field) => field.width ?? widget.minColumnWidth)
+        .toList(growable: false);
+    final minWidth =
+        widths.fold<double>(0, (sum, width) => sum + width) +
+        widget.columnSpacing * (tableFields.length - 1) +
+        24;
+
+    return mui.Material(
+      color: scheme.surface,
+      child: SizedBox(
+        height: widget.headingRowHeight + rowHeight * tableRows.length,
+        child: dt2.DataTable2(
+          minWidth: minWidth,
+          headingRowHeight: widget.headingRowHeight,
+          dataRowHeight: rowHeight,
+          columnSpacing: widget.columnSpacing,
+          horizontalMargin: 8,
+          showCheckboxColumn: false,
+          border: TableBorder.all(
+            color: scheme.outlineVariant.withValues(alpha: 0.45),
+          ),
+          columns: tableFields
+              .map((field) {
+                return dt2.DataColumn2(
+                  fixedWidth: field.width,
+                  minWidth: widget.minColumnWidth > 0
+                      ? widget.minColumnWidth
+                      : null,
+                  numeric: field.numeric,
+                  label: field.sortable
+                      ? SortableHeader(
+                          label: field.label,
+                          isSorted: _isFieldSorted(field),
+                          sortAscending: _sortAscending,
+                          onTap: () => _toggleSort(field),
+                          center: true,
+                          wrap: true,
+                        )
+                      : Text(
+                          field.label,
+                          textAlign: TextAlign.center,
+                          softWrap: true,
+                        ),
+                );
+              })
+              .toList(growable: false),
+          rows: List<dt2.DataRow2>.generate(tableRows.length, (rowIndex) {
+            final row = tableRows[rowIndex];
+            return dt2.DataRow2(
+              specificRowHeight: rowHeight,
+              cells: tableFields
+                  .map((field) {
+                    final value = row[field.key];
+                    final isEmpty =
+                        value == null || value.toString().trim().isEmpty;
+                    final displayText = isEmpty ? '-' : value.toString();
+                    Widget child;
+                    if (field.builder != null) {
+                      child = field.builder!(context, value, row, rowIndex);
+                    } else {
+                      child = Text(
+                        displayText,
+                        textAlign: TextAlign.center,
+                        softWrap: true,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      );
+                      if (widget.onRowDoubleTap != null) {
+                        child = GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onDoubleTap: () =>
+                              widget.onRowDoubleTap!(row, rowIndex),
+                          child: child,
+                        );
+                      }
+                      child = Tooltip(
+                        message: displayText,
+                        waitDuration: const Duration(milliseconds: 600),
+                        child: child,
+                      );
+                    }
+                    return mui.DataCell(child);
+                  })
+                  .toList(growable: false),
+            );
+          }),
+        ),
       ),
     );
   }
