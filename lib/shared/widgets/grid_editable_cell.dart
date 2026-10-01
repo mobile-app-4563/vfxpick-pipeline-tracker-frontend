@@ -72,13 +72,14 @@ class _GridEditableCellState extends State<GridEditableCell> {
     return value.toString();
   }
 
-  /// Text shown in the cell when not editing. Month-level dates (day == 1,
-  /// i.e. the Excel template's `mmm-yy` cells) render as "May-25" exactly
-  /// like Excel shows them; genuine day-level dates render as "Aug-20"
-  /// (month + day, no year) — always with a '-' between the month and the
-  /// day, matching the month-day labels the read-only grids show. The raw
-  /// ISO value is kept in [_initialText] so double-click editing (date
-  /// picker) still works from the full date.
+  /// Text shown in the cell when not editing: month + day ("Aug-20") with a
+  /// '-' between them, exactly like the read-only grids show. The years are
+  /// always skipped, so a date is NEVER rendered as a month-year label — the
+  /// old "May-25" month-year form was indistinguishable from the 25th of May
+  /// and read as "the year 2025". A date that landed on the 1st (an artefact of
+  /// reading an Excel `mmm-yy` / `M/YY` cell) shows as "May-01". The raw ISO
+  /// value is kept in [_initialText] so double-click editing (date picker)
+  /// still works from the full date.
   String get _displayText {
     final value = widget.displayValue;
     if (value == null) return '-';
@@ -86,10 +87,7 @@ class _GridEditableCellState extends State<GridEditableCell> {
     if (text.isEmpty) return '-';
     if (widget.isDate) {
       final d = DateTime.tryParse(text);
-      if (d != null) {
-        if (d.day == 1) return monthYearLabel(d); // "May-25" like Excel
-        return monthDayLabel(d); // "Aug-20" — dash between month and day
-      }
+      if (d != null) return monthDayLabel(d); // "Aug-20" — never a year
     }
     return text;
   }

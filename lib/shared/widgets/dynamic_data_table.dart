@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart' as mui;
 
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/size_config.dart';
+import 'dark_grid.dart';
 import 'filter_icon.dart';
 import 'sortable_header.dart';
 
@@ -339,28 +340,25 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         columnSpacing: widget.columnSpacing,
         columns: tableFields.map((field) {
           return DataColumn(
-            numeric: field.numeric,
-            label: field.sortable
-                ? SortableHeader(
-                    label: field.label,
-                    isSorted: _isFieldSorted(field),
-                    sortAscending: _sortAscending,
-                    onTap: () => _toggleSort(field),
-                    center: true,
-                  )
-                : Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          field.label,
-                          textAlign: TextAlign.center,
-                          softWrap: false,
-                          overflow: TextOverflow.visible,
-                        ),
-                      ),
-                    ],
-                  ),
+            // Every column is centred: the numeric end-alignment would fight
+            // the uniform "centre all cell content" layout.
+            numeric: false,
+            label: Center(
+              child: field.sortable
+                  ? SortableHeader(
+                      label: field.label,
+                      isSorted: _isFieldSorted(field),
+                      sortAscending: _sortAscending,
+                      onTap: () => _toggleSort(field),
+                      center: true,
+                    )
+                  : Text(
+                      field.label,
+                      textAlign: TextAlign.center,
+                      softWrap: false,
+                      overflow: TextOverflow.visible,
+                    ),
+            ),
           );
         }).toList(),
         rows: List<DataRow>.generate(tableRows.length, (index) {
@@ -390,7 +388,9 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                   );
                 }
               }
-              return DataCell(child);
+              // Centre every cell's content horizontally (the DataTable
+              // already centres it vertically).
+              return DataCell(Center(child: child));
             }).toList(),
           );
         }),
@@ -430,7 +430,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         24;
 
     return mui.Material(
-      color: scheme.surface,
+      color: Colors.transparent,
       child: SizedBox(
         height: widget.headingRowHeight + rowHeight * tableRows.length,
         child: dt2.DataTable2(
@@ -450,21 +450,24 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                   minWidth: widget.minColumnWidth > 0
                       ? widget.minColumnWidth
                       : null,
-                  numeric: field.numeric,
-                  label: field.sortable
-                      ? SortableHeader(
-                          label: field.label,
-                          isSorted: _isFieldSorted(field),
-                          sortAscending: _sortAscending,
-                          onTap: () => _toggleSort(field),
-                          center: true,
-                          wrap: true,
-                        )
-                      : Text(
-                          field.label,
-                          textAlign: TextAlign.center,
-                          softWrap: true,
-                        ),
+                  // Centred like every other column — no right alignment.
+                  numeric: false,
+                  label: Center(
+                    child: field.sortable
+                        ? SortableHeader(
+                            label: field.label,
+                            isSorted: _isFieldSorted(field),
+                            sortAscending: _sortAscending,
+                            onTap: () => _toggleSort(field),
+                            center: true,
+                            wrap: true,
+                          )
+                        : Text(
+                            field.label,
+                            textAlign: TextAlign.center,
+                            softWrap: true,
+                          ),
+                  ),
                 );
               })
               .toList(growable: false),
@@ -503,7 +506,9 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                         child: child,
                       );
                     }
-                    return mui.DataCell(child);
+                    // Centre every cell's content horizontally (DataTable2
+                    // already centres it vertically).
+                    return mui.DataCell(Center(child: child));
                   })
                   .toList(growable: false),
             );
@@ -547,7 +552,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     };
 
     final headerRow = TableRow(
-      decoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+      decoration: const BoxDecoration(color: Colors.transparent),
       children: [
         for (final field in tableFields)
           Padding(
@@ -578,6 +583,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     final dataRows = <TableRow>[
       for (var index = 0; index < tableRows.length; index++)
         TableRow(
+          decoration: const BoxDecoration(color: Colors.transparent),
           children: [
             for (final field in tableFields)
               _buildFitToWidthCell(
@@ -615,9 +621,8 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     DynamicTableField field,
     Map<String, dynamic> row,
     int rowIndex,
-    TextStyle cellStyle, {
-    bool centerAll = false,
-  }) {
+    TextStyle cellStyle,
+  ) {
     final value = row[field.key];
     Widget child;
     if (field.builder != null) {
@@ -628,9 +633,8 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
           : value.toString();
       child = Text(
         displayText,
-        textAlign: centerAll || !field.numeric
-            ? TextAlign.center
-            : TextAlign.right,
+        // Everything is centred — no numeric right-alignment.
+        textAlign: TextAlign.center,
         // Never ellipsize — wrap so the full value stays visible.
         softWrap: true,
         style: cellStyle,
@@ -647,7 +651,9 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
           // No max-height cap: rows grow to fit wrapped content so every
           // field is fully visible.
         ),
-        child: child,
+        // Centre the content horizontally; the surrounding Table already
+        // centres it vertically (TableCellVerticalAlignment.middle).
+        child: Center(child: child),
       ),
     );
     // Double-tap-to-edit on plain-text cells (builder cells like dropdowns
@@ -697,7 +703,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     };
 
     final headerRow = TableRow(
-      decoration: BoxDecoration(color: scheme.surfaceContainerHighest),
+      decoration: const BoxDecoration(color: Colors.transparent),
       children: [
         for (final field in tableFields)
           Padding(
@@ -728,6 +734,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     final dataRows = <TableRow>[
       for (var index = 0; index < tableRows.length; index++)
         TableRow(
+          decoration: const BoxDecoration(color: Colors.transparent),
           children: [
             for (final field in tableFields)
               _buildFitToWidthCell(
@@ -736,7 +743,6 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                 tableRows[index],
                 index,
                 cellStyle,
-                centerAll: true,
               ),
           ],
         ),
@@ -932,7 +938,10 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
 
     final visibleRows = _visibleRows;
 
-    return LayoutBuilder(
+    // Everything below renders on the dark grid theme: headers and data cells
+    // all share the same transparent background with white, centred text
+    // (see [darkGridTheme]).
+    final body = LayoutBuilder(
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < widget.mobileBreakpoint;
         final filterableFields = widget.fields
@@ -1055,5 +1064,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
         return tableWithMobileFilters;
       },
     );
+
+    return DarkGrid(child: body);
   }
 }

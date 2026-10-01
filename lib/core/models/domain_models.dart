@@ -1,7 +1,20 @@
 // Supporting domain models for the restructured pipeline.
 
+import '../utils/excel_date_utils.dart';
+
 DateTime? _parseDate(dynamic v) =>
     (v == null || v == '') ? null : DateTime.tryParse(v.toString());
+
+/// Business dates follow the day/month rule, so a value stored before it was
+/// fixed (a month-year such as "Aug-25", saved as 2025-08-01) is repaired on
+/// the way in — see [repairStoredMonthDayIso]. Timestamps keep using
+/// [_parseDate] because their year is real.
+DateTime? _parseBusinessDate(dynamic v) {
+  if (v == null || v == '') return null;
+  final iso = repairStoredMonthDayIso(v.toString().trim());
+  if (iso == null || iso.isEmpty) return null;
+  return DateTime.tryParse(iso);
+}
 
 double _toDouble(dynamic v) => v == null
     ? 0.0
@@ -60,7 +73,7 @@ class DashboardRow {
     showId: j['showId'] ?? '',
     showName: j['showName'] ?? '',
     shotCount: _toInt(j['shotCount']),
-    dueDate: _parseDate(j['dueDate']),
+    dueDate: _parseBusinessDate(j['dueDate']),
     mandays: _toDouble(j['mandays']),
   );
 }
@@ -126,8 +139,8 @@ class InventActiveShow {
     status: j['status'] ?? '',
     shotCount: _toInt(j['shotCount']),
     totalMandays: _toDouble(j['totalMandays']),
-    minDueDate: _parseDate(j['minDueDate']),
-    maxDueDate: _parseDate(j['maxDueDate']),
+    minDueDate: _parseBusinessDate(j['minDueDate']),
+    maxDueDate: _parseBusinessDate(j['maxDueDate']),
     departments: ((j['departments'] as List<dynamic>?) ?? const [])
         .map((e) => e.toString())
         .toList(growable: false),
@@ -166,7 +179,7 @@ class InventActiveShotDetail {
         status: j['status'] ?? '',
         artistName: j['artistName'],
         mandays: _toDouble(j['mandays']),
-        dueDate: _parseDate(j['dueDate']),
+        dueDate: _parseBusinessDate(j['dueDate']),
       );
 }
 

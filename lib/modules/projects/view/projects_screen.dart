@@ -1110,9 +1110,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       builder: (_) => _ClientDialog(controller: controller),
     );
     if (created == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Client created')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Client created')));
     }
   }
 
@@ -1125,9 +1124,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       builder: (_) => _ShowFormDialog(controller: controller),
     );
     if (created == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Show created')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Show created')));
     }
   }
 
@@ -2179,9 +2177,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       ).showSnackBar(SnackBar(content: Text(e.message ?? 'Unsupported file')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Import failed: $e')));
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -2206,9 +2203,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     vertical: SizeConfig.scaleHeight(context, 4),
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: 0.08),
+                    color: Theme.of(context).colorScheme.primary
+                        .withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(
                       SizeConfig.scaleWidth(context, 6),
                     ),
@@ -2336,9 +2332,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('CSV paste failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('CSV paste failed: $e')));
     } finally {
       if (mounted) setState(() => _isImporting = false);
     }
@@ -2592,14 +2587,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         mimeType: MimeType.microsoftExcel,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Export failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
@@ -2633,9 +2626,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         if (response == null) {
           final message =
               controller.error ?? 'Unable to save batch $batchLabel';
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(message)));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(message)));
           failed = true;
           break;
         }
@@ -2847,9 +2839,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Bulk delete failed: $error')));
       } else {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('$count shot(s) deleted.')));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$count shot(s) deleted.')));
         setState(() {
           _isBulkDeleteMode = false;
           _selectedShotIds.clear();
@@ -2870,9 +2861,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       builder: (_) => _ShotDialog(controller: controller, shot: shot),
     );
     if (result == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Shot saved')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Shot saved')));
     }
   }
 }
@@ -2943,9 +2933,8 @@ int _importHeaderSignalScore(String normalized) {
   for (final word in _importHeaderSignalWords) {
     if (normalized == word) {
       score += 3;
-    } else if (RegExp(
-      '(^|_)${RegExp.escape(word)}(_|\$)',
-    ).hasMatch(normalized)) {
+    } else if (RegExp('(^|_)${RegExp.escape(word)}(_|\$)')
+        .hasMatch(normalized)) {
       score += 2;
     } else if (normalized.contains(word)) {
       score += 1;
@@ -3000,7 +2989,10 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
   return idx < 0 ? 0 : idx;
 }
 
-String? _toIsoDateT(dynamic value) => excelDateToIso(value);
+/// Every project date column is MONTH + DAY with the year skipped (the years
+/// are always replaced by the current one), so "7/18" is 18 July and an Excel
+/// `mmm-yy` cell holding 1 Aug 2025 is the 25th of August — never a year.
+String? _toIsoDateT(dynamic value) => excelEtaToIso(value);
 
 int _toIntValueT(dynamic value) {
   if (value == null) return 0;
@@ -3706,9 +3698,9 @@ List<Map<String, dynamic>> _parseCsvTextRowsT(
   final headerIndex = _findHeaderLineOrNoneT(lines);
   final hasHeader = headerIndex >= 0;
   final headers = hasHeader
-      ? _splitCsvLineT(
-          lines[headerIndex],
-        ).map(_normalizeHeaderT).toList(growable: false)
+      ? _splitCsvLineT(lines[headerIndex])
+            .map(_normalizeHeaderT)
+            .toList(growable: false)
       : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
@@ -3842,9 +3834,9 @@ List<Map<String, dynamic>> _parseCsvRowsT(
   final lines = const LineSplitter().convert(csv);
   if (lines.length < 2) return const [];
   final headerIndex = _findHeaderRowIndexLinesT(lines);
-  final headers = _splitCsvLineT(
-    lines[headerIndex],
-  ).map(_normalizeHeaderT).toList(growable: false);
+  final headers = _splitCsvLineT(lines[headerIndex])
+      .map(_normalizeHeaderT)
+      .toList(growable: false);
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
   final seenKeys = <String>{};

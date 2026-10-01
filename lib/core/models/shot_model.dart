@@ -1,3 +1,5 @@
+import '../utils/excel_date_utils.dart';
+
 /// Core shot entity shared across Dashboard, Projects and Tasks.
 class ShotModel {
   final String shotId;
@@ -98,8 +100,19 @@ class ShotModel {
     this.fromComp,
   });
 
-  static DateTime? _date(dynamic v) =>
-      (v == null || v == '') ? null : DateTime.tryParse(v.toString());
+  /// Parses a shot date, re-reading the day of rows that were stored before the
+  /// day/month rule was fixed.
+  ///
+  /// Those rows hold a month-YEAR (Excel's `mmm-yy` cells, e.g. "Aug-25" saved
+  /// as 2025-08-01) where the data means a month-DAY, so every date showed up
+  /// as a year. [repairStoredMonthDayIso] recovers the day from the year's last
+  /// two digits (`2025` → 25), leaving genuine day-level dates untouched.
+  static DateTime? _date(dynamic v) {
+    if (v == null || v == '') return null;
+    final iso = repairStoredMonthDayIso(v.toString().trim());
+    if (iso == null || iso.isEmpty) return null;
+    return DateTime.tryParse(iso);
+  }
 
   static double _double(dynamic v) => v == null
       ? 0.0

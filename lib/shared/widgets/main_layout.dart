@@ -4,7 +4,6 @@ import 'package:pointer_interceptor/pointer_interceptor.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_colors.dart';
-import '../../core/controllers/theme_controller.dart';
 import '../../core/providers/access_provider.dart';
 import '../../core/utils/size_config.dart';
 import '../../modules/auth/controller/auth_controller.dart';
@@ -67,7 +66,6 @@ class _MainLayoutState extends State<MainLayout> {
     final isMobile = SizeConfig.isMobile(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final authController = Provider.of<AuthController>(context);
-    final themeController = Provider.of<ThemeController>(context);
     final notificationController = Provider.of<NotificationController>(context);
 
     final user = authController.currentUser;
@@ -184,11 +182,7 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                         ),
                         onSelected: (value) {
-                          if (value == 'theme') {
-                            themeController.toggleTheme(
-                              !themeController.isDarkMode,
-                            );
-                          } else if (value == 'notifications') {
+                          if (value == 'notifications') {
                             context.go('/notifications');
                           } else if (value == 'profile') {
                             context.go('/profile');
@@ -220,23 +214,6 @@ class _MainLayoutState extends State<MainLayout> {
                             ),
                           ),
                           const PopupMenuDivider(),
-                          PopupMenuItem<String>(
-                            value: 'theme',
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.brightness_6_outlined,
-                                  size: SizeConfig.iconSize(context, 18),
-                                ),
-                                SizeConfig.sizedBoxW(context, 8),
-                                Text(
-                                  themeController.isDarkMode
-                                      ? 'Switch to Light'
-                                      : 'Switch to Dark',
-                                ),
-                              ],
-                            ),
-                          ),
                           PopupMenuItem<String>(
                             value: 'profile',
                             child: Row(
@@ -278,31 +255,6 @@ class _MainLayoutState extends State<MainLayout> {
                         ),
                       ),
                       SizeConfig.sizedBoxW(context, 12),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.light_mode,
-                            size: SizeConfig.iconSize(context, 16),
-                            color: isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.brandGreen,
-                          ),
-                          Switch(
-                            value: themeController.isDarkMode,
-                            onChanged: themeController.toggleTheme,
-                            activeColor: AppColors.brandGreen,
-                          ),
-                          Icon(
-                            Icons.dark_mode,
-                            size: SizeConfig.iconSize(context, 16),
-                            color: isDark
-                                ? AppColors.brandGreen
-                                : AppColors.lightTextSecondary,
-                          ),
-                        ],
-                      ),
-                      SizeConfig.sizedBoxW(context, 8),
                       Stack(
                         clipBehavior: Clip.none,
                         children: [

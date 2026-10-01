@@ -33,10 +33,9 @@ class _BiddingScreenState extends State<BiddingScreen> {
     if (iso == null || iso.isEmpty) return '—';
     final d = DateTime.tryParse(iso);
     if (d == null) return iso;
-    // Month-level dates (Excel's mmm-yy cells) render exactly like Excel.
-    if (d.day == 1) return monthYearLabel(d);
-    return '${d.day.toString().padLeft(2, '0')}/'
-        '${d.month.toString().padLeft(2, '0')}/${d.year}';
+    // Month + day only — the years are always skipped, so a bid date is never
+    // rendered as a month-year (which reads as the year, not the day).
+    return monthDayLabel(d);
   }
 
   @override

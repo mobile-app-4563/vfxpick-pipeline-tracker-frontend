@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../constants/app_colors.dart';
 import '../../shared/widgets/gradient_box_border.dart';
 
@@ -65,76 +66,6 @@ class AppTheme {
       ),
       dialogTheme: const DialogThemeData(
         backgroundColor: AppColors.darkBg,
-        surfaceTintColor: Colors.transparent,
-      ),
-    );
-  }
-
-  static ThemeData get lightTheme {
-    return ThemeData(
-      useMaterial3: true,
-      fontFamily: 'Roboto',
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: AppColors.lightBg,
-      colorScheme: const ColorScheme.light(
-        primary: AppColors.brandGreen,
-        secondary: AppColors.brandCyan,
-        surface: AppColors.lightBg,
-        onSurface: AppColors.lightTextPrimary,
-        error: AppColors.priorityHigh,
-      ),
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(
-          fontSize: 32,
-          fontWeight: FontWeight.bold,
-          color: AppColors.lightTextPrimary,
-        ),
-        headlineMedium: TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: AppColors.lightTextPrimary,
-        ),
-        titleLarge: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.w600,
-          color: AppColors.lightTextPrimary,
-        ),
-        titleMedium: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: AppColors.lightTextPrimary,
-        ),
-        bodyLarge: TextStyle(fontSize: 16, color: AppColors.lightTextPrimary),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          color: AppColors.lightTextSecondary,
-        ),
-        labelLarge: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: AppColors.lightTextPrimary,
-        ),
-      ),
-      cardTheme: const CardThemeData(
-        color: AppColors.lightCardFill,
-        shadowColor: Colors.black12,
-        elevation: 2,
-      ),
-      inputDecorationTheme: _inputDecorationTheme(
-        borderColor: AppColors.lightCardBorder,
-        fillColor: AppColors.lightCardFill,
-      ),
-      dropdownMenuTheme: DropdownMenuThemeData(
-        inputDecorationTheme: _inputDecorationTheme(
-          borderColor: AppColors.lightCardBorder,
-          fillColor: AppColors.lightCardFill,
-        ),
-        menuStyle: const MenuStyle(
-          backgroundColor: WidgetStatePropertyAll(AppColors.lightCardFill),
-        ),
-      ),
-      dialogTheme: const DialogThemeData(
-        backgroundColor: AppColors.lightBg,
         surfaceTintColor: Colors.transparent,
       ),
     );

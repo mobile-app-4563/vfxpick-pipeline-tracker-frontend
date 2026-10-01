@@ -3,7 +3,6 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
 import 'core/providers/access_provider.dart';
-import 'core/controllers/theme_controller.dart';
 import 'core/routes/app_routes.dart';
 import 'core/theme/app_theme.dart';
 import 'core/utils/size_config.dart';
@@ -25,7 +24,6 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthController()),
         ChangeNotifierProvider(create: (_) => AccessProvider()),
-        ChangeNotifierProvider(create: (_) => ThemeController()),
         ChangeNotifierProvider(create: (_) => HomeController()),
         ChangeNotifierProvider(create: (_) => BiddingController()),
         ChangeNotifierProvider(create: (_) => DashboardController()),
@@ -62,15 +60,13 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.watch<ThemeController>();
     final authController = context.watch<AuthController>();
 
     return MaterialApp.router(
       title: 'VFXPICK Pipeline',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: theme.themeMode,
+      // The app is dark-only — there is no light/white theme to switch to.
+      theme: AppTheme.darkTheme,
       routerConfig: _router,
       builder: (context, child) {
         if (authController.isInitializing && child != null) {

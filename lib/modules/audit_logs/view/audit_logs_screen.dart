@@ -7,6 +7,7 @@ import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/sortable_header.dart';
+import '../../../shared/widgets/dark_grid.dart';
 import '../../auth/controller/auth_controller.dart';
 
 class AuditLogsScreen extends StatefulWidget {
@@ -193,10 +194,7 @@ class _AuditLogTableState extends State<_AuditLogTable> {
             onRefresh: () => context.read<AccessProvider>().loadAuditLogs(),
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
-              child: DataTable(
-                headingRowColor: WidgetStatePropertyAll(
-                  AppColors.brandGreen.withValues(alpha: 0.12),
-                ),
+              child: DarkDataTable(
                 dataRowMinHeight: 56,
                 dataRowMaxHeight: 64,
                 columnSpacing: SizeConfig.scaleWidth(context, 28),

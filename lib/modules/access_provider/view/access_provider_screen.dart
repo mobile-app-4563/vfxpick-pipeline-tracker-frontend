@@ -8,6 +8,7 @@ import '../../../core/utils/size_config.dart';
 import '../../../shared/widgets/empty_state_widget.dart';
 import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/sortable_header.dart';
+import '../../../shared/widgets/dark_grid.dart';
 import '../../auth/controller/auth_controller.dart';
 
 class AccessProviderScreen extends StatefulWidget {
@@ -287,10 +288,7 @@ class _AccessProviderScreenState extends State<AccessProviderScreen> {
                     thumbVisibility: true,
                     child: SingleChildScrollView(
                       controller: _tableVScroll,
-                      child: DataTable(
-                        headingRowColor: WidgetStatePropertyAll(
-                          AppColors.brandGreen.withValues(alpha: 0.12),
-                        ),
+                      child: DarkDataTable(
                         dataRowMinHeight: 56,
                         border: TableBorder(
                           borderRadius: BorderRadius.all(Radius.circular(0)),

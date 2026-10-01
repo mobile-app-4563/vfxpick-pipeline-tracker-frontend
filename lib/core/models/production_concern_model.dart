@@ -1,3 +1,5 @@
+import '../utils/excel_date_utils.dart';
+
 /// ProductionConcernModel wraps a row from the `production_data` table with
 /// the same due-date priority ranking used by [TodaysPickoutModel] for shot
 /// pickouts, so production concerns can be shown in the Home pickouts card
@@ -46,6 +48,17 @@ class ProductionConcernModel {
   static DateTime? _date(dynamic v) =>
       (v == null || v == '') ? null : DateTime.tryParse(v.toString());
 
+  /// The concern's due date follows the day/month rule, so a value stored
+  /// before it was fixed (a month-year such as "Aug-25", saved as 2025-08-01)
+  /// is repaired on the way in — see [repairStoredMonthDayIso]. Reported and
+  /// resolved dates keep the raw parse because their year is real.
+  static DateTime? _dueDate(dynamic v) {
+    if (v == null || v == '') return null;
+    final iso = repairStoredMonthDayIso(v.toString().trim());
+    if (iso == null || iso.isEmpty) return null;
+    return DateTime.tryParse(iso);
+  }
+
   static String _str(dynamic v) => v?.toString() ?? '';
 
   /// Calculate pickout priority from a production concern row using the same
@@ -53,7 +66,7 @@ class ProductionConcernModel {
   /// due today -> Critical, due tomorrow -> High, due <= 3 days -> Medium.
   /// Falls back to the concern's own priority field when there is no due date.
   static ProductionConcernModel calculatePriority(Map<String, dynamic> json) {
-    final dueDate = _date(json['dueDate']);
+    final dueDate = _dueDate(json['dueDate']);
     final ownPriority = _str(json['priority']).toLowerCase();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);

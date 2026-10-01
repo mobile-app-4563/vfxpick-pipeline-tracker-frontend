@@ -13,6 +13,7 @@ import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/gradient_box_border.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../../../shared/widgets/sortable_header.dart';
+import '../../../shared/widgets/dark_grid.dart';
 import '../../auth/controller/auth_controller.dart';
 import '../controller/teams_controller.dart';
 
@@ -425,10 +426,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
           child: SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             scrollDirection: Axis.vertical,
-            child: DataTable(
-              headingRowColor: WidgetStatePropertyAll(
-                AppColors.brandGreen.withValues(alpha: 0.12),
-              ),
+            child: DarkDataTable(
               dataRowMinHeight: 56,
               dataRowMaxHeight: 64,
               columnSpacing: SizeConfig.scaleWidth(context, 28),
@@ -786,9 +784,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
       ),
     );
     if (updated == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('${member.name} updated')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('${member.name} updated')));
     }
   }
 
@@ -850,9 +847,8 @@ class _TeamsScreenState extends State<TeamsScreen> {
       ),
     );
     if (added == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Team member added')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Team member added')));
     }
   }
 }

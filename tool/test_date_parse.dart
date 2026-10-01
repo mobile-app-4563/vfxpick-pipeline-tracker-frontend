@@ -1,18 +1,19 @@
-import '../lib/core/utils/excel_date_utils.dart';
+import 'package:flutter/rendering.dart';
+import 'package:vfxpick_pipeline/core/utils/excel_date_utils.dart';
 
 void main() {
   final now = DateTime.now();
-  print('NOW: $now');
+  debugPrint('NOW: $now');
 
   // Values straight from "excel Jan - dec today pickout.xlsx"
   final cases = <String, String?>{
-    'Sep-01': '${now.year}-09-01', // today's pickout → must be THIS year
-    'Sep-02': '${now.year}-09-02', // tomorrow
+    'Sep-01': '${now.year}-09-01',
+    'Sep-02': '${now.year}-09-02',
     'Sep-03': '${now.year}-09-03',
     'Sep-04': '${now.year}-09-04',
-    'Sep-1': '${now.year}-09-01', // no leading zero
-    'May-25': '${now.year}-05-25', // day interpretation
-    'May 2025': '2025-05-01', // month-year still works
+    'Sep-1': '${now.year}-09-01',
+    'May-25': '${now.year}-05-25',
+    'May 2025': '2025-05-01',
     'May-25 2025': null,
     '2025-05-01': '2025-05-01', // ISO unchanged
     '2025-05-01T00:00:00.000Z': '2025-05-01', // ISO unchanged
@@ -28,7 +29,9 @@ void main() {
     final actual = excelDateToIso(input);
     final ok = actual == expected;
     if (!ok) failures++;
-    print('${ok ? 'PASS' : 'FAIL'}  $input  ->  $actual  (expected $expected)');
+    debugPrint(
+      '${ok ? 'PASS' : 'FAIL'}  $input  ->  $actual  (expected $expected)',
+    );
   });
-  print(failures == 0 ? 'ALL PASS' : '$failures FAILURES');
+  debugPrint(failures == 0 ? 'ALL PASS' : '$failures FAILURES');
 }

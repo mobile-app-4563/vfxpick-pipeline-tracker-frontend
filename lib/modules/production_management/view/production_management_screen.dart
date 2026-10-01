@@ -27,6 +27,8 @@ import '../../../shared/widgets/glass_container.dart';
 import '../../../shared/widgets/grid_editable_cell.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../../auth/controller/auth_controller.dart';
+import '../utils/grid_column_sizing.dart';
+import '../utils/grid_department_mapper.dart';
 
 /// Status values accepted by the backend `shots.status` ENUM (also used for
 /// the grid's Status column, the create dialog and import normalization).
@@ -362,6 +364,50 @@ class _ProductionManagementScreenState
     if (value == null || value.toString().trim().isEmpty) return null;
     return value;
   }
+
+  // ─── Content-driven column widths ─────────────────────────────────────────
+  // Columns size themselves to their content instead of a hard-coded pixel
+  // width, so a column grows when its data does — once Tasks started holding
+  // "ROTO, PAINT" the old 100px no longer fitted it. Laying text out is far too
+  // expensive to repeat for every column on every build, so measurements are
+  // memoised per loaded data set.
+  List<Map<String, dynamic>>? _widthsForRows;
+  double? _widthsForTextScale;
+  final Map<String, double> _columnWidthCache = <String, double>{};
+
+  /// Width that fits [label] and this column's widest value, plus padding.
+  ///
+  /// [rows] is deliberately the unfiltered data set so columns keep a stable
+  /// width while the user filters, rather than resizing on every keystroke.
+  double _columnWidth(
+    BuildContext context,
+    String key,
+    String label,
+    List<Map<String, dynamic>> rows, {
+    double minWidth = gridColumnMinWidth,
+  }) {
+    final textScale = MediaQuery.textScalerOf(context).scale(12);
+    if (!identical(_widthsForRows, rows) || _widthsForTextScale != textScale) {
+      _columnWidthCache.clear();
+      _widthsForRows = rows;
+      _widthsForTextScale = textScale;
+    }
+    return _columnWidthCache.putIfAbsent(
+      key,
+      () => gridColumnWidth(
+        context,
+        label: label,
+        values: rows.map((row) => row[key]),
+        style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
+        minWidth: minWidth,
+      ),
+    );
+  }
+
+  /// Floor for numeric columns, which hold short values and stay readable
+  /// narrower than a text column.
+  double _numericMinWidth(BuildContext context) =>
+      SizeConfig.scaleWidth(context, 60);
 
   void _startEditing(String shotId, String fieldKey) {
     setState(() => _editingCellKey = _cellKey(shotId, fieldKey));
@@ -937,16 +983,17 @@ class _ProductionManagementScreenState
         message: 'Parsing & importing…',
         status: status,
         task: () async {
-          final rows = await _parseGridFileRowsAsync(
+          final parseResult = await _parseGridFileRowsAsync(
             bytes,
             (file.extension ?? 'xlsx').toLowerCase(),
             _gridStatusOptions,
             onProgress: (n) => status.value = 'Parsing… $n rows',
           );
+          final rows = parseResult.rows;
           if (rows.isNotEmpty) {
             status.value = 'Uploading ${rows.length} rows…';
           }
-          return _saveParsedRowsAsync(
+          final summary = await _saveParsedRowsAsync(
             rows,
             ApiConstants.baseUrl,
             ApiConstants.productionGridBulkUpsert,
@@ -954,6 +1001,10 @@ class _ProductionManagementScreenState
             onChunk: (done, total) =>
                 status.value = 'Uploading… chunk $done of $total',
           );
+          // Carry the parse accounting through to the summary below so skipped
+          // lines are always reported instead of silently disappearing.
+          summary['parse'] = parseResult;
+          return summary;
         },
       );
       status.dispose();
@@ -965,6 +1016,7 @@ class _ProductionManagementScreenState
       final errors = (parsed['errors'] as List?) ?? const [];
       final notes = (parsed['notes'] as List?) ?? const [];
       final preview = (parsed['preview'] as List?) ?? const [];
+      final parseResult = parsed['parse'] as _GridParseResult?;
 
       setState(() {
         _isImporting = false;
@@ -976,6 +1028,16 @@ class _ProductionManagementScreenState
         _importFeedback
           ..clear()
           ..addAll(notes.map((n) => n.toString()).where((n) => n.isNotEmpty));
+        if (parseResult != null) {
+          // Make the parse accounting visible in the feedback panel too, so a
+          // skipped line can never pass unnoticed again.
+          _importFeedback.add(
+            'File lines read: ${parseResult.physicalLines} · '
+            'rows imported: ${parseResult.rows.length} · '
+            'rows skipped: ${parseResult.skippedLines}'
+            '${_skippedLineSuffix(parseResult)}',
+          );
+        }
         for (final e in errors) {
           final err = e is Map
               ? e['error']?.toString() ?? e.toString()
@@ -984,10 +1046,15 @@ class _ProductionManagementScreenState
         }
       });
 
+      final skippedSuffix = parseResult == null
+          ? ''
+          : _skippedLineSuffix(parseResult);
       final message = errors.isEmpty
-          ? 'Saved $total rows to the server (created: $created, updated: $updated)'
+          ? 'Saved $total rows to the server '
+                '(created: $created, updated: $updated)$skippedSuffix'
           : 'Saved ${total - errors.length} of $total rows '
-                '(created: $created, updated: $updated, errors: ${errors.length})';
+                '(created: $created, updated: $updated, '
+                'errors: ${errors.length})$skippedSuffix';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
 
@@ -1096,7 +1163,7 @@ class _ProductionManagementScreenState
     setState(() => _isImporting = true);
     try {
       final status = ValueNotifier<String>('Parsing data…');
-      final rows = await _withParsingLoader(
+      final parseResult = await _withParsingLoader(
         context: context,
         message: 'Parsing data…',
         status: status,
@@ -1108,6 +1175,7 @@ class _ProductionManagementScreenState
       );
       status.dispose();
       if (!mounted) return;
+      final rows = parseResult.rows;
       setState(() {
         _isImporting = false;
         _importDraftRows
@@ -1115,15 +1183,23 @@ class _ProductionManagementScreenState
           ..addAll(rows);
         _previewPage = 0;
         _resetImportPreviewCache();
-        _importFeedback.clear();
+        _importFeedback
+          ..clear()
+          ..add(
+            'Lines pasted: ${parseResult.physicalLines} · '
+            'rows parsed: ${rows.length} · '
+            'rows skipped: ${parseResult.skippedLines}'
+            '${_skippedLineSuffix(parseResult)}',
+          );
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
             rows.isEmpty
                 ? 'No rows could be parsed. Each line needs a Shot ID '
-                      '(column 9) and a Tasks/Department value (column 11).'
-                : 'Imported ${rows.length} rows for review.',
+                      '(column 10) and a Tasks/Department value (column 12).'
+                : 'Imported ${rows.length} row(s) for review'
+                      '${_skippedLineSuffix(parseResult)}.',
           ),
         ),
       );
@@ -1310,7 +1386,7 @@ class _ProductionManagementScreenState
             columnSpacing: SizeConfig.scaleWidth(context, 12),
             dataRowMinHeight: MediaQuery.of(context).size.height * 48 / 768,
             dataRowMaxHeight: MediaQuery.of(context).size.height * 62 / 768,
-            fields: _buildImportPreviewFields(context),
+            fields: _buildImportPreviewFields(context, previewRows),
             rows: previewRows,
             // Shared grid page size (see [AppConstants.gridRowsPerPage]).
             rowsPerPage: _rowsPerPage,
@@ -1325,46 +1401,55 @@ class _ProductionManagementScreenState
   }
 
   /// Read-only fields for the import preview table.
-  List<DynamicTableField> _buildImportPreviewFields(BuildContext context) {
+  List<DynamicTableField> _buildImportPreviewFields(
+    BuildContext context,
+    List<Map<String, dynamic>> rows,
+  ) {
     return [
       DynamicTableField(
         key: 'sNo',
         label: 'S No',
-        width: SizeConfig.scaleWidth(context, 75),
+        width: _columnWidth(
+          context,
+          'sNo',
+          'S No',
+          rows,
+          minWidth: _numericMinWidth(context),
+        ),
         numeric: true,
         filterRequired: false,
       ),
-      _previewField(context, 'coordinator', 'Co ordinator', 190),
-      _previewField(context, 'month', 'Month', 120),
-      _previewField(context, 'shotsReceivedDate', 'Shots Received Date', 350),
-      _previewField(context, 'clientForRef', 'Client for Ref', 190),
-      _previewField(context, 'client', 'Client', 200),
-      _previewField(context, 'show', 'Show', 230),
-      _previewField(context, 'wipEta', 'WIP ETA', 150),
-      _previewField(context, 'eta', 'ETA', 180),
-      _previewField(context, 'shotCode', 'Shot ID', 200),
-      _previewField(context, 'frames', 'Frames', 90, numeric: true),
-      _previewField(context, 'tasks', 'Tasks', 100),
-      _previewField(context, 'reviewNotes', 'Review Notes', 220),
-      _previewField(context, 'status', 'Status', 130),
-      _previewField(context, 'deliveredOn', 'Delivered on', 120),
-      _previewField(context, 'workStation', 'Work station', 120),
+      _previewField(context, 'coordinator', 'Co ordinator', rows),
+      _previewField(context, 'month', 'Month', rows),
+      _previewField(context, 'shotsReceivedDate', 'Shots Received Date', rows),
+      _previewField(context, 'clientForRef', 'Client for Ref', rows),
+      _previewField(context, 'client', 'Client', rows),
+      _previewField(context, 'show', 'Show', rows),
+      _previewField(context, 'wipEta', 'WIP ETA', rows),
+      _previewField(context, 'eta', 'ETA', rows),
+      _previewField(context, 'shotCode', 'Shot ID', rows),
+      _previewField(context, 'frames', 'Frames', rows, numeric: true),
+      _previewField(context, 'tasks', 'Tasks', rows),
+      _previewField(context, 'reviewNotes', 'Review Notes', rows),
+      _previewField(context, 'status', 'Status', rows),
+      _previewField(context, 'deliveredOn', 'Delivered on', rows),
+      _previewField(context, 'workStation', 'Work station', rows),
       _previewField(
         context,
         'shotMandays',
         'Shot man-days',
-        110,
+        rows,
         numeric: true,
       ),
       _previewField(
         context,
         'approvedClientMd',
         'Approved Client MD',
-        130,
+        rows,
         numeric: true,
       ),
-      _previewField(context, 'flEta', 'FL ETA', 110),
-      _previewField(context, 'flMandays', 'FL Man-days', 110, numeric: true),
+      _previewField(context, 'flEta', 'FL ETA', rows),
+      _previewField(context, 'flMandays', 'FL Man-days', rows, numeric: true),
     ];
   }
 
@@ -1372,13 +1457,19 @@ class _ProductionManagementScreenState
     BuildContext context,
     String key,
     String label,
-    double width, {
+    List<Map<String, dynamic>> rows, {
     bool numeric = false,
   }) {
     return DynamicTableField(
       key: key,
       label: label,
-      width: SizeConfig.scaleWidth(context, width),
+      width: _columnWidth(
+        context,
+        key,
+        label,
+        rows,
+        minWidth: numeric ? _numericMinWidth(context) : gridColumnMinWidth,
+      ),
       numeric: numeric,
       builder: (context, value, row, rowIndex) {
         final text = value == null || value.toString().trim().isEmpty
@@ -1827,7 +1918,10 @@ class _ProductionManagementScreenState
   }
 
   // ─── Grid fields (all 20 template columns) ───────────────────────────────
-  List<DynamicTableField> _buildFields(BuildContext context) {
+  List<DynamicTableField> _buildFields(
+    BuildContext context,
+    List<Map<String, dynamic>> rows,
+  ) {
     return [
       if (_deleteEnabled)
         DynamicTableField(
@@ -1856,65 +1950,77 @@ class _ProductionManagementScreenState
       DynamicTableField(
         key: 'sNo',
         label: 'S No',
-        width: SizeConfig.scaleWidth(context, 70),
+        width: _columnWidth(
+          context,
+          'sNo',
+          'S No',
+          rows,
+          minWidth: _numericMinWidth(context),
+        ),
         numeric: true,
         filterRequired: false,
       ),
-      _editableField(context, 'coordinator', 'Co ordinator', 190),
-      _editableField(context, 'month', 'Month', 120),
+      _editableField(context, 'coordinator', 'Co ordinator', rows),
+      _editableField(context, 'month', 'Month', rows),
       _editableField(
         context,
         'shotsReceivedDate',
         'Shots Received Date',
-        350,
+        rows,
         isDate: true,
       ),
-      _editableField(context, 'clientForRef', 'Client for Ref', 190),
+      _editableField(context, 'clientForRef', 'Client for Ref', rows),
       DynamicTableField(
         key: 'client',
         label: 'Client',
-        width: SizeConfig.scaleWidth(context, 200),
+        width: _columnWidth(context, 'client', 'Client', rows),
       ),
       DynamicTableField(
         key: 'show',
         label: 'Show',
-        width: SizeConfig.scaleWidth(context, 230),
+        width: _columnWidth(context, 'show', 'Show', rows),
       ),
-      _editableField(context, 'wipEta', 'WIP ETA', 150, isDate: true),
-      _editableField(context, 'eta', 'ETA', 180, isDate: true),
+      _editableField(context, 'wipEta', 'WIP ETA', rows, isDate: true),
+      _editableField(context, 'eta', 'ETA', rows, isDate: true),
       DynamicTableField(
         key: 'shotCode',
         label: 'Shot ID',
-        width: SizeConfig.scaleWidth(context, 200),
+        width: _columnWidth(context, 'shotCode', 'Shot ID', rows),
       ),
-      _editableField(context, 'frames', 'Frames', 90, numeric: true),
-      _editableField(context, 'tasks', 'Tasks', 100),
-      _editableField(context, 'reviewNotes', 'Review Notes', 220),
+      _editableField(context, 'frames', 'Frames', rows, numeric: true),
+      _editableField(context, 'tasks', 'Tasks', rows),
+      _editableField(context, 'reviewNotes', 'Review Notes', rows),
       _editableField(
         context,
         'status',
         'Status',
-        150,
+        rows,
         options: _gridStatusOptions,
       ),
-      _editableField(context, 'deliveredOn', 'Delivered on', 120, isDate: true),
-      _editableField(context, 'workStation', 'Work station', 120),
+      _editableField(
+        context,
+        'deliveredOn',
+        'Delivered on',
+        rows,
+        isDate: true,
+      ),
+      _editableField(context, 'workStation', 'Work station', rows),
       _editableField(
         context,
         'shotMandays',
         'Shot man-days',
-        110,
+        rows,
         numeric: true,
       ),
       _editableField(
         context,
         'approvedClientMd',
         'Approved Client MD',
-        130,
+        rows,
         numeric: true,
       ),
-      _editableField(context, 'flEta', 'FL ETA', 110, isDate: true),
-      _editableField(context, 'flMandays', 'FL Man-days', 110, numeric: true),
+      _editableField(context, 'flEta', 'FL ETA', rows, isDate: true),
+      _editableField(context, 'flMandays', 'FL Man-days', rows, numeric: true),
       if (_deleteEnabled)
         DynamicTableField(
           key: 'actions',
@@ -1945,7 +2051,7 @@ class _ProductionManagementScreenState
     BuildContext context,
     String key,
     String label,
-    double width, {
+    List<Map<String, dynamic>> rows, {
     bool numeric = false,
     bool isDate = false,
     List<String>? options,
@@ -1953,7 +2059,13 @@ class _ProductionManagementScreenState
     return DynamicTableField(
       key: key,
       label: label,
-      width: SizeConfig.scaleWidth(context, width),
+      width: _columnWidth(
+        context,
+        key,
+        label,
+        rows,
+        minWidth: numeric ? _numericMinWidth(context) : gridColumnMinWidth,
+      ),
       numeric: numeric,
       builder: (context, value, row, rowIndex) {
         final shotId = row['shotId']?.toString() ?? '';
@@ -2032,7 +2144,7 @@ class _ProductionManagementScreenState
               columnSpacing: SizeConfig.scaleWidth(context, 12),
               dataRowMinHeight: MediaQuery.of(context).size.height * 28 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 32 / 768,
-              fields: _buildFields(context),
+              fields: _buildFields(context, _rows),
               rows: filteredRows,
               onFilterChanged: _applyColumnFilter,
               // Shared grid page size (see [AppConstants.gridRowsPerPage]).
@@ -2254,7 +2366,7 @@ class _ProductionManagementScreenState
           floatingActionButton: _importEnabled
               ? FloatingActionButton.extended(
                   backgroundColor: AppColors.brandGreen,
-                  foregroundColor: Colors.white,
+                  // foregroundColor: Colors.white,
                   onPressed: (_isSyncing || _isSavingImport || _isImporting)
                       ? null
                       : _openCreateMenu,
@@ -2429,15 +2541,31 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
   Set<String> _reviewNotesChips = {};
 
   // Unique value lists extracted from the grid rows (computed after first
-  // frame so the dialog opens instantly, like the Projects dialog). Status,
-  // tasks and work station use fixed option lists; coordinator and month are
+  // frame so the dialog opens instantly, like the Projects dialog). Status
+  // and work station use fixed option lists; tasks, coordinator and month are
   // derived from the rows.
   late final List<String> _statuses = [..._statusFilterOptions];
-  late final List<String> _tasks = [..._tasksFilterOptions()];
   List<String> _coordinators = [];
   late final List<String> _workStations = [..._workStationFilterOptions];
   List<String> _months = [];
   bool _isLoadingValues = true;
+
+  // Department values present in the loaded rows that are not pipeline
+  // departments (for example "NO TASK"). Unknown departments are accepted, not
+  // rejected, so they are appended to both the Department and Tasks filter
+  // lists — otherwise their rows would only be reachable through "All".
+  List<String> _extraDepartments = [];
+
+  /// Tasks filter options: the pipeline departments plus every extra
+  /// department value actually present in the data.
+  List<String> get _tasks => [..._tasksFilterOptions(), ..._extraDepartments];
+
+  /// Department (Data Source) filter options, with "All" first.
+  List<String> get _departmentOptions => [
+    _allDepartmentOption,
+    ...AppConstants.pipelineDepartments,
+    ..._extraDepartments,
+  ];
 
   // Sub-page navigation: null = main list.
   String? _subPageKey;
@@ -2484,6 +2612,10 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
       setState(() {
         _coordinators = _unique('coordinator');
         _months = _unique('month');
+        _extraDepartments = gridExtraDepartments(
+          widget.rows.map((row) => (row['tasks'] ?? '').toString()),
+          known: AppConstants.pipelineDepartments,
+        );
         _isLoadingValues = false;
       });
     });
@@ -2632,7 +2764,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
         // ── Data Source (inline single-select chips, same as Projects) ──
         _labeledChipRow(
           'Department',
-          [_allDepartmentOption, ...AppConstants.pipelineDepartments],
+          _departmentOptions,
           _selectedDepartment,
           (v) => setState(() => _selectedDepartment = v),
         ),
@@ -3548,14 +3680,18 @@ int _findHeaderRowIndexLinesT(List<String> lines) {
   return idx < 0 ? 0 : idx;
 }
 
-/// Grid date cells are typed as MONTH + DAY ("Sep-01" = 1 Sep of the current
-/// year), and the template also carries real `mmm-yy` date cells (exact).
-/// Real date cells decode exactly; TEXT cells ("Sep-01", "Aug-28") are
-/// day-of-month values whose year is the CURRENT year — never a year token,
-/// so `monthYearFirst` must stay OFF (default mode).
-String? _toGridIsoDateT(dynamic value) => excelDateToIso(value);
+/// Grid date cells are always MONTH + DAY ("Sep-01" = 1 Sep, "7/18" = 18 Jul)
+/// with the year skipped in favour of the current one.
+///
+/// Real Excel date cells (`mmm-yy` serials) arrive as the 1st of a month whose
+/// 2-digit year is really the day, and text cells ("7/18", "3/26", "Aug-28")
+/// are month/day pairs. Both must be read by the day/month rule — a plain
+/// parse turned "7/18" into July 2018 and every grid date rendered as a year.
+String? _toGridIsoDateT(dynamic value) => excelEtaToIso(value);
 
-String? _toGridEtaIsoDateT(dynamic value) => excelDateToCurrentYearIso(value);
+/// Every date column (Shots Received Date, Delivered on, WIP ETA, ETA, FL ETA)
+/// shares the same rule, so this is kept as an explicitly named alias.
+String? _toGridEtaIsoDateT(dynamic value) => excelEtaToIso(value);
 
 int _toIntValueT(dynamic value) {
   if (value == null) return 0;
@@ -3736,12 +3872,12 @@ Map<String, dynamic> _toGridApiRowT(
     'client': str('client'),
     'show': str('show'),
     'shotCode': str('shotCode'),
-    'tasks': str('tasks').toUpperCase(),
+    'tasks': normalizeGridTasks(str('tasks')),
     'coordinator': str('coordinator'),
     'month': str('month'),
     'shotsReceivedDate': _toGridIsoDateT(valueFor('shotsReceivedDate')),
     'clientForRef': str('clientForRef'),
-    'wipEta': _toGridIsoDateT(valueFor('wipEta')),
+    'wipEta': _toGridEtaIsoDateT(valueFor('wipEta')),
     'eta': _toGridEtaIsoDateT(valueFor('eta')),
     'frames': _toIntValueT(valueFor('frames')),
     'reviewNotes': str('reviewNotes'),
@@ -3750,7 +3886,7 @@ Map<String, dynamic> _toGridApiRowT(
     'workStation': str('workStation'),
     'shotMandays': _toDoubleValueT(valueFor('shotMandays')),
     'approvedClientMd': _toDoubleValueT(valueFor('approvedClientMd')),
-    'flEta': _toGridIsoDateT(valueFor('flEta')),
+    'flEta': _toGridEtaIsoDateT(valueFor('flEta')),
     'flMandays': _toDoubleValueT(valueFor('flMandays')),
   };
 }
@@ -3789,16 +3925,62 @@ const int _importYieldEvery = 40;
 
 Future<void> _importYield() => Future<void>.delayed(Duration.zero);
 
-/// Parses pasted CSV text into grid API rows, locating the header row,
-/// mapping every column and de-duplicating shot codes. Yields to the event
-/// loop every [_importYieldEvery] rows.
-Future<List<Map<String, dynamic>>> _parseGridCsvTextRowsAsync(
+/// Outcome of parsing an imported file or paste.
+///
+/// Lines are now only ever skipped for reasons the user can SEE — the counts
+/// below are shown in the import summary. Previously repeated shot/task/notes
+/// lines were dropped silently, which is how 1,637 real rows disappeared from
+/// a 11,016-line import.
+class _GridParseResult {
+  const _GridParseResult({
+    required this.rows,
+    this.physicalLines = 0,
+    this.blankLines = 0,
+    this.repeatedHeaderLines = 0,
+    this.missingShotIdLines = 0,
+  });
+
+  /// Rows ready to send to the server (every physical data line is kept).
+  final List<Map<String, dynamic>> rows;
+
+  /// Data lines examined (header row excluded).
+  final int physicalLines;
+
+  /// Lines skipped because every cell was empty.
+  final int blankLines;
+
+  /// Lines skipped because they repeat the header row inside the sheet.
+  final int repeatedHeaderLines;
+
+  /// Lines skipped because column 10 (Shot ID) was empty.
+  final int missingShotIdLines;
+
+  int get skippedLines => blankLines + repeatedHeaderLines + missingShotIdLines;
+}
+
+/// Suffix describing why lines were skipped, or '' when nothing was skipped.
+String _skippedLineSuffix(_GridParseResult result) {
+  final reasons = <String>[
+    if (result.missingShotIdLines > 0)
+      '${result.missingShotIdLines} without a Shot ID',
+    if (result.repeatedHeaderLines > 0)
+      '${result.repeatedHeaderLines} repeated header row(s)',
+    if (result.blankLines > 0) '${result.blankLines} blank row(s)',
+  ];
+  if (reasons.isEmpty) return '';
+  return ' · ${result.physicalLines} lines read, skipped ${reasons.join(', ')}';
+}
+
+/// Parses pasted CSV text into grid API rows, locating the header row and
+/// mapping every column. Every physical line is kept — lines are never merged
+/// by shot code. Yields to the event loop every [_importYieldEvery] rows.
+Future<_GridParseResult> _parseGridCsvTextRowsAsync(
   String csvText,
   List<String> gridStatuses, {
   void Function(int parsedRows)? onProgress,
 }) async {
   final lines = const LineSplitter().convert(csvText.trim());
-  if (lines.isEmpty) return const [];
+  if (lines.isEmpty) return const _GridParseResult(rows: []);
 
   final headerIndex = _findHeaderLineOrNoneT(lines);
   final hasHeader = headerIndex >= 0;
@@ -3809,8 +3991,11 @@ Future<List<Map<String, dynamic>>> _parseGridCsvTextRowsAsync(
       : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
-  final seenShotCodes = <String>{};
   var processed = 0;
+  var physical = 0;
+  var blank = 0;
+  var repeatedHeader = 0;
+  var missingShot = 0;
 
   // Data-only pastes (no header row) start at line 0; columns are mapped
   // positionally through `_gridFieldColumnIndex` inside `_toGridApiRowT`.
@@ -3819,10 +4004,17 @@ Future<List<Map<String, dynamic>>> _parseGridCsvTextRowsAsync(
       await _importYield();
       onProgress?.call(out.length);
     }
+    physical++;
     final line = lines[i].trim();
-    if (line.isEmpty) continue;
+    if (line.isEmpty) {
+      blank++;
+      continue;
+    }
     final values = _splitCsvLineT(lines[i]);
-    if (hasHeader && _isHeaderLikeRowT(values, headerLabels)) continue;
+    if (hasHeader && _isHeaderLikeRowT(values, headerLabels)) {
+      repeatedHeader++;
+      continue;
+    }
     final raw = <String, dynamic>{};
     for (var c = 0; c < values.length; c++) {
       final value = values[c].trim();
@@ -3834,22 +4026,34 @@ Future<List<Map<String, dynamic>>> _parseGridCsvTextRowsAsync(
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
     final code = (apiRow['shotCode'] ?? '').toString().trim();
-    if (code.isEmpty) continue;
-    // The same shot with different tasks (e.g. Roto vs Comp) or a different
-    // feedback round (review notes) must stay as separate rows.
-    final taskKey = (apiRow['tasks'] ?? '').toString().trim().toUpperCase();
-    final notesKey = (apiRow['reviewNotes'] ?? '').toString().trim();
-    final dedupKey = '$code|$taskKey|$notesKey';
-    if (seenShotCodes.contains(dedupKey)) continue;
-    seenShotCodes.add(dedupKey);
+    if (code.isEmpty) {
+      missingShot++;
+      continue;
+    }
+    // Every physical line is kept. The same shot + department + review notes
+    // may legitimately repeat (one line per element/submission, each with its
+    // own Frames / ETA / man-days / Status), so lines are never merged here.
+    // `sourceRowRef` is what the server uses to tell them apart and to make a
+    // re-import of the same data update rows instead of duplicating them.
+    apiRow['sourceRowRef'] = 'paste:${i + 1}';
     out.add(apiRow);
   }
-  return out;
+  return _GridParseResult(
+    rows: out,
+    physicalLines: physical,
+    blankLines: blank,
+    repeatedHeaderLines: repeatedHeader,
+    missingShotIdLines: missingShot,
+  );
 }
 
 /// Parses Excel bytes into grid API rows, yielding to the event loop around
 /// the workbook decode and every [_importYieldEvery] data rows.
-Future<List<Map<String, dynamic>>> _parseGridExcelRowsAsync(
+///
+/// Keeps every physical line of the first sheet. Each row carries a
+/// `sourceRowRef` of the form `Sheet1!12` (the line's row number inside the
+/// workbook) so repeated shot/task/notes lines stay distinct server-side.
+Future<_GridParseResult> _parseGridExcelRowsAsync(
   Uint8List bytes,
   List<String> gridStatuses, {
   void Function(int parsedRows)? onProgress,
@@ -3857,27 +4061,38 @@ Future<List<Map<String, dynamic>>> _parseGridExcelRowsAsync(
   await _importYield();
   final excel = Excel.decodeBytes(bytes);
   await _importYield();
-  if (excel.tables.isEmpty) return const [];
+  if (excel.tables.isEmpty) return const _GridParseResult(rows: []);
+  final sheetName = excel.tables.keys.first;
   final firstSheet = excel.tables.values.first;
   final rows = firstSheet.rows;
-  if (rows.length < 2) return const [];
+  if (rows.length < 2) return const _GridParseResult(rows: []);
   final headerIndex = _findHeaderRowIndexT(rows);
   final headers = rows[headerIndex]
       .map((c) => _normalizeHeaderT(c?.value?.toString() ?? ''))
       .toList();
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
-  final seenShotCodes = <String>{};
   var processed = 0;
+  var physical = 0;
+  var blank = 0;
+  var repeatedHeader = 0;
+  var missingShot = 0;
   for (var i = headerIndex + 1; i < rows.length; i++) {
     if (++processed % _importYieldEvery == 0) {
       await _importYield();
       onProgress?.call(out.length);
     }
+    physical++;
     final r = rows[i];
-    if (r.every((c) => (c?.value?.toString().trim() ?? '').isEmpty)) continue;
+    if (r.every((c) => (c?.value?.toString().trim() ?? '').isEmpty)) {
+      blank++;
+      continue;
+    }
     final cellValues = r.map((c) => c?.value?.toString().trim() ?? '').toList();
-    if (_isHeaderLikeRowT(cellValues, headerLabels)) continue;
+    if (_isHeaderLikeRowT(cellValues, headerLabels)) {
+      repeatedHeader++;
+      continue;
+    }
     final raw = <String, dynamic>{};
     for (var c = 0; c < headers.length; c++) {
       final key = headers[c];
@@ -3888,46 +4103,64 @@ Future<List<Map<String, dynamic>>> _parseGridExcelRowsAsync(
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
     final code = (apiRow['shotCode'] ?? '').toString().trim();
-    if (code.isEmpty) continue;
-    // The same shot with different tasks (e.g. Roto vs Comp) or a different
-    // feedback round (review notes) must stay as separate rows.
-    final taskKey = (apiRow['tasks'] ?? '').toString().trim().toUpperCase();
-    final notesKey = (apiRow['reviewNotes'] ?? '').toString().trim();
-    final dedupKey = '$code|$taskKey|$notesKey';
-    if (seenShotCodes.contains(dedupKey)) continue;
-    seenShotCodes.add(dedupKey);
+    if (code.isEmpty) {
+      missingShot++;
+      continue;
+    }
+    // Every physical line is kept. The same shot + department + review notes
+    // may legitimately repeat (one line per element/submission, each with its
+    // own Frames / ETA / man-days / Status), so lines are never merged here.
+    // `sourceRowRef` is what the server uses to tell them apart and to make a
+    // re-import of the same file update rows instead of duplicating them.
+    apiRow['sourceRowRef'] = '$sheetName!${i + 1}';
     out.add(apiRow);
   }
-  return out;
+  return _GridParseResult(
+    rows: out,
+    physicalLines: physical,
+    blankLines: blank,
+    repeatedHeaderLines: repeatedHeader,
+    missingShotIdLines: missingShot,
+  );
 }
 
 /// Parses CSV bytes into grid API rows, yielding to the event loop every
-/// [_importYieldEvery] rows.
-Future<List<Map<String, dynamic>>> _parseGridCsvRowsAsync(
+/// [_importYieldEvery] rows. Keeps every physical line.
+Future<_GridParseResult> _parseGridCsvRowsAsync(
   Uint8List bytes,
   List<String> gridStatuses, {
   void Function(int parsedRows)? onProgress,
 }) async {
   final csv = utf8.decode(bytes, allowMalformed: true);
   final lines = const LineSplitter().convert(csv);
-  if (lines.length < 2) return const [];
+  if (lines.length < 2) return const _GridParseResult(rows: []);
   final headerIndex = _findHeaderRowIndexLinesT(lines);
   final headers = _splitCsvLineT(lines[headerIndex])
       .map(_normalizeHeaderT)
       .toList(growable: false);
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
-  final seenShotCodes = <String>{};
   var processed = 0;
+  var physical = 0;
+  var blank = 0;
+  var repeatedHeader = 0;
+  var missingShot = 0;
   for (var i = headerIndex + 1; i < lines.length; i++) {
     if (++processed % _importYieldEvery == 0) {
       await _importYield();
       onProgress?.call(out.length);
     }
+    physical++;
     final line = lines[i].trim();
-    if (line.isEmpty) continue;
+    if (line.isEmpty) {
+      blank++;
+      continue;
+    }
     final values = _splitCsvLineT(lines[i]);
-    if (_isHeaderLikeRowT(values, headerLabels)) continue;
+    if (_isHeaderLikeRowT(values, headerLabels)) {
+      repeatedHeader++;
+      continue;
+    }
     final raw = <String, dynamic>{};
     for (var c = 0; c < headers.length; c++) {
       final key = headers[c];
@@ -3938,22 +4171,30 @@ Future<List<Map<String, dynamic>>> _parseGridCsvRowsAsync(
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
     final code = (apiRow['shotCode'] ?? '').toString().trim();
-    if (code.isEmpty) continue;
-    // The same shot with different tasks (e.g. Roto vs Comp) or a different
-    // feedback round (review notes) must stay as separate rows.
-    final taskKey = (apiRow['tasks'] ?? '').toString().trim().toUpperCase();
-    final notesKey = (apiRow['reviewNotes'] ?? '').toString().trim();
-    final dedupKey = '$code|$taskKey|$notesKey';
-    if (seenShotCodes.contains(dedupKey)) continue;
-    seenShotCodes.add(dedupKey);
+    if (code.isEmpty) {
+      missingShot++;
+      continue;
+    }
+    // Every physical line is kept. The same shot + department + review notes
+    // may legitimately repeat (one line per element/submission, each with its
+    // own Frames / ETA / man-days / Status), so lines are never merged here.
+    // `sourceRowRef` is what the server uses to tell them apart and to make a
+    // re-import of the same file update rows instead of duplicating them.
+    apiRow['sourceRowRef'] = 'csv:${i + 1}';
     out.add(apiRow);
   }
-  return out;
+  return _GridParseResult(
+    rows: out,
+    physicalLines: physical,
+    blankLines: blank,
+    repeatedHeaderLines: repeatedHeader,
+    missingShotIdLines: missingShot,
+  );
 }
 
 /// Parses an imported file's bytes (Excel or CSV) into grid API rows,
 /// yielding to the event loop while doing so.
-Future<List<Map<String, dynamic>>> _parseGridFileRowsAsync(
+Future<_GridParseResult> _parseGridFileRowsAsync(
   Uint8List bytes,
   String extension,
   List<String> gridStatuses, {
@@ -4049,6 +4290,25 @@ Future<Map<String, dynamic>> _saveParsedRowsAsync(
   final preview = <Map<String, dynamic>>[];
   for (final row in rows) {
     preview.add(_gridPreviewRowT(row));
+  }
+
+  // Name any Tasks value the importer could not place in a department: such a
+  // row is saved unchanged and the value becomes its own Department filter
+  // option, so the row stays reachable.
+  final unmappedTasks = <String>{};
+  for (final row in rows) {
+    unmappedTasks.addAll(
+      unmappedGridTaskParts((row['tasks'] ?? '').toString()),
+    );
+  }
+  if (unmappedTasks.isNotEmpty) {
+    final sorted = unmappedTasks.toList()..sort();
+    notes.insert(
+      0,
+      'Tasks value(s) kept as-is (no matching department): '
+      '${sorted.join(', ')} — each one is now selectable in the Department '
+      'and Tasks filters.',
+    );
   }
 
   return <String, dynamic>{

@@ -2,6 +2,28 @@ import 'package:flutter/foundation.dart';
 
 import '../constants/api_constants.dart';
 import '../services/api_controller.dart';
+import '../utils/excel_date_utils.dart';
+
+/// Date columns of the production grid, in the template's order. Rows stored
+/// before the day/month rule was fixed hold a month-YEAR (the 1st of the month
+/// in a meaningless year); [_repairStoredGridDates] re-reads the day from it.
+const List<String> _gridDateFields = <String>[
+  'shotsReceivedDate',
+  'wipEta',
+  'eta',
+  'deliveredOn',
+  'flEta',
+];
+
+/// Re-reads the real day of every stored date (`Aug-25` = 25 Aug, saved as
+/// 1 Aug 2025) so old rows render exactly like a fresh import would.
+List<Map<String, dynamic>> _repairStoredGridDates(dynamic rows) {
+  if (rows is! List) return <Map<String, dynamic>>[];
+  return rows.whereType<Map>().map((row) {
+    final map = Map<String, dynamic>.from(row);
+    return repairStoredRowDates(map, _gridDateFields);
+  }).toList();
+}
 
 class ProductionService {
   final ApiController _api = ApiController.instance;
@@ -211,12 +233,16 @@ class ProductionService {
   }
 
   /// Fetch the full production management grid (20 Excel-template columns).
+  ///
+  /// Stored dates are repaired on the way out (see [_repairStoredGridDates])
+  /// because rows written before the day/month rule was fixed carry the day in
+  /// the year's last two digits and would otherwise display as month-years.
   Future<Map<String, dynamic>> getProductionGrid() async {
     try {
       final response = await _api.get(ApiConstants.productionGrid);
 
       if (response['success'] == true) {
-        return response;
+        return {...response, 'rows': _repairStoredGridDates(response['rows'])};
       } else {
         return {
           'success': false,
