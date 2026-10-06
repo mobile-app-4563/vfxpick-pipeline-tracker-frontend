@@ -4,8 +4,8 @@ class AppConstants {
   // ──── Grid pagination ─────────────────────────────────────────────────────
   /// Rows rendered per page by every [DynamicDataTable] grid.
   ///
-  /// 500 is the largest page the grids use, so a normal dataset fits on a
-  /// single page and the pagination bar only appears for larger results.
+  /// Keep the initial build small; the next page is materialized only when
+  /// the user moves down through the grid.
   static const int gridRowsPerPage = 500;
 
   // ──── Departments (fixed) ──────────────────────────────────────────────────

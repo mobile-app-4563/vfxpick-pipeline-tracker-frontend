@@ -318,7 +318,9 @@ class _ProductionManagementScreenState
     setState(() {
       _isLoading = false;
       if (response['success'] == true) {
-        _rows = List<Map<String, dynamic>>.from(response['rows'] ?? []);
+        _rows = _mergeDuplicateGridRowsT(
+          List<Map<String, dynamic>>.from(response['rows'] ?? []),
+        );
         // Rows changed → filtered cache must be rebuilt.
         _cachedFilteredRows = null;
         _filterSignature = '';
@@ -723,13 +725,15 @@ class _ProductionManagementScreenState
         final msg = errors.isNotEmpty
             ? 'Sync failed: ${errors.length} row(s) had errors.'
             : (response['error'] ?? 'Sync failed');
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isSyncing = false);
@@ -932,12 +936,14 @@ class _ProductionManagementScreenState
         mimeType: MimeType.microsoftExcel,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
@@ -1055,8 +1061,9 @@ class _ProductionManagementScreenState
           : 'Saved ${total - errors.length} of $total rows '
                 '(created: $created, updated: $updated, '
                 'errors: ${errors.length})$skippedSuffix';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
 
       // Refresh the grid so imported rows appear.
       await _loadGrid();
@@ -1065,8 +1072,9 @@ class _ProductionManagementScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
     }
   }
 
@@ -1089,8 +1097,9 @@ class _ProductionManagementScreenState
                     vertical: SizeConfig.scaleHeight(context, 4),
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary
-                        .withValues(alpha: 0.08),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(
                       SizeConfig.scaleWidth(context, 6),
                     ),
@@ -1206,8 +1215,9 @@ class _ProductionManagementScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('CSV parse failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV parse failed: $e')));
     }
   }
 
@@ -1281,8 +1291,9 @@ class _ProductionManagementScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSavingImport = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
   }
 
@@ -1392,6 +1403,11 @@ class _ProductionManagementScreenState
             rowsPerPage: _rowsPerPage,
             showCellBorders: true,
             useDataTable2: true,
+            headerTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+            cellTextStyle: const TextStyle(color: Colors.white),
             // Sit flush against the container's green border (no gap).
             padding: EdgeInsets.zero,
           ),
@@ -1534,8 +1550,9 @@ class _ProductionManagementScreenState
     if (created == true && mounted) {
       await _loadGrid();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Grid row created.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Grid row created.')));
     }
   }
 
@@ -1585,8 +1602,9 @@ class _ProductionManagementScreenState
         _pendingEdits.remove(gridId);
         await _loadGrid();
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Row "$label" deleted.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Row "$label" deleted.')));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Delete failed: ${response['error']}')),
@@ -1594,8 +1612,9 @@ class _ProductionManagementScreenState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -1643,8 +1662,9 @@ class _ProductionManagementScreenState
         await _loadGrid();
         if (!mounted) return;
         final deleted = response['deleted'] as int? ?? count;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$deleted row(s) deleted.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$deleted row(s) deleted.')));
         setState(() => _selectedGridIds.clear());
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1653,8 +1673,9 @@ class _ProductionManagementScreenState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Bulk delete failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Bulk delete failed: $e')));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -2123,6 +2144,12 @@ class _ProductionManagementScreenState
       );
     }
 
+    final pageStart = _page * _rowsPerPage;
+    final visibleRows = filteredRows
+        .skip(pageStart)
+        .take(_rowsPerPage)
+        .toList(growable: false);
+
     return GlassContainer(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2144,8 +2171,13 @@ class _ProductionManagementScreenState
               columnSpacing: SizeConfig.scaleWidth(context, 12),
               dataRowMinHeight: MediaQuery.of(context).size.height * 28 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 32 / 768,
-              fields: _buildFields(context, _rows),
+              fields: _buildFields(context, visibleRows),
               rows: filteredRows,
+              headerTextStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              cellTextStyle: const TextStyle(color: Colors.white),
               onFilterChanged: _applyColumnFilter,
               // Shared grid page size (see [AppConstants.gridRowsPerPage]).
               rowsPerPage: _rowsPerPage,
@@ -3625,8 +3657,9 @@ int _importHeaderSignalScore(String normalized) {
   for (final word in _importHeaderSignalWords) {
     if (normalized == word) {
       score += 3;
-    } else if (RegExp('(^|_)${RegExp.escape(word)}(_|\$)')
-        .hasMatch(normalized)) {
+    } else if (RegExp(
+      '(^|_)${RegExp.escape(word)}(_|\$)',
+    ).hasMatch(normalized)) {
       score += 2;
     } else if (normalized.contains(word)) {
       score += 1;
@@ -3927,10 +3960,49 @@ Future<void> _importYield() => Future<void>.delayed(Duration.zero);
 
 /// Outcome of parsing an imported file or paste.
 ///
-/// Lines are now only ever skipped for reasons the user can SEE — the counts
-/// below are shown in the import summary. Previously repeated shot/task/notes
-/// lines were dropped silently, which is how 1,637 real rows disappeared from
-/// a 11,016-line import.
+/// Combines records that represent the same shot and coordinator. Department
+/// and review-note values are unioned so one grouped row still retains all
+/// work represented by the source rows.
+List<Map<String, dynamic>> _mergeDuplicateGridRowsT(
+  List<Map<String, dynamic>> rows,
+) {
+  final grouped = <String, Map<String, dynamic>>{};
+  for (final row in rows) {
+    final shot = (row['shotCode'] ?? row['shot_id'] ?? '').toString().trim();
+    final coordinator = (row['coordinator'] ?? '').toString().trim();
+    final key = '${shot.toLowerCase()}|${coordinator.toLowerCase()}';
+    final existing = grouped[key];
+    if (existing == null) {
+      grouped[key] = Map<String, dynamic>.from(row);
+      continue;
+    }
+
+    for (final field in const ['tasks', 'reviewNotes']) {
+      final values = <String>{
+        ..._splitGridValuesT(existing[field]),
+        ..._splitGridValuesT(row[field]),
+      };
+      existing[field] = values.join(', ');
+    }
+    for (final entry in row.entries) {
+      final current = existing[entry.key]?.toString().trim() ?? '';
+      final incoming = entry.value?.toString().trim() ?? '';
+      if (current.isEmpty && incoming.isNotEmpty) {
+        existing[entry.key] = entry.value;
+      }
+    }
+  }
+  return grouped.values.toList(growable: false);
+}
+
+Set<String> _splitGridValuesT(dynamic value) {
+  return (value?.toString() ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toSet();
+}
+
 class _GridParseResult {
   const _GridParseResult({
     required this.rows,
@@ -3940,7 +4012,7 @@ class _GridParseResult {
     this.missingShotIdLines = 0,
   });
 
-  /// Rows ready to send to the server (every physical data line is kept).
+  /// Rows ready to send to the server after duplicate grouping.
   final List<Map<String, dynamic>> rows;
 
   /// Data lines examined (header row excluded).
@@ -3985,9 +4057,9 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
   final headerIndex = _findHeaderLineOrNoneT(lines);
   final hasHeader = headerIndex >= 0;
   final headers = hasHeader
-      ? _splitCsvLineT(lines[headerIndex])
-            .map(_normalizeHeaderT)
-            .toList(growable: false)
+      ? _splitCsvLineT(
+          lines[headerIndex],
+        ).map(_normalizeHeaderT).toList(growable: false)
       : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
@@ -4039,7 +4111,7 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
     out.add(apiRow);
   }
   return _GridParseResult(
-    rows: out,
+    rows: _mergeDuplicateGridRowsT(out),
     physicalLines: physical,
     blankLines: blank,
     repeatedHeaderLines: repeatedHeader,
@@ -4116,7 +4188,7 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
     out.add(apiRow);
   }
   return _GridParseResult(
-    rows: out,
+    rows: _mergeDuplicateGridRowsT(out),
     physicalLines: physical,
     blankLines: blank,
     repeatedHeaderLines: repeatedHeader,
@@ -4135,9 +4207,9 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
   final lines = const LineSplitter().convert(csv);
   if (lines.length < 2) return const _GridParseResult(rows: []);
   final headerIndex = _findHeaderRowIndexLinesT(lines);
-  final headers = _splitCsvLineT(lines[headerIndex])
-      .map(_normalizeHeaderT)
-      .toList(growable: false);
+  final headers = _splitCsvLineT(
+    lines[headerIndex],
+  ).map(_normalizeHeaderT).toList(growable: false);
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
   var processed = 0;
@@ -4184,7 +4256,7 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
     out.add(apiRow);
   }
   return _GridParseResult(
-    rows: out,
+    rows: _mergeDuplicateGridRowsT(out),
     physicalLines: physical,
     blankLines: blank,
     repeatedHeaderLines: repeatedHeader,
