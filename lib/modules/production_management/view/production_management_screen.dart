@@ -726,13 +726,15 @@ class _ProductionManagementScreenState
         final msg = errors.isNotEmpty
             ? 'Sync failed: ${errors.length} row(s) had errors.'
             : (response['error'] ?? 'Sync failed');
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(msg)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(msg)));
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isSyncing = false);
@@ -935,12 +937,14 @@ class _ProductionManagementScreenState
         mimeType: MimeType.microsoftExcel,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
@@ -1058,8 +1062,9 @@ class _ProductionManagementScreenState
           : 'Saved ${total - errors.length} of $total rows '
                 '(created: $created, updated: $updated, '
                 'errors: ${errors.length})$skippedSuffix';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
 
       // Refresh the grid so imported rows appear.
       await _loadGrid();
@@ -1068,8 +1073,9 @@ class _ProductionManagementScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Import failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Import failed: $e')));
     }
   }
 
@@ -1092,8 +1098,9 @@ class _ProductionManagementScreenState
                     vertical: SizeConfig.scaleHeight(context, 4),
                   ),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary
-                        .withValues(alpha: 0.08),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(
                       SizeConfig.scaleWidth(context, 6),
                     ),
@@ -1210,8 +1217,9 @@ class _ProductionManagementScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isImporting = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('CSV parse failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV parse failed: $e')));
     }
   }
 
@@ -1269,8 +1277,9 @@ class _ProductionManagementScreenState
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSavingImport = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
   }
 
@@ -1531,8 +1540,9 @@ class _ProductionManagementScreenState
     if (created == true && mounted) {
       await _loadGrid();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Grid row created.')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Grid row created.')));
     }
   }
 
@@ -1593,8 +1603,9 @@ class _ProductionManagementScreenState
         _pendingEdits.remove(gridId);
         await _loadGrid();
         if (!mounted) return;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Row "$label" deleted.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Row "$label" deleted.')));
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Delete failed: ${response['error']}')),
@@ -1602,8 +1613,9 @@ class _ProductionManagementScreenState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -1663,8 +1675,9 @@ class _ProductionManagementScreenState
         await _loadGrid();
         if (!mounted) return;
         final deleted = response['deleted'] as int? ?? count;
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$deleted row(s) deleted.')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('$deleted row(s) deleted.')));
         setState(() => _selectedGridIds.clear());
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1673,8 +1686,9 @@ class _ProductionManagementScreenState
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Bulk delete failed: $e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Bulk delete failed: $e')));
     } finally {
       if (mounted) setState(() => _isDeleting = false);
     }
@@ -3653,8 +3667,9 @@ int _importHeaderSignalScore(String normalized) {
   for (final word in _importHeaderSignalWords) {
     if (normalized == word) {
       score += 3;
-    } else if (RegExp('(^|_)${RegExp.escape(word)}(_|\$)')
-        .hasMatch(normalized)) {
+    } else if (RegExp(
+      '(^|_)${RegExp.escape(word)}(_|\$)',
+    ).hasMatch(normalized)) {
       score += 2;
     } else if (normalized.contains(word)) {
       score += 1;
@@ -4056,9 +4071,9 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
   final headerIndex = _findHeaderLineOrNoneT(lines);
   final hasHeader = headerIndex >= 0;
   final headers = hasHeader
-      ? _splitCsvLineT(lines[headerIndex])
-            .map(_normalizeHeaderT)
-            .toList(growable: false)
+      ? _splitCsvLineT(
+          lines[headerIndex],
+        ).map(_normalizeHeaderT).toList(growable: false)
       : const <String>[];
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
@@ -4206,9 +4221,9 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
   final lines = const LineSplitter().convert(csv);
   if (lines.length < 2) return const _GridParseResult(rows: []);
   final headerIndex = _findHeaderRowIndexLinesT(lines);
-  final headers = _splitCsvLineT(lines[headerIndex])
-      .map(_normalizeHeaderT)
-      .toList(growable: false);
+  final headers = _splitCsvLineT(
+    lines[headerIndex],
+  ).map(_normalizeHeaderT).toList(growable: false);
   final headerLabels = headers.where((h) => h.isNotEmpty).toSet();
   final out = <Map<String, dynamic>>[];
   var processed = 0;
