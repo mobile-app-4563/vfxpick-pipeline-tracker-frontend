@@ -318,6 +318,9 @@ class _ProductionManagementScreenState
     setState(() {
       _isLoading = false;
       if (response['success'] == true) {
+        // Keep each persisted grid_id visible. Two physical rows can share
+        // the same display fields, and collapsing them makes a delete appear
+        // to do nothing when the surviving row is fetched again.
         _rows = List<Map<String, dynamic>>.from(response['rows'] ?? []);
         // Rows changed → filtered cache must be rebuilt.
         _cachedFilteredRows = null;
@@ -983,24 +986,24 @@ class _ProductionManagementScreenState
         message: 'Parsing & importing…',
         status: status,
         task: () async {
-          final parseResult = await _parseGridFileRowsAsync(
-            bytes,
-            (file.extension ?? 'xlsx').toLowerCase(),
-            _gridStatusOptions,
-            onProgress: (n) => status.value = 'Parsing… $n rows',
+          final parseResult = _gridParseResultFromMap(
+            await compute(_parseGridFileInIsolate, <String, dynamic>{
+              'bytes': bytes,
+              'extension': (file.extension ?? 'xlsx').toLowerCase(),
+              'statuses': _gridStatusOptions,
+            }),
           );
           final rows = parseResult.rows;
           if (rows.isNotEmpty) {
             status.value = 'Uploading ${rows.length} rows…';
           }
-          final summary = await _saveParsedRowsAsync(
-            rows,
-            ApiConstants.baseUrl,
-            ApiConstants.productionGridBulkUpsert,
-            ApiController.instance.getToken(),
-            onChunk: (done, total) =>
-                status.value = 'Uploading… chunk $done of $total',
-          );
+          status.value = 'Uploading ${rows.length} rows in background…';
+          final summary = await compute(_saveParsedRowsInIsolate, {
+            'rows': rows,
+            'baseUrl': ApiConstants.baseUrl,
+            'endpoint': ApiConstants.productionGridBulkUpsert,
+            'token': ApiController.instance.getToken(),
+          });
           // Carry the parse accounting through to the summary below so skipped
           // lines are always reported instead of silently disappearing.
           summary['parse'] = parseResult;
@@ -1163,14 +1166,15 @@ class _ProductionManagementScreenState
     setState(() => _isImporting = true);
     try {
       final status = ValueNotifier<String>('Parsing data…');
-      final parseResult = await _withParsingLoader(
-        context: context,
-        message: 'Parsing data…',
-        status: status,
-        task: () => _parseGridCsvTextRowsAsync(
-          _csvPasteController.text,
-          _gridStatusOptions,
-          onProgress: (n) => status.value = 'Parsing… $n rows',
+      final parseResult = _gridParseResultFromMap(
+        await _withParsingLoader(
+          context: context,
+          message: 'Parsing data…',
+          status: status,
+          task: () => compute(_parseGridCsvTextInIsolate, {
+            'csvText': _csvPasteController.text,
+            'statuses': _gridStatusOptions,
+          }),
         ),
       );
       status.dispose();
@@ -1215,44 +1219,28 @@ class _ProductionManagementScreenState
   Future<void> _saveImportedRows() async {
     if (_isSavingImport || _importDraftRows.isEmpty) return;
     setState(() => _isSavingImport = true);
-    var created = 0;
-    var updated = 0;
-    final errors = <String>[];
-    final notes = <String>[];
-    const chunkSize = 100;
-
     try {
-      for (var i = 0; i < _importDraftRows.length; i += chunkSize) {
-        final chunk = _importDraftRows.sublist(
-          i,
-          (i + chunkSize).clamp(0, _importDraftRows.length),
-        );
-        final response = await _productionService.bulkUpsertProductionGrid(
-          chunk,
-        );
-        if (response['success'] == true) {
-          created += response['created'] as int? ?? 0;
-          updated += response['updated'] as int? ?? 0;
-          final chunkErrors = (response['errors'] as List?) ?? const [];
-          for (final e in chunkErrors) {
-            final err = e is Map
-                ? e['error']?.toString() ?? e.toString()
-                : e.toString();
-            if (err.isNotEmpty) errors.add(err);
-          }
-          // Informational notes (e.g. auto-created clients/shows).
-          final chunkNotes = (response['notes'] as List?) ?? const [];
-          for (final n in chunkNotes) {
-            final note = n.toString();
-            if (note.isNotEmpty) notes.add(note);
-          }
-        } else {
-          errors.add(
-            response['error']?.toString() ??
-                'Chunk ${i ~/ chunkSize + 1} failed',
-          );
-        }
-      }
+      final status = ValueNotifier<String>('Uploading imported rows…');
+      final summary = await _withParsingLoader(
+        context: context,
+        message: 'Saving imported data…',
+        status: status,
+        task: () => compute(_saveParsedRowsInIsolate, {
+          'rows': List<Map<String, dynamic>>.from(_importDraftRows),
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.productionGridBulkUpsert,
+          'token': ApiController.instance.getToken(),
+        }),
+      );
+      status.dispose();
+      final created = summary['created'] as int? ?? 0;
+      final updated = summary['updated'] as int? ?? 0;
+      final errors =
+          (summary['errors'] as List?)?.map((e) => e.toString()).toList() ??
+          <String>[];
+      final notes =
+          (summary['notes'] as List?)?.map((n) => n.toString()).toList() ??
+          <String>[];
 
       if (!mounted) return;
       setState(() {
@@ -1384,14 +1372,19 @@ class _ProductionManagementScreenState
             onPageChanged: (p) => setState(() => _previewPage = p),
             minColumnWidth: SizeConfig.scaleWidth(context, 40),
             columnSpacing: SizeConfig.scaleWidth(context, 12),
-            dataRowMinHeight: MediaQuery.of(context).size.height * 48 / 768,
-            dataRowMaxHeight: MediaQuery.of(context).size.height * 62 / 768,
+            dataRowMinHeight: MediaQuery.of(context).size.height * 28 / 768,
+            dataRowMaxHeight: MediaQuery.of(context).size.height * 32 / 768,
             fields: _buildImportPreviewFields(context, previewRows),
             rows: previewRows,
             // Shared grid page size (see [AppConstants.gridRowsPerPage]).
             rowsPerPage: _rowsPerPage,
-            showCellBorders: true,
+            showCellBorders: _showCellBorders,
             useDataTable2: true,
+            headerTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+            cellTextStyle: const TextStyle(color: Colors.white),
             // Sit flush against the container's green border (no gap).
             padding: EdgeInsets.zero,
           ),
@@ -1483,9 +1476,13 @@ class _ProductionManagementScreenState
           child: Text(
             text,
             textAlign: TextAlign.center,
-            softWrap: false,
-            overflow: TextOverflow.visible,
-            style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
+            softWrap: true,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: SizeConfig.fontSize(context, 12),
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
           ),
         );
       },
@@ -1577,7 +1574,18 @@ class _ProductionManagementScreenState
 
     setState(() => _isDeleting = true);
     try {
-      final response = await _productionService.deleteProductionGridRow(gridId);
+      final status = ValueNotifier<String>('Deleting row in background…');
+      final response = await _withParsingLoader(
+        context: context,
+        message: 'Deleting row…',
+        status: status,
+        task: () => compute(_deleteGridRowInIsolate, {
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.productionGridRow(gridId),
+          'token': ApiController.instance.getToken(),
+        }),
+      );
+      status.dispose();
       if (!mounted) return;
       if (response['success'] == true) {
         // Drop pending edits for the removed row so a later Sync never
@@ -1631,9 +1639,21 @@ class _ProductionManagementScreenState
     setState(() => _isDeleting = true);
     try {
       final gridIds = _selectedGridIds.toList();
-      final response = await _productionService.bulkDeleteProductionGrid(
-        gridIds,
+      final status = ValueNotifier<String>(
+        'Deleting $count rows in background…',
       );
+      final response = await _withParsingLoader(
+        context: context,
+        message: 'Deleting rows…',
+        status: status,
+        task: () => compute(_bulkDeleteGridRowsInIsolate, {
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.productionGridBulkDelete,
+          'token': ApiController.instance.getToken(),
+          'gridIds': gridIds,
+        }),
+      );
+      status.dispose();
       if (!mounted) return;
       if (response['success'] == true) {
         // Drop pending edits for every removed row (see [_confirmDeleteRow]).
@@ -2123,6 +2143,12 @@ class _ProductionManagementScreenState
       );
     }
 
+    final pageStart = _page * _rowsPerPage;
+    final visibleRows = filteredRows
+        .skip(pageStart)
+        .take(_rowsPerPage)
+        .toList(growable: false);
+
     return GlassContainer(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2144,8 +2170,13 @@ class _ProductionManagementScreenState
               columnSpacing: SizeConfig.scaleWidth(context, 12),
               dataRowMinHeight: MediaQuery.of(context).size.height * 28 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 32 / 768,
-              fields: _buildFields(context, _rows),
+              fields: _buildFields(context, visibleRows),
               rows: filteredRows,
+              headerTextStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              cellTextStyle: const TextStyle(color: Colors.white),
               onFilterChanged: _applyColumnFilter,
               // Shared grid page size (see [AppConstants.gridRowsPerPage]).
               rowsPerPage: _rowsPerPage,
@@ -2213,7 +2244,7 @@ class _ProductionManagementScreenState
 
   /// Flips the grid page with a one-frame "Parsing…" overlay so the table
   /// rebuild is visible feedback instead of a silent freeze (Projects flow).
-  void _changeGridPage(int page) {
+  Future<void> _changeGridPage(int page) async {
     if (_isGridChanging || page == _page) return;
     final phase = SchedulerBinding.instance.schedulerPhase;
     if (phase == SchedulerPhase.persistentCallbacks) {
@@ -2225,14 +2256,11 @@ class _ProductionManagementScreenState
       return;
     }
     setState(() => _isGridChanging = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _page = page);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _isGridChanging = false);
-      });
-    });
+    setState(() => _page = page);
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    setState(() => _isGridChanging = false);
   }
 
   /// Overlays a spinner over the grid/screen while work is in progress.
@@ -3560,13 +3588,13 @@ class _NewGridRowDialogState extends State<_NewGridRowDialog> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Import parsing helpers (main-thread friendly).
+// Import parsing helpers (isolate-safe and UI-independent).
 //
 // These mirror the Projects screen's top-level helpers but map raw rows onto
 // the 20 production-grid template columns (client, show, shot ID, frames,
 // tasks/department, status, etc.). They are top-level and chunk their work
-// with event-loop yields so the loader spinner stays responsive while
-// parsing on the UI thread (web-safe — no `compute()`/isolate needed).
+// with event-loop yields so the worker remains cooperative while processing
+// large files. The public entry points below run these helpers in isolates.
 // ─────────────────────────────────────────────────────────────────────────────
 
 String _normalizeHeaderT(String input) {
@@ -3927,10 +3955,53 @@ Future<void> _importYield() => Future<void>.delayed(Duration.zero);
 
 /// Outcome of parsing an imported file or paste.
 ///
-/// Lines are now only ever skipped for reasons the user can SEE — the counts
-/// below are shown in the import summary. Previously repeated shot/task/notes
-/// lines were dropped silently, which is how 1,637 real rows disappeared from
-/// a 11,016-line import.
+/// Combines records that represent the same shot, coordinator, task and
+/// remark. Rows with different Tasks or Review Notes remain separate records;
+/// exact duplicates are collapsed while retaining any other non-empty values.
+List<Map<String, dynamic>> _mergeDuplicateGridRowsT(
+  List<Map<String, dynamic>> rows,
+) {
+  final grouped = <String, Map<String, dynamic>>{};
+  for (final row in rows) {
+    final shot = (row['shotCode'] ?? row['shot_id'] ?? '').toString().trim();
+    final coordinator = (row['coordinator'] ?? '').toString().trim();
+    final tasks = (row['tasks'] ?? '').toString().trim();
+    final reviewNotes = (row['reviewNotes'] ?? '').toString().trim();
+    final key = [shot, coordinator, tasks, reviewNotes]
+        .map((value) => value.toLowerCase().replaceAll(RegExp(r'\s+'), ' '))
+        .join('|');
+    final existing = grouped[key];
+    if (existing == null) {
+      grouped[key] = Map<String, dynamic>.from(row);
+      continue;
+    }
+
+    for (final field in const ['tasks', 'reviewNotes']) {
+      final values = <String>{
+        ..._splitGridValuesT(existing[field]),
+        ..._splitGridValuesT(row[field]),
+      };
+      existing[field] = values.join(', ');
+    }
+    for (final entry in row.entries) {
+      final current = existing[entry.key]?.toString().trim() ?? '';
+      final incoming = entry.value?.toString().trim() ?? '';
+      if (current.isEmpty && incoming.isNotEmpty) {
+        existing[entry.key] = entry.value;
+      }
+    }
+  }
+  return grouped.values.toList(growable: false);
+}
+
+Set<String> _splitGridValuesT(dynamic value) {
+  return (value?.toString() ?? '')
+      .split(',')
+      .map((part) => part.trim())
+      .where((part) => part.isNotEmpty)
+      .toSet();
+}
+
 class _GridParseResult {
   const _GridParseResult({
     required this.rows,
@@ -3940,7 +4011,7 @@ class _GridParseResult {
     this.missingShotIdLines = 0,
   });
 
-  /// Rows ready to send to the server (every physical data line is kept).
+  /// Rows ready to send to the server after duplicate grouping.
   final List<Map<String, dynamic>> rows;
 
   /// Data lines examined (header row excluded).
@@ -4039,7 +4110,7 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
     out.add(apiRow);
   }
   return _GridParseResult(
-    rows: out,
+    rows: _mergeDuplicateGridRowsT(out),
     physicalLines: physical,
     blankLines: blank,
     repeatedHeaderLines: repeatedHeader,
@@ -4116,7 +4187,7 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
     out.add(apiRow);
   }
   return _GridParseResult(
-    rows: out,
+    rows: _mergeDuplicateGridRowsT(out),
     physicalLines: physical,
     blankLines: blank,
     repeatedHeaderLines: repeatedHeader,
@@ -4184,7 +4255,7 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
     out.add(apiRow);
   }
   return _GridParseResult(
-    rows: out,
+    rows: _mergeDuplicateGridRowsT(out),
     physicalLines: physical,
     blankLines: blank,
     repeatedHeaderLines: repeatedHeader,
@@ -4318,5 +4389,119 @@ Future<Map<String, dynamic>> _saveParsedRowsAsync(
     'errors': errors,
     'notes': notes,
     'preview': preview,
+  };
+}
+
+/// Isolate entry point for file parsing. Only sendable values cross the
+/// isolate boundary; the result is converted back to [_GridParseResult] on
+/// the UI isolate after the worker completes.
+Future<Map<String, dynamic>> _parseGridFileInIsolate(
+  Map<String, dynamic> args,
+) async {
+  final result = await _parseGridFileRowsAsync(
+    args['bytes'] as Uint8List,
+    args['extension'] as String,
+    List<String>.from(args['statuses'] as List),
+  );
+  return _gridParseResultToMap(result);
+}
+
+/// Isolate entry point for pasted CSV parsing.
+Future<Map<String, dynamic>> _parseGridCsvTextInIsolate(
+  Map<String, dynamic> args,
+) async {
+  final result = await _parseGridCsvTextRowsAsync(
+    args['csvText'] as String,
+    List<String>.from(args['statuses'] as List),
+  );
+  return _gridParseResultToMap(result);
+}
+
+Map<String, dynamic> _gridParseResultToMap(_GridParseResult result) => {
+  'rows': result.rows,
+  'physicalLines': result.physicalLines,
+  'blankLines': result.blankLines,
+  'repeatedHeaderLines': result.repeatedHeaderLines,
+  'missingShotIdLines': result.missingShotIdLines,
+};
+
+_GridParseResult _gridParseResultFromMap(Map<String, dynamic> value) {
+  return _GridParseResult(
+    rows: List<Map<String, dynamic>>.from(value['rows'] as List? ?? const []),
+    physicalLines: value['physicalLines'] as int? ?? 0,
+    blankLines: value['blankLines'] as int? ?? 0,
+    repeatedHeaderLines: value['repeatedHeaderLines'] as int? ?? 0,
+    missingShotIdLines: value['missingShotIdLines'] as int? ?? 0,
+  );
+}
+
+/// Isolate entry point for chunked upload and preview generation.
+Future<Map<String, dynamic>> _saveParsedRowsInIsolate(
+  Map<String, dynamic> args,
+) {
+  return _saveParsedRowsAsync(
+    List<Map<String, dynamic>>.from(args['rows'] as List),
+    args['baseUrl'] as String,
+    args['endpoint'] as String,
+    args['token'] as String?,
+  );
+}
+
+Future<Map<String, dynamic>> _deleteGridRowInIsolate(
+  Map<String, dynamic> args,
+) {
+  return _gridHttpRequestInIsolate(
+    baseUrl: args['baseUrl'] as String,
+    endpoint: args['endpoint'] as String,
+    token: args['token'] as String?,
+    method: 'DELETE',
+  );
+}
+
+Future<Map<String, dynamic>> _bulkDeleteGridRowsInIsolate(
+  Map<String, dynamic> args,
+) {
+  return _gridHttpRequestInIsolate(
+    baseUrl: args['baseUrl'] as String,
+    endpoint: args['endpoint'] as String,
+    token: args['token'] as String?,
+    method: 'POST',
+    body: <String, dynamic>{'gridIds': args['gridIds']},
+  );
+}
+
+Future<Map<String, dynamic>> _gridHttpRequestInIsolate({
+  required String baseUrl,
+  required String endpoint,
+  required String? token,
+  required String method,
+  Map<String, dynamic>? body,
+}) async {
+  final request = http.Request(method, Uri.parse('$baseUrl$endpoint'))
+    ..headers.addAll(<String, String>{
+      'Accept': 'application/json',
+      if (body != null) 'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    });
+  if (body != null) request.body = jsonEncode(body);
+
+  final client = http.Client();
+  late final http.Response response;
+  try {
+    response = await client.send(request).then(http.Response.fromStream);
+  } finally {
+    client.close();
+  }
+  final decoded = response.body.isEmpty
+      ? <String, dynamic>{}
+      : jsonDecode(response.body);
+  if (response.statusCode >= 200 && response.statusCode < 300) {
+    return decoded is Map<String, dynamic>
+        ? decoded
+        : <String, dynamic>{'success': true};
+  }
+  return <String, dynamic>{
+    'success': false,
+    'error': 'Request failed (${response.statusCode}): ${response.body}',
   };
 }

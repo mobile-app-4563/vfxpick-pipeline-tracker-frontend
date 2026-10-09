@@ -5,12 +5,13 @@
 class ApiConstants {
   // ───────────────────────────────────────────────────────────────────────────
   // BASE CONFIGURATION
-  // ───────────────────────────────────────────────────────────────────────────
+  // ─────────────────
+  // 0──────────────────────────────────────────────────────────
   static const String baseUrlPersonalLaptop =
       'https://7h86261d-3000.inc1.devtunnels.ms/api';
   static const String baseUrlServer = 'http://192.168.1.15:3000/api';
   static const String baseUrlLocalhost = 'http://localhost:3000/api';
-  static const String baseUrl = baseUrlServer;
+  static const String baseUrl = baseUrlPersonalLaptop;
   // ───────────────────────────────────────────────────────────────────────────
   // AUTH (/api/auth) — unchanged
   // ───────────────────────────────────────────────────────────────────────────

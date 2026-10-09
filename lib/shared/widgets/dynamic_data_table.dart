@@ -8,12 +8,13 @@ import 'dark_grid.dart';
 import 'filter_icon.dart';
 import 'sortable_header.dart';
 
-typedef DynamicFieldBuilder = Widget Function(
-  BuildContext context,
-  dynamic value,
-  Map<String, dynamic> row,
-  int rowIndex,
-);
+typedef DynamicFieldBuilder =
+    Widget Function(
+      BuildContext context,
+      dynamic value,
+      Map<String, dynamic> row,
+      int rowIndex,
+    );
 
 class DynamicTableField {
   final String key;
@@ -67,6 +68,8 @@ class DynamicDataTable extends StatefulWidget {
   final bool fitToWidth;
   final bool showCellBorders;
   final bool useDataTable2;
+  final TextStyle? headerTextStyle;
+  final TextStyle? cellTextStyle;
 
   /// Called when a data row is double-tapped (plain-text cells only — cells
   /// with a custom [builder] keep their own interaction, e.g. dropdowns).
@@ -96,6 +99,8 @@ class DynamicDataTable extends StatefulWidget {
     this.fitToWidth = false,
     this.showCellBorders = false,
     this.useDataTable2 = false,
+    this.headerTextStyle,
+    this.cellTextStyle,
     this.onRowDoubleTap,
   });
 
@@ -350,6 +355,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                       isSorted: _isFieldSorted(field),
                       sortAscending: _sortAscending,
                       onTap: () => _toggleSort(field),
+                      style: widget.headerTextStyle,
                       center: true,
                     )
                   : Text(
@@ -357,6 +363,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                       textAlign: TextAlign.center,
                       softWrap: false,
                       overflow: TextOverflow.visible,
+                      style: widget.headerTextStyle,
                     ),
             ),
           );
@@ -379,6 +386,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                   textAlign: TextAlign.center,
                   softWrap: false,
                   overflow: TextOverflow.visible,
+                  style: widget.cellTextStyle,
                 );
                 if (widget.onRowDoubleTap != null) {
                   child = GestureDetector(
@@ -439,6 +447,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
           dataRowHeight: rowHeight,
           columnSpacing: widget.columnSpacing,
           horizontalMargin: 8,
+          fixedColumnsColor: Colors.white,
           showCheckboxColumn: false,
           border: TableBorder.all(
             color: scheme.outlineVariant.withValues(alpha: 0.45),
@@ -459,6 +468,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                             isSorted: _isFieldSorted(field),
                             sortAscending: _sortAscending,
                             onTap: () => _toggleSort(field),
+                            style: widget.headerTextStyle,
                             center: true,
                             wrap: true,
                           )
@@ -466,6 +476,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                             field.label,
                             textAlign: TextAlign.center,
                             softWrap: true,
+                            style: widget.headerTextStyle,
                           ),
                   ),
                 );
@@ -491,6 +502,7 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
                         softWrap: true,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
+                        style: widget.cellTextStyle,
                       );
                       if (widget.onRowDoubleTap != null) {
                         child = GestureDetector(
@@ -526,15 +538,19 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
     List<Map<String, dynamic>> tableRows,
   ) {
     final scheme = Theme.of(context).colorScheme;
-    final headerStyle = TextStyle(
-      fontSize: SizeConfig.fontSize(context, 12),
-      fontWeight: FontWeight.w600,
-      color: scheme.onSurface,
-    );
-    final cellStyle = TextStyle(
-      fontSize: SizeConfig.fontSize(context, 12),
-      color: scheme.onSurface,
-    );
+    final headerStyle =
+        widget.headerTextStyle ??
+        TextStyle(
+          fontSize: SizeConfig.fontSize(context, 12),
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        );
+    final cellStyle =
+        widget.cellTextStyle ??
+        TextStyle(
+          fontSize: SizeConfig.fontSize(context, 12),
+          color: scheme.onSurface,
+        );
 
     // Floor the flex weights so no column collapses to an unreadable width:
     // every column gets at least 35% of the average weight, keeping wide
@@ -680,15 +696,19 @@ class _DynamicDataTableState extends State<DynamicDataTable> {
   }) {
     final scheme = Theme.of(context).colorScheme;
     final borderColor = scheme.outlineVariant.withValues(alpha: 0.45);
-    final headerStyle = TextStyle(
-      fontSize: SizeConfig.fontSize(context, 12),
-      fontWeight: FontWeight.w600,
-      color: scheme.onSurface,
-    );
-    final cellStyle = TextStyle(
-      fontSize: SizeConfig.fontSize(context, 12),
-      color: scheme.onSurface,
-    );
+    final headerStyle =
+        widget.headerTextStyle ??
+        TextStyle(
+          fontSize: SizeConfig.fontSize(context, 12),
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        );
+    final cellStyle =
+        widget.cellTextStyle ??
+        TextStyle(
+          fontSize: SizeConfig.fontSize(context, 12),
+          color: scheme.onSurface,
+        );
 
     // Fixed column widths: prefer the field's configured width, falling back
     // to minColumnWidth. Never let a column shrink below minColumnWidth.

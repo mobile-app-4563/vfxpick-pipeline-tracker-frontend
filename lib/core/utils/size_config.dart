@@ -118,8 +118,13 @@ class SizeConfig {
   ) => BorderRadius.circular(scaleWidth(context, radius));
 
   // ─── Icon sizing ───────────────────────────────────────────────────────────
-  static double iconSize(BuildContext context, double base) =>
-      scaleWidth(context, base);
+  /// Keeps icons at their declared size on smaller screens for reliable
+  /// recognition and touch-target alignment.
+  static double iconSize(BuildContext context, double base) {
+    final width = screenWidth(context);
+    if (width <= desktopBreakpoint) return base;
+    return (base * (width / 1366)).clamp(base, base * 1.08).toDouble();
+  }
 
   // ─── Clamped sizing (between min and max) ──────────────────────────────────
   static double clamped(
