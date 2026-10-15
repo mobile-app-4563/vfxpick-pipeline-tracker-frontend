@@ -12,7 +12,7 @@ class ApiConstants {
       'https://hhdzqff9-3000.inc1.devtunnels.ms/api';
   static const String baseUrlServer = 'http://192.168.1.15:3000/api';
   static const String baseUrlLocalhost = 'http://localhost:3000/api';
-  static const String baseUrl = baseUrlPersonalLaptop;
+  static const String baseUrl = baseUrlServer;
   // ───────────────────────────────────────────────────────────────────────────
   // AUTH (/api/auth) — unchanged
   // ───────────────────────────────────────────────────────────────────────────
