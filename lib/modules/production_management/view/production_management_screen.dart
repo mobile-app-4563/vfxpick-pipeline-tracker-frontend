@@ -238,17 +238,12 @@ class _ProductionManagementScreenState
 
   // ─── Import state (mirrors the Projects screen flow) ──────────────────────
   final TextEditingController _csvPasteController = TextEditingController();
-  final List<Map<String, dynamic>> _importDraftRows = [];
   final List<String> _importFeedback = [];
   bool _isImporting = false;
-  bool _isSavingImport = false;
   // In-tree parsing loader state (NO dialog/navigator — see
   // [_withParsingLoader]).
   bool _showParsingOverlay = false;
   ValueNotifier<String>? _parsingStatus;
-  int _previewPage = 0;
-  List<Map<String, dynamic>>? _cachedImportPreviewRows;
-  int _cachedImportPreviewLength = -1;
 
   @override
   void initState() {
@@ -276,7 +271,7 @@ class _ProductionManagementScreenState
         }
       };
       access.addListener(_deleteEnabledListener!);
-      // Import switch drives Paste CSV / Import File / Save Imported Data AND
+      // Import switch drives Paste CSV / Import File AND
       // the New Grid Row (create) FAB — mirror the delete listener so toggling
       // it live hides/shows the affordances.
       _importEnabledListener = () {
@@ -318,6 +313,9 @@ class _ProductionManagementScreenState
     setState(() {
       _isLoading = false;
       if (response['success'] == true) {
+        // Keep each persisted grid_id visible. Two physical rows can share
+        // the same display fields, and collapsing them makes a delete appear
+        // to do nothing when the surviving row is fetched again.
         _rows = List<Map<String, dynamic>>.from(response['rows'] ?? []);
         // Rows changed → filtered cache must be rebuilt.
         _cachedFilteredRows = null;
@@ -963,7 +961,7 @@ class _ProductionManagementScreenState
 
   // ─── Import: pick & parse an Excel/CSV file (auto-saves) ─────────────────
   Future<void> _pickAndParseExcel() async {
-    if (_isImporting || _isSavingImport) return;
+    if (_isImporting) return;
     try {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -983,24 +981,24 @@ class _ProductionManagementScreenState
         message: 'Parsing & importing…',
         status: status,
         task: () async {
-          final parseResult = await _parseGridFileRowsAsync(
-            bytes,
-            (file.extension ?? 'xlsx').toLowerCase(),
-            _gridStatusOptions,
-            onProgress: (n) => status.value = 'Parsing… $n rows',
+          final parseResult = _gridParseResultFromMap(
+            await compute(_parseGridFileInIsolate, <String, dynamic>{
+              'bytes': bytes,
+              'extension': (file.extension ?? 'xlsx').toLowerCase(),
+              'statuses': _gridStatusOptions,
+            }),
           );
           final rows = parseResult.rows;
           if (rows.isNotEmpty) {
             status.value = 'Uploading ${rows.length} rows…';
           }
-          final summary = await _saveParsedRowsAsync(
-            rows,
-            ApiConstants.baseUrl,
-            ApiConstants.productionGridBulkUpsert,
-            ApiController.instance.getToken(),
-            onChunk: (done, total) =>
-                status.value = 'Uploading… chunk $done of $total',
-          );
+          status.value = 'Uploading ${rows.length} rows in background…';
+          final summary = await compute(_saveParsedRowsInIsolate, {
+            'rows': rows,
+            'baseUrl': ApiConstants.baseUrl,
+            'endpoint': ApiConstants.productionGridBulkUpsert,
+            'token': ApiController.instance.getToken(),
+          });
           // Carry the parse accounting through to the summary below so skipped
           // lines are always reported instead of silently disappearing.
           summary['parse'] = parseResult;
@@ -1015,16 +1013,10 @@ class _ProductionManagementScreenState
       final updated = parsed['updated'] as int? ?? 0;
       final errors = (parsed['errors'] as List?) ?? const [];
       final notes = (parsed['notes'] as List?) ?? const [];
-      final preview = (parsed['preview'] as List?) ?? const [];
       final parseResult = parsed['parse'] as _GridParseResult?;
 
       setState(() {
         _isImporting = false;
-        _importDraftRows
-          ..clear()
-          ..addAll(preview.cast<Map<String, dynamic>>());
-        _previewPage = 0;
-        _resetImportPreviewCache();
         _importFeedback
           ..clear()
           ..addAll(notes.map((n) => n.toString()).where((n) => n.isNotEmpty));
@@ -1113,7 +1105,7 @@ class _ProductionManagementScreenState
 
   // ─── Import: paste CSV text for review ───────────────────────────────────
   Future<void> _openPasteCsvDialog() async {
-    if (_isImporting || _isSavingImport) return;
+    if (_isImporting) return;
     _csvPasteController.clear();
     final ok = await showDialog<bool>(
       context: context,
@@ -1162,27 +1154,37 @@ class _ProductionManagementScreenState
 
     setState(() => _isImporting = true);
     try {
+      final messenger = ScaffoldMessenger.of(context);
       final status = ValueNotifier<String>('Parsing data…');
-      final parseResult = await _withParsingLoader(
-        context: context,
-        message: 'Parsing data…',
-        status: status,
-        task: () => _parseGridCsvTextRowsAsync(
-          _csvPasteController.text,
-          _gridStatusOptions,
-          onProgress: (n) => status.value = 'Parsing… $n rows',
+      final parseResult = _gridParseResultFromMap(
+        await _withParsingLoader(
+          context: context,
+          message: 'Parsing data…',
+          status: status,
+          task: () => compute(_parseGridCsvTextInIsolate, {
+            'csvText': _csvPasteController.text,
+            'statuses': _gridStatusOptions,
+          }),
         ),
       );
-      status.dispose();
       if (!mounted) return;
       final rows = parseResult.rows;
+      Map<String, dynamic>? summary;
+      if (rows.isNotEmpty) {
+        status.value = 'Uploading ${rows.length} rows…';
+        summary = await compute(_saveParsedRowsInIsolate, {
+          'rows': rows,
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.productionGridBulkUpsert,
+          'token': ApiController.instance.getToken(),
+        });
+      }
+      status.dispose();
+      final errors = ((summary?['errors'] as List?) ?? const [])
+          .map((error) => error.toString())
+          .toList(growable: false);
       setState(() {
         _isImporting = false;
-        _importDraftRows
-          ..clear()
-          ..addAll(rows);
-        _previewPage = 0;
-        _resetImportPreviewCache();
         _importFeedback
           ..clear()
           ..add(
@@ -1191,14 +1193,19 @@ class _ProductionManagementScreenState
             'rows skipped: ${parseResult.skippedLines}'
             '${_skippedLineSuffix(parseResult)}',
           );
+        _importFeedback.addAll(errors);
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      if (rows.isNotEmpty) {
+        await _loadGrid();
+        if (!mounted) return;
+      }
+      messenger.showSnackBar(
         SnackBar(
           content: Text(
             rows.isEmpty
                 ? 'No rows could be parsed. Each line needs a Shot ID '
                       '(column 10) and a Tasks/Department value (column 12).'
-                : 'Imported ${rows.length} row(s) for review'
+                : 'Saved ${summary?['total'] ?? rows.length} row(s)'
                       '${_skippedLineSuffix(parseResult)}.',
           ),
         ),
@@ -1208,81 +1215,6 @@ class _ProductionManagementScreenState
       setState(() => _isImporting = false);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('CSV parse failed: $e')));
-    }
-  }
-
-  // ─── Import: save reviewed draft rows in chunks ──────────────────────────
-  Future<void> _saveImportedRows() async {
-    if (_isSavingImport || _importDraftRows.isEmpty) return;
-    setState(() => _isSavingImport = true);
-    var created = 0;
-    var updated = 0;
-    final errors = <String>[];
-    final notes = <String>[];
-    const chunkSize = 100;
-
-    try {
-      for (var i = 0; i < _importDraftRows.length; i += chunkSize) {
-        final chunk = _importDraftRows.sublist(
-          i,
-          (i + chunkSize).clamp(0, _importDraftRows.length),
-        );
-        final response = await _productionService.bulkUpsertProductionGrid(
-          chunk,
-        );
-        if (response['success'] == true) {
-          created += response['created'] as int? ?? 0;
-          updated += response['updated'] as int? ?? 0;
-          final chunkErrors = (response['errors'] as List?) ?? const [];
-          for (final e in chunkErrors) {
-            final err = e is Map
-                ? e['error']?.toString() ?? e.toString()
-                : e.toString();
-            if (err.isNotEmpty) errors.add(err);
-          }
-          // Informational notes (e.g. auto-created clients/shows).
-          final chunkNotes = (response['notes'] as List?) ?? const [];
-          for (final n in chunkNotes) {
-            final note = n.toString();
-            if (note.isNotEmpty) notes.add(note);
-          }
-        } else {
-          errors.add(
-            response['error']?.toString() ??
-                'Chunk ${i ~/ chunkSize + 1} failed',
-          );
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _isSavingImport = false;
-        _importDraftRows.clear();
-        _previewPage = 0;
-        _resetImportPreviewCache();
-        _importFeedback
-          ..clear()
-          ..addAll(notes)
-          ..addAll(errors);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            errors.isEmpty
-                ? 'Saved ${created + updated} rows '
-                      '(created: $created, updated: $updated)'
-                : 'Saved ${created + updated} rows with ${errors.length} error(s).',
-          ),
-        ),
-      );
-      await _loadGrid();
-      if (!mounted) return;
-      _showImportFeedback();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSavingImport = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Save failed: $e')));
     }
   }
 
@@ -1319,185 +1251,12 @@ class _ProductionManagementScreenState
     );
   }
 
-  // ─── Import preview cache (Projects flow) ────────────────────────────────
-  void _resetImportPreviewCache() {
-    _cachedImportPreviewRows = null;
-    _cachedImportPreviewLength = -1;
-  }
-
-  List<Map<String, dynamic>> _buildImportPreviewRows() {
-    if (_cachedImportPreviewRows != null &&
-        _cachedImportPreviewLength == _importDraftRows.length) {
-      return _cachedImportPreviewRows!;
-    }
-    final rows = _importDraftRows.map(_gridPreviewRowT).toList(growable: false);
-    _cachedImportPreviewRows = rows;
-    _cachedImportPreviewLength = _importDraftRows.length;
-    return rows;
-  }
-
-  /// Read-only preview of the draft import rows (all 20 template columns).
-  Widget _importPreviewTable(BuildContext context) {
-    final previewRows = _buildImportPreviewRows();
-
-    return GlassContainer(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: EdgeInsets.symmetric(
-              vertical: SizeConfig.scaleHeight(context, 6),
-              horizontal: SizeConfig.scaleWidth(context, 12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Import preview — ${previewRows.length} row(s)',
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                TextButton.icon(
-                  onPressed: _isSavingImport ? null : _saveImportedRows,
-                  icon: _isSavingImport
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_outlined, size: 18),
-                  label: Text(
-                    _isSavingImport ? 'Saving…' : 'Save Imported Data',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _paginationBar(
-            context,
-            _previewPage,
-            previewRows.length,
-            (p) => setState(() => _previewPage = p),
-            rowsPerPage: _rowsPerPage,
-          ),
-          DynamicDataTable(
-            currentPage: _previewPage,
-            onPageChanged: (p) => setState(() => _previewPage = p),
-            minColumnWidth: SizeConfig.scaleWidth(context, 40),
-            columnSpacing: SizeConfig.scaleWidth(context, 12),
-            dataRowMinHeight: MediaQuery.of(context).size.height * 48 / 768,
-            dataRowMaxHeight: MediaQuery.of(context).size.height * 62 / 768,
-            fields: _buildImportPreviewFields(context, previewRows),
-            rows: previewRows,
-            // Shared grid page size (see [AppConstants.gridRowsPerPage]).
-            rowsPerPage: _rowsPerPage,
-            showCellBorders: true,
-            useDataTable2: true,
-            // Sit flush against the container's green border (no gap).
-            padding: EdgeInsets.zero,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// Read-only fields for the import preview table.
-  List<DynamicTableField> _buildImportPreviewFields(
-    BuildContext context,
-    List<Map<String, dynamic>> rows,
-  ) {
-    return [
-      DynamicTableField(
-        key: 'sNo',
-        label: 'S No',
-        width: _columnWidth(
-          context,
-          'sNo',
-          'S No',
-          rows,
-          minWidth: _numericMinWidth(context),
-        ),
-        numeric: true,
-        filterRequired: false,
-      ),
-      _previewField(context, 'coordinator', 'Co ordinator', rows),
-      _previewField(context, 'month', 'Month', rows),
-      _previewField(context, 'shotsReceivedDate', 'Shots Received Date', rows),
-      _previewField(context, 'clientForRef', 'Client for Ref', rows),
-      _previewField(context, 'client', 'Client', rows),
-      _previewField(context, 'show', 'Show', rows),
-      _previewField(context, 'wipEta', 'WIP ETA', rows),
-      _previewField(context, 'eta', 'ETA', rows),
-      _previewField(context, 'shotCode', 'Shot ID', rows),
-      _previewField(context, 'frames', 'Frames', rows, numeric: true),
-      _previewField(context, 'tasks', 'Tasks', rows),
-      _previewField(context, 'reviewNotes', 'Review Notes', rows),
-      _previewField(context, 'status', 'Status', rows),
-      _previewField(context, 'deliveredOn', 'Delivered on', rows),
-      _previewField(context, 'workStation', 'Work station', rows),
-      _previewField(
-        context,
-        'shotMandays',
-        'Shot man-days',
-        rows,
-        numeric: true,
-      ),
-      _previewField(
-        context,
-        'approvedClientMd',
-        'Approved Client MD',
-        rows,
-        numeric: true,
-      ),
-      _previewField(context, 'flEta', 'FL ETA', rows),
-      _previewField(context, 'flMandays', 'FL Man-days', rows, numeric: true),
-    ];
-  }
-
-  DynamicTableField _previewField(
-    BuildContext context,
-    String key,
-    String label,
-    List<Map<String, dynamic>> rows, {
-    bool numeric = false,
-  }) {
-    return DynamicTableField(
-      key: key,
-      label: label,
-      width: _columnWidth(
-        context,
-        key,
-        label,
-        rows,
-        minWidth: numeric ? _numericMinWidth(context) : gridColumnMinWidth,
-      ),
-      numeric: numeric,
-      builder: (context, value, row, rowIndex) {
-        final text = value == null || value.toString().trim().isEmpty
-            ? '-'
-            : value.toString();
-        return Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: SizeConfig.scaleWidth(context, 4),
-            vertical: SizeConfig.scaleHeight(context, 4),
-          ),
-          child: Text(
-            text,
-            textAlign: TextAlign.center,
-            softWrap: false,
-            overflow: TextOverflow.visible,
-            style: TextStyle(fontSize: SizeConfig.fontSize(context, 12)),
-          ),
-        );
-      },
-    );
-  }
-
   // ─── Manual creation ─────────────────────────────────────────────────────
   void _openCreateMenu() {
     // Create actions (New Grid Row) follow the department import switch —
     // same gate the backend applies to create_production_grid_row.
     if (!_importEnabled) return;
-    if (_isSyncing || _isSavingImport || _isImporting) return;
+    if (_isSyncing || _isImporting) return;
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -1577,7 +1336,18 @@ class _ProductionManagementScreenState
 
     setState(() => _isDeleting = true);
     try {
-      final response = await _productionService.deleteProductionGridRow(gridId);
+      final status = ValueNotifier<String>('Deleting row in background…');
+      final response = await _withParsingLoader(
+        context: context,
+        message: 'Deleting row…',
+        status: status,
+        task: () => compute(_deleteGridRowInIsolate, {
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.productionGridRow(gridId),
+          'token': ApiController.instance.getToken(),
+        }),
+      );
+      status.dispose();
       if (!mounted) return;
       if (response['success'] == true) {
         // Drop pending edits for the removed row so a later Sync never
@@ -1631,9 +1401,21 @@ class _ProductionManagementScreenState
     setState(() => _isDeleting = true);
     try {
       final gridIds = _selectedGridIds.toList();
-      final response = await _productionService.bulkDeleteProductionGrid(
-        gridIds,
+      final status = ValueNotifier<String>(
+        'Deleting $count rows in background…',
       );
+      final response = await _withParsingLoader(
+        context: context,
+        message: 'Deleting rows…',
+        status: status,
+        task: () => compute(_bulkDeleteGridRowsInIsolate, {
+          'baseUrl': ApiConstants.baseUrl,
+          'endpoint': ApiConstants.productionGridBulkDelete,
+          'token': ApiController.instance.getToken(),
+          'gridIds': gridIds,
+        }),
+      );
+      status.dispose();
       if (!mounted) return;
       if (response['success'] == true) {
         // Drop pending edits for every removed row (see [_confirmDeleteRow]).
@@ -1746,9 +1528,7 @@ class _ProductionManagementScreenState
                 ),
               ),
             ),
-            onPressed: _isImporting || _isSavingImport
-                ? null
-                : _openPasteCsvDialog,
+            onPressed: _isImporting ? null : _openPasteCsvDialog,
             icon: _isImporting
                 ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
                 : const Icon(Icons.content_paste_outlined),
@@ -1763,37 +1543,13 @@ class _ProductionManagementScreenState
                 ),
               ),
             ),
-            onPressed: _isImporting || _isSavingImport
-                ? null
-                : _pickAndParseExcel,
+            onPressed: _isImporting ? null : _pickAndParseExcel,
             icon: _isImporting
                 ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
                 : const Icon(Icons.upload_file_outlined),
             label: const Text('Import File'),
           ),
         ],
-        if (_importEnabled && _importDraftRows.isNotEmpty)
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandGreen,
-              foregroundColor: Colors.white,
-              fixedSize: SizeConfig.buttonFixedSize(context, 200, 40),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(
-                  SizeConfig.scaleWidth(context, 2),
-                ),
-              ),
-            ),
-            onPressed: _isSavingImport ? null : _saveImportedRows,
-            icon: _isSavingImport
-                ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-                : const Icon(Icons.save_outlined),
-            label: Text(
-              _isSavingImport
-                  ? 'Saving…'
-                  : 'Save Imported Data (${_importDraftRows.length})',
-            ),
-          ),
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             fixedSize: SizeConfig.buttonFixedSize(context, 150, 40),
@@ -2123,6 +1879,12 @@ class _ProductionManagementScreenState
       );
     }
 
+    final pageStart = _page * _rowsPerPage;
+    final visibleRows = filteredRows
+        .skip(pageStart)
+        .take(_rowsPerPage)
+        .toList(growable: false);
+
     return GlassContainer(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -2144,8 +1906,13 @@ class _ProductionManagementScreenState
               columnSpacing: SizeConfig.scaleWidth(context, 12),
               dataRowMinHeight: MediaQuery.of(context).size.height * 28 / 768,
               dataRowMaxHeight: MediaQuery.of(context).size.height * 32 / 768,
-              fields: _buildFields(context, _rows),
+              fields: _buildFields(context, visibleRows),
               rows: filteredRows,
+              headerTextStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+              cellTextStyle: const TextStyle(color: Colors.white),
               onFilterChanged: _applyColumnFilter,
               // Shared grid page size (see [AppConstants.gridRowsPerPage]).
               rowsPerPage: _rowsPerPage,
@@ -2213,7 +1980,7 @@ class _ProductionManagementScreenState
 
   /// Flips the grid page with a one-frame "Parsing…" overlay so the table
   /// rebuild is visible feedback instead of a silent freeze (Projects flow).
-  void _changeGridPage(int page) {
+  Future<void> _changeGridPage(int page) async {
     if (_isGridChanging || page == _page) return;
     final phase = SchedulerBinding.instance.schedulerPhase;
     if (phase == SchedulerPhase.persistentCallbacks) {
@@ -2225,14 +1992,11 @@ class _ProductionManagementScreenState
       return;
     }
     setState(() => _isGridChanging = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _page = page);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _isGridChanging = false);
-      });
-    });
+    setState(() => _page = page);
+    await WidgetsBinding.instance.endOfFrame;
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) return;
+    setState(() => _isGridChanging = false);
   }
 
   /// Overlays a spinner over the grid/screen while work is in progress.
@@ -2367,7 +2131,7 @@ class _ProductionManagementScreenState
               ? FloatingActionButton.extended(
                   backgroundColor: AppColors.brandGreen,
                   // foregroundColor: Colors.white,
-                  onPressed: (_isSyncing || _isSavingImport || _isImporting)
+                  onPressed: (_isSyncing || _isImporting)
                       ? null
                       : _openCreateMenu,
                   icon: const Icon(Icons.add),
@@ -2386,10 +2150,6 @@ class _ProductionManagementScreenState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _toolbar(context),
-                      if (_importDraftRows.isNotEmpty) ...[
-                        SizedBox(height: SizeConfig.scaleHeight(context, 20)),
-                        _importPreviewTable(context),
-                      ],
                       SizedBox(height: SizeConfig.scaleHeight(context, 20)),
                       _grid(context),
                     ],
@@ -3560,13 +3320,13 @@ class _NewGridRowDialogState extends State<_NewGridRowDialog> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Import parsing helpers (main-thread friendly).
+// Import parsing helpers (isolate-safe and UI-independent).
 //
 // These mirror the Projects screen's top-level helpers but map raw rows onto
 // the 20 production-grid template columns (client, show, shot ID, frames,
 // tasks/department, status, etc.). They are top-level and chunk their work
-// with event-loop yields so the loader spinner stays responsive while
-// parsing on the UI thread (web-safe — no `compute()`/isolate needed).
+// with event-loop yields so the worker remains cooperative while processing
+// large files. The public entry points below run these helpers in isolates.
 // ─────────────────────────────────────────────────────────────────────────────
 
 String _normalizeHeaderT(String input) {
@@ -3891,33 +3651,6 @@ Map<String, dynamic> _toGridApiRowT(
   };
 }
 
-/// Compact display row for the import preview table (all 20 columns).
-Map<String, dynamic> _gridPreviewRowT(Map<String, dynamic> row) {
-  String s(String key) => (row[key] ?? '').toString().trim();
-  String d(String key) => formatDateLikeExcel(s(key));
-  return <String, dynamic>{
-    'coordinator': s('coordinator'),
-    'month': s('month'),
-    'shotsReceivedDate': d('shotsReceivedDate'),
-    'clientForRef': s('clientForRef'),
-    'client': s('client'),
-    'show': s('show'),
-    'wipEta': d('wipEta'),
-    'eta': d('eta'),
-    'shotCode': s('shotCode'),
-    'frames': s('frames'),
-    'tasks': s('tasks'),
-    'reviewNotes': s('reviewNotes'),
-    'status': s('status'),
-    'deliveredOn': d('deliveredOn'),
-    'workStation': s('workStation'),
-    'shotMandays': s('shotMandays'),
-    'approvedClientMd': s('approvedClientMd'),
-    'flEta': d('flEta'),
-    'flMandays': s('flMandays'),
-  };
-}
-
 /// Number of rows processed between event-loop yields while parsing.
 /// Keeps the UI thread (and the loader spinner) responsive on web, where
 /// parsing runs on the main isolate.
@@ -3925,12 +3658,6 @@ const int _importYieldEvery = 40;
 
 Future<void> _importYield() => Future<void>.delayed(Duration.zero);
 
-/// Outcome of parsing an imported file or paste.
-///
-/// Lines are now only ever skipped for reasons the user can SEE — the counts
-/// below are shown in the import summary. Previously repeated shot/task/notes
-/// lines were dropped silently, which is how 1,637 real rows disappeared from
-/// a 11,016-line import.
 class _GridParseResult {
   const _GridParseResult({
     required this.rows,
@@ -3940,7 +3667,7 @@ class _GridParseResult {
     this.missingShotIdLines = 0,
   });
 
-  /// Rows ready to send to the server (every physical data line is kept).
+  /// Rows ready to send to the server in source-file order.
   final List<Map<String, dynamic>> rows;
 
   /// Data lines examined (header row excluded).
@@ -4030,11 +3757,8 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
       missingShot++;
       continue;
     }
-    // Every physical line is kept. The same shot + department + review notes
-    // may legitimately repeat (one line per element/submission, each with its
-    // own Frames / ETA / man-days / Status), so lines are never merged here.
-    // `sourceRowRef` is what the server uses to tell them apart and to make a
-    // re-import of the same data update rows instead of duplicating them.
+    // Retain the physical source row for traceability. Every source row is
+    // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = 'paste:${i + 1}';
     out.add(apiRow);
   }
@@ -4107,11 +3831,8 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
       missingShot++;
       continue;
     }
-    // Every physical line is kept. The same shot + department + review notes
-    // may legitimately repeat (one line per element/submission, each with its
-    // own Frames / ETA / man-days / Status), so lines are never merged here.
-    // `sourceRowRef` is what the server uses to tell them apart and to make a
-    // re-import of the same file update rows instead of duplicating them.
+    // Retain the physical source row for traceability. Every source row is
+    // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = '$sheetName!${i + 1}';
     out.add(apiRow);
   }
@@ -4178,8 +3899,8 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
     // Every physical line is kept. The same shot + department + review notes
     // may legitimately repeat (one line per element/submission, each with its
     // own Frames / ETA / man-days / Status), so lines are never merged here.
-    // `sourceRowRef` is what the server uses to tell them apart and to make a
-    // re-import of the same file update rows instead of duplicating them.
+    // The source reference is provenance only; repeated source values remain
+    // independent rows.
     apiRow['sourceRowRef'] = 'csv:${i + 1}';
     out.add(apiRow);
   }
@@ -4217,7 +3938,7 @@ Future<_GridParseResult> _parseGridFileRowsAsync(
   throw Exception('Unsupported format: .$extension');
 }
 
-/// HTTP POST to the grid bulk-upsert endpoint using `package:http`
+/// HTTP POST to the grid import endpoint using `package:http`
 /// directly (independent of the `ApiController` singleton).
 Future<Map<String, dynamic>> _postBulkUpsertT(
   String baseUrl,
@@ -4248,9 +3969,9 @@ Future<Map<String, dynamic>> _postBulkUpsertT(
   );
 }
 
-/// Uploads parsed grid rows to the bulk-upsert endpoint in 100-row chunks
+/// Uploads parsed grid rows to the import endpoint in 100-row chunks
 /// (async HTTP — naturally yields between chunks). Returns a summary map:
-/// total / created / updated / errors / notes / preview.
+/// total / created / updated / errors / notes.
 Future<Map<String, dynamic>> _saveParsedRowsAsync(
   List<Map<String, dynamic>> rows,
   String baseUrl,
@@ -4285,13 +4006,6 @@ Future<Map<String, dynamic>> _saveParsedRowsAsync(
     }
   }
 
-  // Preview every parsed row (N records at once) so nothing is hidden
-  // behind a client-side cap — the preview table no longer paginates.
-  final preview = <Map<String, dynamic>>[];
-  for (final row in rows) {
-    preview.add(_gridPreviewRowT(row));
-  }
-
   // Name any Tasks value the importer could not place in a department: such a
   // row is saved unchanged and the value becomes its own Department filter
   // option, so the row stays reachable.
@@ -4317,6 +4031,119 @@ Future<Map<String, dynamic>> _saveParsedRowsAsync(
     'updated': updated,
     'errors': errors,
     'notes': notes,
-    'preview': preview,
+  };
+}
+
+/// Isolate entry point for file parsing. Only sendable values cross the
+/// isolate boundary; the result is converted back to [_GridParseResult] on
+/// the UI isolate after the worker completes.
+Future<Map<String, dynamic>> _parseGridFileInIsolate(
+  Map<String, dynamic> args,
+) async {
+  final result = await _parseGridFileRowsAsync(
+    args['bytes'] as Uint8List,
+    args['extension'] as String,
+    List<String>.from(args['statuses'] as List),
+  );
+  return _gridParseResultToMap(result);
+}
+
+/// Isolate entry point for pasted CSV parsing.
+Future<Map<String, dynamic>> _parseGridCsvTextInIsolate(
+  Map<String, dynamic> args,
+) async {
+  final result = await _parseGridCsvTextRowsAsync(
+    args['csvText'] as String,
+    List<String>.from(args['statuses'] as List),
+  );
+  return _gridParseResultToMap(result);
+}
+
+Map<String, dynamic> _gridParseResultToMap(_GridParseResult result) => {
+  'rows': result.rows,
+  'physicalLines': result.physicalLines,
+  'blankLines': result.blankLines,
+  'repeatedHeaderLines': result.repeatedHeaderLines,
+  'missingShotIdLines': result.missingShotIdLines,
+};
+
+_GridParseResult _gridParseResultFromMap(Map<String, dynamic> value) {
+  return _GridParseResult(
+    rows: List<Map<String, dynamic>>.from(value['rows'] as List? ?? const []),
+    physicalLines: value['physicalLines'] as int? ?? 0,
+    blankLines: value['blankLines'] as int? ?? 0,
+    repeatedHeaderLines: value['repeatedHeaderLines'] as int? ?? 0,
+    missingShotIdLines: value['missingShotIdLines'] as int? ?? 0,
+  );
+}
+
+/// Isolate entry point for chunked upload.
+Future<Map<String, dynamic>> _saveParsedRowsInIsolate(
+  Map<String, dynamic> args,
+) {
+  return _saveParsedRowsAsync(
+    List<Map<String, dynamic>>.from(args['rows'] as List),
+    args['baseUrl'] as String,
+    args['endpoint'] as String,
+    args['token'] as String?,
+  );
+}
+
+Future<Map<String, dynamic>> _deleteGridRowInIsolate(
+  Map<String, dynamic> args,
+) {
+  return _gridHttpRequestInIsolate(
+    baseUrl: args['baseUrl'] as String,
+    endpoint: args['endpoint'] as String,
+    token: args['token'] as String?,
+    method: 'DELETE',
+  );
+}
+
+Future<Map<String, dynamic>> _bulkDeleteGridRowsInIsolate(
+  Map<String, dynamic> args,
+) {
+  return _gridHttpRequestInIsolate(
+    baseUrl: args['baseUrl'] as String,
+    endpoint: args['endpoint'] as String,
+    token: args['token'] as String?,
+    method: 'POST',
+    body: <String, dynamic>{'gridIds': args['gridIds']},
+  );
+}
+
+Future<Map<String, dynamic>> _gridHttpRequestInIsolate({
+  required String baseUrl,
+  required String endpoint,
+  required String? token,
+  required String method,
+  Map<String, dynamic>? body,
+}) async {
+  final request = http.Request(method, Uri.parse('$baseUrl$endpoint'))
+    ..headers.addAll(<String, String>{
+      'Accept': 'application/json',
+      if (body != null) 'Content-Type': 'application/json',
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    });
+  if (body != null) request.body = jsonEncode(body);
+
+  final client = http.Client();
+  late final http.Response response;
+  try {
+    response = await client.send(request).then(http.Response.fromStream);
+  } finally {
+    client.close();
+  }
+  final decoded = response.body.isEmpty
+      ? <String, dynamic>{}
+      : jsonDecode(response.body);
+  if (response.statusCode >= 200 && response.statusCode < 300) {
+    return decoded is Map<String, dynamic>
+        ? decoded
+        : <String, dynamic>{'success': true};
+  }
+  return <String, dynamic>{
+    'success': false,
+    'error': 'Request failed (${response.statusCode}): ${response.body}',
   };
 }

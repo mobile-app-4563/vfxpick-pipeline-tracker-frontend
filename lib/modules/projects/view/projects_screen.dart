@@ -121,7 +121,6 @@ const List<String> _projectPositionalTemplate = [
 ];
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
-  final List<Map<String, dynamic>> _importDraftRows = [];
   final TextEditingController _csvPasteController = TextEditingController();
 
   // ── Text-based filters (freeform search) ──
@@ -155,18 +154,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   Set<String> _fromMmChips = {};
   Set<String> _fromCompChips = {};
 
-  final String _importShotFilter = '';
-  final String _importFrameInFilter = '';
-  final String _importFrameOutFilter = '';
-  final String _importSupervisorBidFilter = '';
-  final String _importClientBidFilter = '';
-  final String _importEtaFilter = '';
-  final String _importStatusFilter = '';
-
   bool _isImporting = false;
   bool _isSavingImport = false;
-  bool _importAutoSaved = false;
-  int _lastImportedTotal = 0;
   final List<String> _importFeedback = [];
   bool _isExporting = false;
   bool _isBroadAccess = false;
@@ -215,22 +204,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   // ── Page-change feedback: brief "Parsing…" overlay while the grid switches
   //    pages, so heavy table rebuilds are never silent. ──
   bool _isProjectGridChanging = false;
-  bool _isPreviewGridChanging = false;
-
-  // ── Import-preview cache: projected preview Maps are rebuilt ONLY when the
-  //    draft rows change — never on unrelated builds (large imports used to
-  //    re-materialize thousands of Maps on the UI thread every setState). ──
-  List<Map<String, dynamic>>? _cachedImportPreviewRows;
-  int _cachedImportPreviewLength = -1;
-
-  void _resetImportPreviewCache() {
-    _cachedImportPreviewRows = null;
-    _cachedImportPreviewLength = -1;
-  }
 
   // ── Pagination ──
   int _projectPage = 0;
-  int _previewPage = 0;
 
   // Rows per page — one shared cap for every grid (see
   // [AppConstants.gridRowsPerPage]). The table slices rows internally, so
@@ -312,28 +288,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() => _isProjectGridChanging = false);
-      });
-    });
-  }
-
-  /// Same deferred page flip with spinner for the import-preview table.
-  void _changePreviewPage(int page) {
-    if (_isPreviewGridChanging || page == _previewPage) return;
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.persistentCallbacks) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _changePreviewPage(page);
-      });
-      return;
-    }
-    setState(() => _isPreviewGridChanging = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _previewPage = page);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _isPreviewGridChanging = false);
       });
     });
   }
@@ -666,10 +620,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _importActions(context, controller),
-                      if (_importDraftRows.isNotEmpty) ...[
-                        SizedBox(height: SizeConfig.scaleHeight(context, 12)),
-                        _importPreviewTable(),
-                      ],
                       SizedBox(height: SizeConfig.scaleHeight(context, 20)),
                       SizedBox(
                         // height: math.max(
@@ -875,43 +825,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
         ] else
           ...[],
-        // Save Imported Data only exists while the import switch is ON — a
-        // save is a bulk create/upsert, which the backend gates on the same
-        // per-department import switch.
-        if (_canCreateShot) ...[
-          // import-or-create enabled
-          SizedBox(
-            width: SizeConfig.scaleWidth(context, 200),
-            child: ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandGreen,
-                foregroundColor: Colors.white,
-                fixedSize: SizeConfig.buttonFixedSize(context, 160, 40),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(
-                    SizeConfig.scaleWidth(context, 2),
-                  ),
-                ),
-              ),
-              onPressed:
-                  _isSavingImport ||
-                      _importDraftRows.isEmpty ||
-                      _importAutoSaved
-                  ? null
-                  : () => _saveImportedRows(controller),
-              icon: _isSavingImport
-                  ? SizeConfig.loadingIndicator(size: 14, stroke: 2)
-                  : Icon(
-                      _importAutoSaved
-                          ? Icons.check_circle_outline
-                          : Icons.save_outlined,
-                    ),
-              label: Text(
-                _importAutoSaved ? 'Saved to Server' : 'Save Imported Data',
-              ),
-            ),
-          ),
-        ],
         OutlinedButton.icon(
           style: OutlinedButton.styleFrom(
             fixedSize: SizeConfig.buttonFixedSize(context, 100, 40),
@@ -1781,242 +1694,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  /// Builds the display Maps for the import preview. The result is cached and
-  /// invalidated only when `_importDraftRows` changes, so unrelated setState
-  /// calls never re-project thousands of rows on the UI thread.
-  List<Map<String, dynamic>> _buildImportPreviewRows() {
-    if (_cachedImportPreviewLength == _importDraftRows.length &&
-        _cachedImportPreviewRows != null) {
-      return _cachedImportPreviewRows!;
-    }
-    final rows = List<Map<String, dynamic>>.generate(
-      _importDraftRows.length,
-      (index) => _projectPreviewRowT(_importDraftRows[index]),
-    );
-    _cachedImportPreviewLength = _importDraftRows.length;
-    _cachedImportPreviewRows = rows;
-    return rows;
-  }
-
-  Widget _importPreviewTable() {
-    final previewRows = _buildImportPreviewRows();
-
-    // Filtering disabled by default — all _import*Filter vars are ''.
-    // Skip the O(N) filter copy entirely when nothing is active.
-    final hasActiveImportFilter =
-        _importShotFilter.trim().isNotEmpty ||
-        _importFrameInFilter.trim().isNotEmpty ||
-        _importFrameOutFilter.trim().isNotEmpty ||
-        _importSupervisorBidFilter.trim().isNotEmpty ||
-        _importClientBidFilter.trim().isNotEmpty ||
-        _importEtaFilter.trim().isNotEmpty ||
-        _importStatusFilter.trim().isNotEmpty;
-    final filteredPreviewRows = hasActiveImportFilter
-        ? previewRows
-              .where((row) {
-                // Case-insensitive + date-aware matching (see grid_filter_utils).
-                bool contains(String key, String query) =>
-                    gridTextContains(row[key], query);
-
-                return contains('shotCode', _importShotFilter) &&
-                    contains('frameIn', _importFrameInFilter) &&
-                    contains('frameOut', _importFrameOutFilter) &&
-                    contains('supervisorBid', _importSupervisorBidFilter) &&
-                    contains('clientBid', _importClientBidFilter) &&
-                    contains('clientEta', _importEtaFilter) &&
-                    contains('status', _importStatusFilter);
-              })
-              .toList(growable: false)
-        : previewRows;
-
-    return GlassContainer(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: SizeConfig.paddingOnly(
-              context,
-              left: 10,
-              top: 10,
-              right: 10,
-            ),
-            child: Text(
-              _lastImportedTotal > _importDraftRows.length
-                  ? 'Imported Preview ($_lastImportedTotal rows — showing first ${_importDraftRows.length})'
-                  : 'Imported Preview (${_importDraftRows.length} rows)',
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ),
-          _paginationBar(
-            context,
-            _previewPage,
-            _importDraftRows.length,
-            _changePreviewPage,
-          ),
-          _withGridParsingOverlay(
-            isLoading: _isPreviewGridChanging,
-            child: DynamicDataTable(
-              currentPage: _previewPage,
-              onPageChanged: _changePreviewPage,
-              rowsPerPage: _rowsPerPage,
-              columnSpacing: SizeConfig.scaleWidth(context, 30),
-              padding: SizeConfig.paddingSymmetric(
-                context,
-                horizontal: 4,
-                vertical: 4,
-              ),
-              showCellBorders: true,
-              // headingRowHeight: MediaQuery.of(context).size.height * 40 / 768,
-              dataRowMinHeight: MediaQuery.of(context).size.height * 40 / 768,
-              dataRowMaxHeight: MediaQuery.of(context).size.height * 52 / 768,
-              // frozenColumnCount: 5,
-              fields: [
-                DynamicTableField(
-                  key: 'shotCode',
-                  label: 'Shot',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'frameIn',
-                  label: 'Frame In',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'frameOut',
-                  label: 'Frame Out',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'totalFrames',
-                  label: 'Total',
-                  width: SizeConfig.scaleWidth(context, 80),
-                ),
-                DynamicTableField(
-                  key: 'coordinator',
-                  label: 'Coordinator',
-                  width: SizeConfig.scaleWidth(context, 120),
-                ),
-                DynamicTableField(
-                  key: 'levelOfShot',
-                  label: 'Level',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'allocationDate',
-                  label: 'Alloc Date',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'allocationEta',
-                  label: 'Alloc ETA',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'startingDate',
-                  label: 'Start Date',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'completeDate',
-                  label: 'Complete',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'dailyWip',
-                  label: 'WIP %',
-                  width: SizeConfig.scaleWidth(context, 80),
-                ),
-                DynamicTableField(
-                  key: 'mandays',
-                  label: 'Mandays',
-                  width: SizeConfig.scaleWidth(context, 80),
-                ),
-                DynamicTableField(
-                  key: 'consumedMandays',
-                  label: 'Consumed',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'savedMandays',
-                  label: 'Saved',
-                  width: SizeConfig.scaleWidth(context, 80),
-                ),
-                DynamicTableField(
-                  key: 'supervisorBid',
-                  label: 'Sup Bid',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'clientBid',
-                  label: 'Cli Bid',
-                  width: SizeConfig.scaleWidth(context, 90),
-                ),
-                DynamicTableField(
-                  key: 'clientEta',
-                  label: 'ETA',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'approvedVersion',
-                  label: 'Appr Ver',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'approvedBy',
-                  label: 'Appr By',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'comments',
-                  label: 'Comments',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'complexity',
-                  label: 'Complexity',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'notes',
-                  label: 'Notes',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-                DynamicTableField(
-                  key: 'status',
-                  label: 'Status',
-                  width: SizeConfig.scaleWidth(context, 130),
-                ),
-
-                DynamicTableField(
-                  key: 'fromRoto',
-                  label: 'Roto',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'fromPaint',
-                  label: 'Paint',
-                  width: SizeConfig.scaleWidth(context, 100),
-                ),
-                DynamicTableField(
-                  key: 'fromMm',
-                  label: 'MM',
-                  width: SizeConfig.scaleWidth(context, 80),
-                ),
-                DynamicTableField(
-                  key: 'fromComp',
-                  label: 'Comp',
-                  width: SizeConfig.scaleWidth(context, 80),
-                ),
-              ],
-              rows: filteredPreviewRows,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   /// Resolves the show/department the import rows will be written to.
   ///
   /// When the toolbar filter already has a specific show + department the
@@ -2088,9 +1765,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                   : file?.name.split('.').last ?? '')
               .toLowerCase();
 
-      // Heavy decode + parse + API upload all happen in a background isolate.
-      // Only a compact summary + capped preview come back to the UI thread, so
-      // large files never block the UI or transfer thousands of row Maps.
+      // Heavy decode, parse, and API upload all happen in a background isolate.
       final outcome = await compute(
         _parseAndSaveImportInIsolate,
         <String, dynamic>{
@@ -2144,18 +1819,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       final notes = ((outcome['notes'] as List<dynamic>?) ?? const [])
           .map((e) => e.toString())
           .toList(growable: false);
-      final preview = ((outcome['preview'] as List<dynamic>?) ?? const [])
-          .map((e) => Map<String, dynamic>.from(e as Map))
-          .toList(growable: false);
-
       setState(() {
-        _importAutoSaved = true;
-        _lastImportedTotal = total;
-        _previewPage = 0;
-        _resetImportPreviewCache();
-        _importDraftRows
-          ..clear()
-          ..addAll(preview);
         _importFeedback
           ..clear()
           ..addAll(errors)
@@ -2318,18 +1982,14 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         'targetShowId': target.showId,
       });
       if (!mounted) return;
-      setState(() {
-        _importAutoSaved = false;
-        _lastImportedTotal = rows.length;
-        _previewPage = 0;
-        _resetImportPreviewCache();
-        _importDraftRows
-          ..clear()
-          ..addAll(rows);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Imported ${rows.length} rows for review')),
-      );
+      if (rows.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No rows could be imported.')),
+        );
+      } else {
+        setState(() => _importFeedback.clear());
+        await _uploadImportedRows(controller, rows);
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -2600,10 +2260,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
   }
 
-  Future<void> _saveImportedRows(ProjectController controller) async {
+  Future<void> _uploadImportedRows(
+    ProjectController controller,
+    List<Map<String, dynamic>> rows,
+  ) async {
     setState(() {
       _isSavingImport = true;
-      _importAutoSaved = false;
     });
     _importFeedback.clear();
     const chunkSize = 100; // send in batches to avoid huge JSON payloads
@@ -2613,10 +2275,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     var failed = false;
 
     try {
-      for (var i = 0; i < _importDraftRows.length; i += chunkSize) {
-        final end = (i + chunkSize).clamp(0, _importDraftRows.length);
-        final chunk = _importDraftRows.sublist(i, end);
-        final batchLabel = '${i + 1}-${math.min(end, _importDraftRows.length)}';
+      for (var i = 0; i < rows.length; i += chunkSize) {
+        final end = (i + chunkSize).clamp(0, rows.length);
+        final chunk = rows.sublist(i, end);
+        final batchLabel = '${i + 1}-${math.min(end, rows.length)}';
         // reload:false → no full network refetch + grid rebuild after every
         // chunk (that was the main source of UI jank during big imports).
         final response = await controller.bulkUpsertShots(chunk, reload: false);
@@ -2643,7 +2305,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         // Update progress on every batch
         setState(() {});
 
-        if (mounted && i + chunkSize < _importDraftRows.length) {
+        if (mounted && i + chunkSize < rows.length) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
@@ -2662,10 +2324,6 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       }
 
       if (!failed && mounted) {
-        setState(() {
-          _importDraftRows.clear();
-          _resetImportPreviewCache();
-        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -3507,8 +3165,8 @@ List<Map<String, String>> _showsListFromArgsT(dynamic rawShows) =>
 
 /// Entry point for `compute()`.  Parses Excel/CSV bytes in a background isolate
 /// AND uploads every row to the API in 100-row chunks.
-/// Only a compact summary + a capped preview are transferred back to the UI
-/// thread, so even 10k+ row files never jank the app or flood main-thread GC.
+/// Only a compact import summary is transferred back to the UI thread, so
+/// large files never jank the app or flood main-thread GC.
 /// All arguments must be serializable (no object references).
 Future<Map<String, dynamic>> _parseAndSaveImportInIsolate(
   Map<String, dynamic> args,
@@ -3572,21 +3230,12 @@ Future<Map<String, dynamic>> _parseAndSaveImportInIsolate(
     }
   }
 
-  // Cap the preview transferred back — the table paginates this client-side.
-  const previewCap = 60;
-  final preview = <Map<String, dynamic>>[];
-  final limit = rows.length < previewCap ? rows.length : previewCap;
-  for (var i = 0; i < limit; i++) {
-    preview.add(_projectPreviewRowT(rows[i]));
-  }
-
   return <String, dynamic>{
     'total': rows.length,
     'created': created,
     'updated': updated,
     'errors': errors,
     'notes': notes,
-    'preview': preview,
   };
 }
 
@@ -3619,41 +3268,6 @@ Future<Map<String, dynamic>> _postBulkUpsertT(
   throw Exception(
     'Bulk upsert failed (${response.statusCode}): ${response.body}',
   );
-}
-
-/// Compact display row used only by the import preview table.
-Map<String, dynamic> _projectPreviewRowT(Map<String, dynamic> row) {
-  String s(String key) => (row[key] ?? '').toString();
-  String d(String key) => formatDateLikeExcel(s(key));
-  return <String, dynamic>{
-    'shotCode': s('shotCode'),
-    'frameIn': s('frameIn'),
-    'frameOut': s('frameOut'),
-    'totalFrames': s('totalFrames'),
-    'supervisorBid': s('supervisorBid'),
-    'clientBid': s('clientBid'),
-    'clientEta': d('clientEta'),
-    'coordinator': s('coordinator'),
-    'levelOfShot': s('levelOfShot'),
-    'allocationDate': d('allocationDate'),
-    'allocationEta': d('allocationEta'),
-    'startingDate': d('startingDate'),
-    'completeDate': d('completeDate'),
-    'dailyWip': s('dailyWip'),
-    'mandays': s('mandays'),
-    'consumedMandays': s('consumedMandays'),
-    'savedMandays': s('savedMandays'),
-    'approvedVersion': s('approvedVersion'),
-    'approvedBy': s('approvedBy'),
-    'comments': s('comments'),
-    'complexity': s('complexity'),
-    'notes': s('notes'),
-    'status': s('status'),
-    'fromRoto': s('fromRoto'),
-    'fromPaint': s('fromPaint'),
-    'fromMm': s('fromMm'),
-    'fromComp': s('fromComp'),
-  };
 }
 
 /// Entry point for `compute()`.  Parses pasted CSV text in a background
