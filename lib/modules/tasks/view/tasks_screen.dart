@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:excel/excel.dart' hide Border;
 import 'package:file_saver/file_saver.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:vfxpick_pipeline/shared/widgets/custom_text_field.dart';
@@ -34,26 +33,14 @@ class TasksScreen extends StatefulWidget {
 }
 
 class _TasksScreenState extends State<TasksScreen> {
-  final List<Map<String, String>> _importDraftRows = [];
   bool _isArtist = false;
   bool _isBroadAccess = false;
   bool _isAdmin = false;
   List<String> _accessibleDepartments = AppConstants.pipelineDepartments;
   bool _isExporting = false;
   bool _showCellBorders = true;
-  int _previewPage = 0;
   final GlobalKey<_DepartmentViewState> _departmentViewKey =
       GlobalKey<_DepartmentViewState>();
-
-  // ── Page-change feedback: brief "Parsing…" overlay while the preview grid
-  //    switches pages, so heavy table rebuilds are never silent. ──
-  bool _isPreviewGridChanging = false;
-
-  // ── Import-preview cache: projected preview Maps are rebuilt ONLY when the
-  //    draft rows change — never on unrelated builds (large pastes used to
-  //    re-materialize thousands of Maps on the UI thread every setState). ──
-  List<Map<String, dynamic>>? _cachedImportPreviewRows;
-  int _cachedImportPreviewLength = -1;
 
   @override
   void initState() {
@@ -117,10 +104,6 @@ class _TasksScreenState extends State<TasksScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _importActions(context, controller),
-        if (_importDraftRows.isNotEmpty) ...[
-          SizedBox(height: SizeConfig.scaleHeight(context, 12)),
-          _importPreviewTable(),
-        ],
         SizedBox(height: SizeConfig.scaleHeight(context, 12)),
         Expanded(
           child: RefreshIndicator(
@@ -349,155 +332,17 @@ class _TasksScreenState extends State<TasksScreen> {
       );
 
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Downloaded: $fileName')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Export failed: $e')));
     } finally {
       if (mounted) {
         setState(() => _isExporting = false);
       }
     }
-  }
-
-  /// Builds the display Maps for the import preview. Cached and invalidated
-  /// only when `_importDraftRows` changes, so unrelated setState calls never
-  /// re-project thousands of rows on the UI thread.
-  List<Map<String, dynamic>> _buildImportPreviewRows() {
-    if (_cachedImportPreviewLength == _importDraftRows.length &&
-        _cachedImportPreviewRows != null) {
-      return _cachedImportPreviewRows!;
-    }
-    final rows = List<Map<String, dynamic>>.generate(_importDraftRows.length, (
-      index,
-    ) {
-      final row = _importDraftRows[index];
-      return {
-        'shot': (row['shot_id'] ?? row['shot_code'] ?? row['shot'] ?? '')
-            .toString(),
-        'supervisorStatus': (row['supervisor_status'] ?? '').toString(),
-        'artistStatus': (row['artist_status'] ?? '').toString(),
-      };
-    });
-    _cachedImportPreviewLength = _importDraftRows.length;
-    _cachedImportPreviewRows = rows;
-    return rows;
-  }
-
-  /// Flips the import-preview page with a one-frame "Parsing…" overlay so the
-  /// table rebuild is visible feedback instead of a silent freeze. The heavy
-  /// work (slicing/rebuild) runs BETWEEN frames while the spinner is on
-  /// screen. Deferred flips keep it safe even when the table's internal page
-  /// clamp fires mid-build.
-  void _changePreviewPage(int page) {
-    if (_isPreviewGridChanging || page == _previewPage) return;
-    final phase = SchedulerBinding.instance.schedulerPhase;
-    if (phase == SchedulerPhase.persistentCallbacks) {
-      // Called mid-build (DynamicDataTable internal page clamp) — defer.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        _changePreviewPage(page);
-      });
-      return;
-    }
-    setState(() => _isPreviewGridChanging = true);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _previewPage = page);
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        setState(() => _isPreviewGridChanging = false);
-      });
-    });
-  }
-
-  /// Overlays a "Parsing…" spinner on a grid while its page is switching.
-  Widget _withGridParsingOverlay({
-    required bool isLoading,
-    required Widget child,
-  }) {
-    if (!isLoading) return child;
-    return Stack(
-      children: [
-        child,
-        Positioned.fill(
-          child: ColoredBox(
-            color: Colors.black.withValues(alpha: 0.18),
-            child: const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 3),
-                  ),
-                  SizedBox(height: 10),
-                  Text('Parsing…'),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _importPreviewTable() {
-    final previewRows = _buildImportPreviewRows();
-
-    return GlassContainer(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Imported Preview (${_importDraftRows.length} rows)',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          _tasksPaginationBar(
-            context,
-            _previewPage,
-            _importDraftRows.length,
-            _changePreviewPage,
-          ),
-          _withGridParsingOverlay(
-            isLoading: _isPreviewGridChanging,
-            child: DynamicDataTable(
-              currentPage: _previewPage,
-              onPageChanged: _changePreviewPage,
-              rowsPerPage: _tasksRowsPerPage,
-              showCellBorders: true,
-              // headingRowHeight: MediaQuery.of(context).size.height * 40 / 768,
-              dataRowMinHeight: MediaQuery.of(context).size.height * 40 / 768,
-              dataRowMaxHeight: MediaQuery.of(context).size.height * 52 / 768,
-              fields: [
-                DynamicTableField(
-                  key: 'shot',
-                  label: 'Shot',
-                  width: SizeConfig.scaleWidth(context, 160),
-                ),
-                DynamicTableField(
-                  key: 'supervisorStatus',
-                  label: 'Supervisor Status',
-                  width: SizeConfig.scaleWidth(context, 180),
-                ),
-                DynamicTableField(
-                  key: 'artistStatus',
-                  label: 'Artist Status',
-                  width: SizeConfig.scaleWidth(context, 160),
-                ),
-              ],
-              rows: previewRows,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -1158,9 +1003,8 @@ class _DepartmentViewState extends State<_DepartmentView> {
           padding: EdgeInsets.all(SizeConfig.scaleWidth(context, 12)),
           child: Text(
             'Task Management',
-            style: Theme.of(
-              context,
-            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            style: Theme.of(context).textTheme.titleLarge
+                ?.copyWith(fontWeight: FontWeight.bold),
           ),
         ),
         GlassContainer(
@@ -1705,9 +1549,8 @@ class _DepartmentViewState extends State<_DepartmentView> {
       builder: (_) => _AssignDialog(shot: shot, controller: widget.controller),
     );
     if (assigned == true && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Artist assigned')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Artist assigned')));
     }
   }
 }
@@ -1821,9 +1664,8 @@ class _ProductionViewState extends State<_ProductionView> {
                   children: [
                     Text(
                       'Production Management',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: Theme.of(context).textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: SizeConfig.scaleHeight(context, 4)),
                     Text(
