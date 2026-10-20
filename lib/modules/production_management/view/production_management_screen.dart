@@ -3692,6 +3692,11 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
       }
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
+    final code = (apiRow['shotCode'] ?? '').toString().trim();
+    if (code.isEmpty) {
+      missingShot++;
+      continue;
+    }
     // Retain the physical source row for traceability. Every source row is
     // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = 'paste:${i + 1}';
@@ -3753,6 +3758,11 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
       raw[key] = cell?.value;
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
+    final code = (apiRow['shotCode'] ?? '').toString().trim();
+    if (code.isEmpty) {
+      missingShot++;
+      continue;
+    }
     // Retain the physical source row for traceability. Every source row is
     // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = '$sheetName!${i + 1}';
