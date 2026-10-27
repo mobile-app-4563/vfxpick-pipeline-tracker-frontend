@@ -3581,7 +3581,7 @@ Map<String, dynamic> _toGridApiRowT(
     'client': str('client'),
     'show': str('show'),
     'shotCode': str('shotCode'),
-    'tasks': normalizeGridTasks(str('tasks')),
+    'tasks': str('tasks'),
     'coordinator': str('coordinator'),
     'month': str('month'),
     'shotsReceivedDate': _toGridIsoDateT(valueFor('shotsReceivedDate')),
@@ -3753,7 +3753,6 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
       raw[key] = cell?.value;
     }
     final apiRow = _toGridApiRowT(raw, gridStatuses);
-    (apiRow['shotCode'] ?? '').toString().trim();
     // Retain the physical source row for traceability. Every source row is
     // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = '$sheetName!${i + 1}';

@@ -22,15 +22,15 @@ void main() {
     // Every value below actually appears in jan_dec_full.xlsx (2,939 rows
     // combined) and used to be invisible under every department filter.
     test('maps the real spreadsheet spellings', () {
-      expect(normalizeGridTasks('CAMERA TRACK'), 'MM');
-      expect(normalizeGridTasks('OBJECT TRACK'), 'MM');
+      expect(normalizeGridTasks('CAMERA TRACK'), 'CAMERA TRACK');
+      expect(normalizeGridTasks('OBJECT TRACK'), 'OBJECT TRACK');
       expect(normalizeGridTasks('TRACKING'), 'MM');
       expect(normalizeGridTasks('RETOPO'), 'MM');
       expect(normalizeGridTasks('RIGGING'), 'MM');
       expect(normalizeGridTasks('UV / TEXTURE'), 'MM');
-      expect(normalizeGridTasks('ROTOANIM'), 'ROTO');
-      expect(normalizeGridTasks('ROTO ANIM'), 'ROTO');
-      expect(normalizeGridTasks('ROTOANIMATION'), 'ROTO');
+      expect(normalizeGridTasks('ROTOANIM'), 'ROTOANIM');
+      expect(normalizeGridTasks('ROTO ANIM'), 'ROTO ANIM');
+      expect(normalizeGridTasks('ROTOANIMATION'), 'ROTOANIMATION');
       expect(normalizeGridTasks('ROTO + KEYING'), 'ROTO');
       expect(normalizeGridTasks('DMP'), 'PAINT');
       expect(normalizeGridTasks('CGI'), 'COMP');
@@ -66,10 +66,10 @@ void main() {
     });
 
     test('matches aliases in any capitalisation', () {
-      expect(normalizeGridTasks('camera track'), 'MM');
-      expect(normalizeGridTasks('Camera Track'), 'MM');
-      expect(normalizeGridTasks('  CaMeRa   TrAcK '), 'MM');
-      expect(normalizeGridTasks('rotoanim'), 'ROTO');
+      expect(normalizeGridTasks('camera track'), 'CAMERA TRACK');
+      expect(normalizeGridTasks('Camera Track'), 'CAMERA TRACK');
+      expect(normalizeGridTasks('  CaMeRa   TrAcK '), 'CAMERA TRACK');
+      expect(normalizeGridTasks('rotoanim'), 'ROTOANIM');
       expect(normalizeGridTasks('Dmp'), 'PAINT');
       expect(normalizeGridTasks('paint / comp'), 'PAINT, COMP');
       expect(normalizeGridTasks('roto + tracking'), 'ROTO, MM');

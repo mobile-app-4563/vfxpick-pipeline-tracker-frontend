@@ -1,10 +1,9 @@
 /// Maps the free-text Tasks/Department values found in imported spreadsheets
 /// onto the fixed pipeline departments.
 ///
-/// The production grid's department filter only knows ROTO, PAINT, MM and
-/// COMP, so a row whose Tasks column reads ``CAMERA TRACK`` or ``ROTOANIM``
-/// used to be stored but never matched any filter — it looked like the row was
-/// missing. Every value is therefore translated on the way in.
+/// Built-in department aliases are translated on the way in. Runtime-added
+/// departments are kept as their own values so imported rows remain assigned
+/// to the department configured by the user.
 ///
 /// Matching is case-insensitive: every capitalisation of a known spelling
 /// (``camera track``, ``Camera Track``, ``CAMERA TRACK``) normalises onto the
@@ -23,19 +22,13 @@ const List<String> gridDepartments = <String>['ROTO', 'PAINT', 'MM', 'COMP'];
 /// Spreadsheet spellings for each pipeline department (keys upper-cased,
 /// values one of [gridDepartments]).
 ///
-/// Real sheets spell the same work many ways — ``CAMERA TRACK``, ``OBJECT
-/// TRACK`` and ``TRACKING`` are all matchmove, ``ROTOANIM`` is rotoscoping and
-/// ``DMP`` is matte painting. Only spellings seen in actual imports (plus
-/// their close synonyms) are listed.
+/// Real sheets spell the same work many ways. Only values that are intended to
+/// map to one of the four built-in departments are listed here.
 const Map<String, String> gridTaskAlias = <String, String>{
   // ROTO — rotoscoping and keying.
   'ROTO': 'ROTO',
   'ROTOSCOPE': 'ROTO',
   'ROTOSCOPY': 'ROTO',
-  'ROTOANIM': 'ROTO',
-  'ROTOANIMATION': 'ROTO',
-  'ROTO ANIM': 'ROTO',
-  'ROTO ANIMATION': 'ROTO',
   'ROTOKEY': 'ROTO',
   'ROTO KEY': 'ROTO',
   'ROTO KEYING': 'ROTO',
@@ -62,10 +55,8 @@ const Map<String, String> gridTaskAlias = <String, String>{
   'MATCH MOVE': 'MM',
   'MATCHMOTION': 'MM',
   'MATCH MOTION': 'MM',
-  'CAMERA TRACK': 'MM',
   'CAM TRACK': 'MM',
   'CAMTRACK': 'MM',
-  'OBJECT TRACK': 'MM',
   'OBJ TRACK': 'MM',
   'PLANAR TRACK': 'MM',
   'PLANE TRACK': 'MM',
@@ -93,6 +84,16 @@ const Map<String, String> gridTaskAlias = <String, String>{
 /// Separators real sheets use between two departments on one row.
 final RegExp _separator = RegExp(r'[,/&+]|\bAND\b');
 
+/// Valid standalone runtime departments that must not be reduced by a
+/// broader built-in alias such as ROTO.
+const Set<String> _preservedGridTaskLabels = <String>{
+  'CAMERA TRACK',
+  'OBJECT TRACK',
+  'ROTOANIM',
+  'ROTO ANIM',
+  'ROTOANIMATION',
+};
+
 /// Maps a free-text Tasks/Department value onto the pipeline departments.
 ///
 /// A value may name several departments (``PAINT / COMP``, ``ROTO + PAINT +
@@ -106,6 +107,7 @@ String normalizeGridTasks(String raw) {
   // whitespace so "CaMeRa   TrAcK" matches the same alias as "CAMERA TRACK".
   final value = raw.toUpperCase().trim().replaceAll(RegExp(r'\s+'), ' ');
   if (value.isEmpty) return '';
+  if (_preservedGridTaskLabels.contains(value)) return value;
 
   final parts = value
       .split(_separator)
