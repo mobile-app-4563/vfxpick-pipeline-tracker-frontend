@@ -84,6 +84,41 @@ bool gridSetContainsIgnoreCase(dynamic value, Set<String> selected) {
   return selected.any((s) => _collapseWhitespace(s) == v);
 }
 
+/// Chip label → comparison key: lower-cased, trailing punctuation dropped, all
+/// whitespace removed. So "WIP", "Wip" and "WIP " are the same chip, as are
+/// "Inhouse / FL" and "Inhouse/FL".
+String gridNormalizeChipValue(String value) {
+  final lower = value.toLowerCase();
+  return lower
+      .replaceAll(RegExp(r'[.\s]+$'), '')
+      .replaceAll(RegExp(r'\s+'), '');
+}
+
+/// True when [rowValue] belongs to any of the categorical [selected] values
+/// (Status, Co ordinator, Work station, Month, Review Notes).
+///
+/// The production grid stores every cell verbatim, so these chips match as a
+/// case/punctuation-insensitive **substring**, which makes the category chips
+/// behave like categories: "FL" finds "FL Kavi" and "FL_Raghu", "Hold" finds
+/// "Hold as of now" and "RTU / Hold", and "Sangeetha" finds
+/// "Sangeetha / Saravanan". The "Blank" option matches an empty cell.
+bool gridCategoryMatchesAny(dynamic rowValue, Iterable<String> selected) {
+  final value = (rowValue ?? '').toString();
+  final isBlank = value.trim().isEmpty;
+  var any = false;
+  for (final option in selected) {
+    any = true;
+    if (gridNormalizeChipValue(option) == 'blank') {
+      if (isBlank) return true;
+      continue;
+    }
+    if (isBlank) continue;
+    if (gridTextContains(value, option)) return true;
+  }
+  // An empty selection matches everything.
+  return !any;
+}
+
 final RegExp _stripToAlnum = RegExp('[^a-z0-9]');
 final RegExp _digitsAndSeparatorsOnly = RegExp(r'^[\d\s./\-,]+$');
 final RegExp _whitespace = RegExp(r'\s+');

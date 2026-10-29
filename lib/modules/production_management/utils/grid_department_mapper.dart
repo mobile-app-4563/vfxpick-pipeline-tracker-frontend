@@ -16,6 +16,8 @@
 /// hiding behind the "All" option.
 library;
 
+import '../../../core/utils/grid_filter_utils.dart';
+
 /// Pipeline departments an imported Tasks value is mapped onto.
 const List<String> gridDepartments = <String>['ROTO', 'PAINT', 'MM', 'COMP'];
 
@@ -185,4 +187,35 @@ List<String> gridExtraDepartments(
   }
   extras.sort();
   return extras;
+}
+
+/// True when [rowValue] belongs to the department [selected].
+///
+/// A Tasks cell may name several departments ("Paint / Comp", "Roto + Keying"),
+/// so it is normalised and split, then each part is compared **exactly**. That
+/// keeps a runtime department from being swallowed by a broader built-in one:
+/// picking ROTO must not pull in ROTOANIM, and picking MM must not pull in
+/// CAMERA TRACK.
+bool gridDepartmentMatches(String rowValue, String selected) {
+  final value = rowValue.trim();
+  if (value.isEmpty) return false;
+  final wanted = gridNormalizeChipValue(selected);
+  if (wanted.isEmpty) return true;
+  return normalizeGridTasks(value)
+      .split(',')
+      .map(gridNormalizeChipValue)
+      .contains(wanted);
+}
+
+/// True when [rowValue] belongs to any of the department [selected] values.
+bool gridDepartmentMatchesAny(dynamic rowValue, Iterable<String> selected) {
+  var any = false;
+  for (final option in selected) {
+    any = true;
+    if (gridDepartmentMatches((rowValue ?? '').toString(), option)) {
+      return true;
+    }
+  }
+  // An empty selection matches everything.
+  return !any;
 }

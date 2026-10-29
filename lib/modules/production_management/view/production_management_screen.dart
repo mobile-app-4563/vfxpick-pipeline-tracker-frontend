@@ -94,15 +94,6 @@ const List<String> _gridPositionalLabels = [
   'FL Man-days',
 ];
 
-/// Lower-cases and strips whitespace/trailing punctuation so chip labels
-/// ('WIP', 'Inhouse / FL') match stored values ('Wip', 'Inhouse/FL').
-///
-/// Shared by the grid, its filter dialog and the Status/Tasks option lists.
-String _normalizeChipValue(String s) {
-  final t = s.toLowerCase();
-  return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
-}
-
 /// Filter options for the grid's Tasks column — built dynamically from
 /// the pipeline departments (incl. any departments added at runtime).
 List<String> _tasksFilterOptions() => [...AppConstants.pipelineDepartments];
@@ -214,6 +205,7 @@ class _ProductionManagementScreenState
   String _clientFilter = '';
   String _showFilter = '';
   Set<String> _reviewNotesChips = {};
+  String _reviewNotesFilter = '';
   String _framesFilter = '';
   String _shotsReceivedDateFilter = '';
   String _wipEtaFilter = '';
@@ -346,16 +338,10 @@ class _ProductionManagementScreenState
   /// A row's ``tasks`` column holds the spreadsheet spelling verbatim, which
   /// may name several departments (``Paint / Comp``, ``Roto + Keying``).
   /// Matching normalises the row value on the fly — the stored text is never
-  /// rewritten — so filtering by PAINT still finds a ``Paint / Comp`` line.
-  static bool _rowMatchesDepartment(Map<String, dynamic> row, String dept) {
-    final value = (row['tasks'] ?? '').toString();
-    if (value.trim().isEmpty) return false;
-    final wanted = _normalizeChipValue(dept);
-    return normalizeGridTasks(value)
-        .split(',')
-        .map((p) => _normalizeChipValue(p))
-        .any((p) => p == wanted);
-  }
+  /// rewritten — so filtering by PAINT still finds a ``Paint / Comp`` line,
+  /// while ROTO never pulls in ROTOANIM. See [gridDepartmentMatches].
+  static bool _rowMatchesDepartment(Map<String, dynamic> row, String dept) =>
+      gridDepartmentMatches((row['tasks'] ?? '').toString(), dept);
 
   dynamic _displayValue(Map<String, dynamic> row, String fieldKey) {
     final shotId = row['shotId'];
@@ -457,6 +443,7 @@ class _ProductionManagementScreenState
       _clientFilter,
       _showFilter,
       join(_reviewNotesChips),
+      _reviewNotesFilter,
       _framesFilter,
       _shotsReceivedDateFilter,
       _wipEtaFilter,
@@ -488,30 +475,16 @@ class _ProductionManagementScreenState
             bool contains(String key, String query) =>
                 gridTextContains(row[key], query);
 
-            bool chipMatch(String key, Set<String> selected) {
-              if (selected.isEmpty) return true;
-              final value = (row[key] ?? '').toString();
-              if (selected.contains(value)) return true;
-              // The 'tasks' column keeps the spreadsheet spelling, which may
-              // name several departments — match if any of them is selected.
-              final parts = key == 'tasks'
-                  ? normalizeGridTasks(value)
-                        .split(',')
-                        .map((p) => _normalizeChipValue(p))
-                        .toList()
-                  : <String>[_normalizeChipValue(value)];
-              for (final p in parts) {
-                for (final s in selected) {
-                  if (p == _normalizeChipValue(s)) return true;
-                }
-              }
-              // The 'Blank' chip matches rows with an empty cell.
-              if (value.trim().isEmpty &&
-                  selected.any((s) => _normalizeChipValue(s) == 'blank')) {
-                return true;
-              }
-              return false;
-            }
+            /// Multi-select chip matching for the categorical columns.
+            ///
+            /// Tasks / Department compare exactly (after normalising) so a
+            /// runtime department is never swallowed by a broader built-in
+            /// one; every other chip column matches as a substring so the
+            /// category chips behave like categories. See
+            /// [gridDepartmentMatchesAny] and [gridCategoryMatchesAny].
+            bool chipMatch(String key, Set<String> selected) => key == 'tasks'
+                ? gridDepartmentMatchesAny(row[key], selected)
+                : gridCategoryMatchesAny(row[key], selected);
 
             return (_departmentFilter == _allDepartmentOption ||
                     _rowMatchesDepartment(row, _departmentFilter)) &&
@@ -520,6 +493,7 @@ class _ProductionManagementScreenState
                 contains('client', _clientFilter) &&
                 contains('show', _showFilter) &&
                 chipMatch('reviewNotes', _reviewNotesChips) &&
+                contains('reviewNotes', _reviewNotesFilter) &&
                 contains('frames', _framesFilter) &&
                 contains('shotsReceivedDate', _shotsReceivedDateFilter) &&
                 contains('wipEta', _wipEtaFilter) &&
@@ -551,6 +525,7 @@ class _ProductionManagementScreenState
     inc(_clientFilter);
     inc(_showFilter);
     count += _reviewNotesChips.length;
+    inc(_reviewNotesFilter);
     inc(_framesFilter);
     inc(_shotsReceivedDateFilter);
     inc(_wipEtaFilter);
@@ -652,6 +627,7 @@ class _ProductionManagementScreenState
         initialClient: _clientFilter,
         initialShow: _showFilter,
         initialReviewNotesChips: _reviewNotesChips,
+        initialReviewNotes: _reviewNotesFilter,
         initialFrames: _framesFilter,
         initialShotsReceivedDate: _shotsReceivedDateFilter,
         initialWipEta: _wipEtaFilter,
@@ -676,6 +652,7 @@ class _ProductionManagementScreenState
       _clientFilter = result.client;
       _showFilter = result.show;
       _reviewNotesChips = result.reviewNotesChips;
+      _reviewNotesFilter = result.reviewNotes;
       _framesFilter = result.frames;
       _shotsReceivedDateFilter = result.shotsReceivedDate;
       _wipEtaFilter = result.wipEta;
@@ -1813,11 +1790,11 @@ class _ProductionManagementScreenState
   /// selection when the editor opens.
   List<String> _statusEditOptions(List<Map<String, dynamic>> rows) {
     final options = [..._gridStatusOptions];
-    final seen = options.map(_normalizeChipValue).toSet();
+    final seen = options.map(gridNormalizeChipValue).toSet();
     for (final row in rows) {
       final value = (row['status'] ?? '').toString().trim();
       if (value.isEmpty) continue;
-      if (seen.add(_normalizeChipValue(value))) options.add(value);
+      if (seen.add(gridNormalizeChipValue(value))) options.add(value);
     }
     return options;
   }
@@ -2201,6 +2178,7 @@ class _ProductionFilterResult {
   final String client;
   final String show;
   final Set<String> reviewNotesChips;
+  final String reviewNotes;
   final String frames;
   final String shotsReceivedDate;
   final String wipEta;
@@ -2224,6 +2202,7 @@ class _ProductionFilterResult {
     required this.client,
     required this.show,
     required this.reviewNotesChips,
+    required this.reviewNotes,
     required this.frames,
     required this.shotsReceivedDate,
     required this.wipEta,
@@ -2264,6 +2243,7 @@ class _ProductionFilterDialog extends StatefulWidget {
   final String initialClient;
   final String initialShow;
   final Set<String> initialReviewNotesChips;
+  final String initialReviewNotes;
   final String initialFrames;
   final String initialShotsReceivedDate;
   final String initialWipEta;
@@ -2287,6 +2267,7 @@ class _ProductionFilterDialog extends StatefulWidget {
     required this.initialClient,
     required this.initialShow,
     required this.initialReviewNotesChips,
+    required this.initialReviewNotes,
     required this.initialFrames,
     required this.initialShotsReceivedDate,
     required this.initialWipEta,
@@ -2319,13 +2300,14 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
   Set<String> _monthChips = {};
   Set<String> _reviewNotesChips = {};
 
-  // Status and work station start from fixed option lists; status is widened
-  // with the values actually present in the data (the import stores the sheet
-  // spelling verbatim), while tasks, coordinator and month are derived from
-  // the rows.
+  // Option lists. The import stores every cell verbatim, so each list starts
+  // from its built-in values and is widened with the values actually present
+  // in the data — otherwise the sheet's own spellings ("FL Kavi",
+  // "Hold as of now", "Episode 104") would be unreachable.
   List<String> _statuses = [..._statusFilterOptions];
   List<String> _coordinators = [];
-  late final List<String> _workStations = [..._workStationFilterOptions];
+  List<String> _workStations = [..._workStationFilterOptions];
+  List<String> _reviewNotes = [..._reviewNotesFilterOptions];
   List<String> _months = [];
   bool _isLoadingValues = true;
 
@@ -2374,6 +2356,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
         text: widget.initialApprovedClientMd,
       ),
       'flMandays': TextEditingController(text: widget.initialFlMandays),
+      'reviewNotes': TextEditingController(text: widget.initialReviewNotes),
     };
     _statusChips = {...widget.initialStatusChips};
     _tasksChips = {...widget.initialTasksChips};
@@ -2386,6 +2369,9 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
       setState(() => _subQuery = _subSearchCtrl.text);
     });
 
+    // Keep the Review Notes tile's active count in step with the free-text box.
+    _controllers['reviewNotes']!.addListener(_onReviewNotesTextChanged);
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       setState(() {
@@ -2396,6 +2382,11 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
           known: AppConstants.pipelineDepartments,
         );
         _statuses = [..._statusFilterOptions, ..._extraStatuses];
+        _workStations = [
+          ..._workStationFilterOptions,
+          ..._distinctNotIn('workStation', _workStationFilterOptions),
+        ];
+        _reviewNotes = [..._reviewNotesFilterOptions, ..._reviewNotesExtras()];
         _isLoadingValues = false;
       });
     });
@@ -2408,46 +2399,97 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
   List<String> get _extraStatuses =>
       _distinctNotIn('status', _statusFilterOptions);
 
+  /// Review-note spellings present in the grid that the built-in categories do
+  /// not already cover, capped because the sheet carries hundreds of one-off
+  /// notes. The free-text box on the Notes page reaches the rest.
+  static const int _maxReviewNoteChips = 40;
+
+  List<String> _reviewNotesExtras() {
+    final counts = <String, int>{};
+    final spellings = <String, String>{};
+    for (final row in widget.rows) {
+      final value = (row['reviewNotes'] ?? '').toString().trim();
+      if (value.isEmpty) continue;
+      final key = gridNormalizeChipValue(value);
+      counts[key] = (counts[key] ?? 0) + 1;
+      spellings.putIfAbsent(key, () => value);
+    }
+    final knownValues = _reviewNotesFilterOptions
+        .map(gridNormalizeChipValue)
+        .toSet();
+    final ranked = counts.keys.where((k) => !knownValues.contains(k)).toList()
+      ..sort((a, b) => counts[b]!.compareTo(counts[a]!));
+    return ranked
+        .take(_maxReviewNoteChips)
+        .map((k) => spellings[k]!)
+        .toList(growable: false);
+  }
+
   /// Distinct non-empty values of [key] that [known] does not already cover.
+  ///
+  /// Deduplication ignores case and whitespace, so the sheet's "Mathi Kumar "
+  /// and "Mathi kumar" produce one chip rather than two that filter the same
+  /// rows. The first spelling seen is kept for display.
   List<String> _distinctNotIn(String key, Iterable<String> known) {
-    final knownValues = known.map(_normalizeChipValue).toSet();
+    final knownValues = known.map(gridNormalizeChipValue).toSet();
     final seen = <String>{};
     final extras = <String>[];
     for (final row in widget.rows) {
       final value = (row[key] ?? '').toString().trim();
       if (value.isEmpty) continue;
-      if (knownValues.contains(_normalizeChipValue(value))) continue;
-      if (seen.add(_normalizeChipValue(value))) extras.add(value);
+      final normalized = gridNormalizeChipValue(value);
+      if (knownValues.contains(normalized)) continue;
+      if (seen.add(normalized)) extras.add(value);
     }
-    extras.sort();
+    extras.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return extras;
   }
 
   @override
   void dispose() {
     _subSearchCtrl.dispose();
+    _controllers['reviewNotes']?.removeListener(_onReviewNotesTextChanged);
     for (final c in _controllers.values) {
       c.dispose();
     }
     super.dispose();
   }
 
+  void _onReviewNotesTextChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// Distinct non-empty values of [key], in display order.
+  ///
+  /// Case and whitespace are ignored for de-duplication, so the sheet's
+  /// "Mathi Kumar " and "Mathi kumar" collapse to one option instead of two
+  /// chips that select the same rows.
   List<String> _unique(String key) {
     final seen = <String>{};
+    final values = <String>[];
     for (final row in widget.rows) {
       final v = (row[key] ?? '').toString().trim();
-      if (v.isNotEmpty) seen.add(v);
+      if (v.isEmpty) continue;
+      if (seen.add(gridNormalizeChipValue(v))) values.add(v);
     }
-    return seen.toList()..sort();
+    values.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return values;
   }
 
   int get _textFilterCount {
     var count = 0;
-    for (final c in _controllers.values) {
-      if (c.text.trim().isNotEmpty) count++;
+    for (final entry in _controllers.entries) {
+      // Review Notes has its own tile/page.
+      if (entry.key == 'reviewNotes') continue;
+      if (entry.value.text.trim().isNotEmpty) count++;
     }
     return count;
   }
+
+  /// Active Review Notes filters: the chips plus the free-text box.
+  int get _reviewNotesFilterCount =>
+      _reviewNotesChips.length +
+      (_controllers['reviewNotes']!.text.trim().isEmpty ? 0 : 1);
 
   void _clearAll() {
     for (final c in _controllers.values) {
@@ -2473,6 +2515,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
         client: _controllers['client']!.text,
         show: _controllers['show']!.text,
         reviewNotesChips: _reviewNotesChips,
+        reviewNotes: _controllers['reviewNotes']!.text,
         frames: _controllers['frames']!.text,
         shotsReceivedDate: _controllers['shotsReceivedDate']!.text,
         wipEta: _controllers['wipEta']!.text,
@@ -2598,7 +2641,7 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
         _filterListTile(
           'Review Notes',
           subtitle: 'Filter by review note type',
-          activeCount: _reviewNotesChips.length,
+          activeCount: _reviewNotesFilterCount,
           onTap: () => setState(() => _subPageKey = 'reviewNotes'),
         ),
         _filterListTile(
@@ -2657,14 +2700,33 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
           ),
         ]);
       case 'reviewNotes':
-        return _buildChipSubPageBody([
-          _ChipFieldGroup(
-            label: 'Review Notes',
-            allItems: _reviewNotesFilterOptions,
-            selected: _reviewNotesChips,
-            onChanged: (v) => setState(() => _reviewNotesChips = v),
-          ),
-        ]);
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The sheet carries hundreds of free-text notes ("Episode 104",
+            // "Final locked QT received"), so a chip for each is unusable.
+            // Text matching reaches every one of them; the chips below cover
+            // the recurring categories.
+            TextField(
+              controller: _controllers['reviewNotes'],
+              decoration: const InputDecoration(
+                labelText: 'Review notes contains',
+                isDense: true,
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: SizeConfig.scaleHeight(context, 12)),
+            _buildChipSubPageBody([
+              _ChipFieldGroup(
+                label: 'Common notes',
+                allItems: _reviewNotes,
+                selected: _reviewNotesChips,
+                onChanged: (v) => setState(() => _reviewNotesChips = v),
+              ),
+            ]),
+          ],
+        );
       case 'search':
         return _buildSearchBody(context);
       default:
