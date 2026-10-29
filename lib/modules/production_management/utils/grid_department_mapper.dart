@@ -1,19 +1,19 @@
-/// Maps the free-text Tasks/Department values found in imported spreadsheets
-/// onto the fixed pipeline departments.
+/// Matches the Tasks/Department values found in imported spreadsheets against
+/// the pipeline departments, for the grid's Department / Tasks filters.
 ///
-/// Built-in department aliases are translated on the way in. Runtime-added
-/// departments are kept as their own values so imported rows remain assigned
-/// to the department configured by the user.
+/// The import itself stores the spreadsheet cell verbatim — nothing is mapped,
+/// validated or rewritten — so this library is used only to make filtering and
+/// the filter-option lists understand the spellings actually present in the
+/// data.
 ///
 /// Matching is case-insensitive: every capitalisation of a known spelling
 /// (``camera track``, ``Camera Track``, ``CAMERA TRACK``) normalises onto the
-/// same canonical department.
-///
-/// Values that cannot be recognised are preserved verbatim — upper-cased, never
-/// dropped and never rejected. [unmappedGridTaskParts] reports them so the
-/// import summary can name them, and [gridExtraDepartments] feeds them to the
-/// Department / Tasks filters so those rows stay reachable instead of hiding
-/// behind the "All" option.
+/// same canonical department. Runtime-added departments such as Camera track,
+/// Object track and Rotoanim resolve to themselves and are never folded into a
+/// built-in department. Values that cannot be recognised are kept verbatim —
+/// never dropped and never rejected — and [gridExtraDepartments] feeds them to
+/// the Department / Tasks filters so those rows stay reachable instead of
+/// hiding behind the "All" option.
 library;
 
 /// Pipeline departments an imported Tasks value is mapped onto.
@@ -55,9 +55,6 @@ const Map<String, String> gridTaskAlias = <String, String>{
   'MATCH MOVE': 'MM',
   'MATCHMOTION': 'MM',
   'MATCH MOTION': 'MM',
-  'CAM TRACK': 'MM',
-  'CAMTRACK': 'MM',
-  'OBJ TRACK': 'MM',
   'PLANAR TRACK': 'MM',
   'PLANE TRACK': 'MM',
   '3D TRACK': 'MM',
@@ -79,6 +76,19 @@ const Map<String, String> gridTaskAlias = <String, String>{
   'COMPOSITING': 'COMP',
   'COMPOSITE': 'COMP',
   'CGI': 'COMP',
+
+  // Runtime departments the user created. These resolve to themselves so the
+  // import never folds them into a built-in department — in particular
+  // Camera/Object tracking must never become MM.
+  'ROTOANIM': 'ROTOANIM',
+  'ROTO ANIM': 'ROTO ANIM',
+  'ROTOANIMATION': 'ROTOANIMATION',
+  'ROTO ANIMATION': 'ROTO ANIMATION',
+  'CAMERA TRACK': 'CAMERA TRACK',
+  'CAM TRACK': 'CAMERA TRACK',
+  'CAMTRACK': 'CAMERA TRACK',
+  'OBJECT TRACK': 'OBJECT TRACK',
+  'OBJ TRACK': 'OBJECT TRACK',
 };
 
 /// Separators real sheets use between two departments on one row.
@@ -92,6 +102,7 @@ const Set<String> _preservedGridTaskLabels = <String>{
   'ROTOANIM',
   'ROTO ANIM',
   'ROTOANIMATION',
+  'ROTO ANIMATION',
 };
 
 /// Maps a free-text Tasks/Department value onto the pipeline departments.
@@ -142,22 +153,6 @@ String? _matchAlias(String part) {
     }
   }
   return null;
-}
-
-/// The comma-separated parts of an already-normalized Tasks value that are not
-/// pipeline departments — i.e. spellings the importer could not place. Such a
-/// row is still saved; the parts are listed by [gridExtraDepartments] among the
-/// Department / Tasks filter options so the row can be filtered on by name.
-List<String> unmappedGridTaskParts(
-  String normalized, {
-  Iterable<String> known = gridDepartments,
-}) {
-  final knownUpper = known.map((k) => k.trim().toUpperCase()).toSet();
-  return normalized
-      .split(',')
-      .map((p) => p.trim().toUpperCase())
-      .where((p) => p.isNotEmpty && !knownUpper.contains(p))
-      .toList();
 }
 
 /// Department values present in [tasksValues] that are not one of [known].

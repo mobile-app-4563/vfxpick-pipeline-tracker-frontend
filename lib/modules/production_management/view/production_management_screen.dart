@@ -94,6 +94,15 @@ const List<String> _gridPositionalLabels = [
   'FL Man-days',
 ];
 
+/// Lower-cases and strips whitespace/trailing punctuation so chip labels
+/// ('WIP', 'Inhouse / FL') match stored values ('Wip', 'Inhouse/FL').
+///
+/// Shared by the grid, its filter dialog and the Status/Tasks option lists.
+String _normalizeChipValue(String s) {
+  final t = s.toLowerCase();
+  return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
+}
+
 /// Filter options for the grid's Tasks column — built dynamically from
 /// the pipeline departments (incl. any departments added at runtime).
 List<String> _tasksFilterOptions() => [...AppConstants.pipelineDepartments];
@@ -334,21 +343,15 @@ class _ProductionManagementScreenState
 
   String? _cellKey(String shotId, String fieldKey) => '$shotId|$fieldKey';
 
-  /// Lower-cases and strips whitespace/trailing punctuation so chip labels
-  /// ('WIP', 'Inhouse / FL') match stored values ('Wip', 'Inhouse/FL').
-  static String _normalizeChipValue(String s) {
-    final t = s.toLowerCase();
-    return t.replaceAll(RegExp(r'[.\s]+$'), '').replaceAll(RegExp(r'\s+'), '');
-  }
-
-  /// A row's ``tasks`` column may hold a single department or a
-  /// comma-separated multi-department list — match if any part equals the
-  /// selected department filter.
+  /// A row's ``tasks`` column holds the spreadsheet spelling verbatim, which
+  /// may name several departments (``Paint / Comp``, ``Roto + Keying``).
+  /// Matching normalises the row value on the fly — the stored text is never
+  /// rewritten — so filtering by PAINT still finds a ``Paint / Comp`` line.
   static bool _rowMatchesDepartment(Map<String, dynamic> row, String dept) {
     final value = (row['tasks'] ?? '').toString();
     if (value.trim().isEmpty) return false;
     final wanted = _normalizeChipValue(dept);
-    return value
+    return normalizeGridTasks(value)
         .split(',')
         .map((p) => _normalizeChipValue(p))
         .any((p) => p == wanted);
@@ -489,10 +492,13 @@ class _ProductionManagementScreenState
               if (selected.isEmpty) return true;
               final value = (row[key] ?? '').toString();
               if (selected.contains(value)) return true;
-              // The 'tasks' column may hold a comma-separated
-              // multi-department list — match if any part is selected.
+              // The 'tasks' column keeps the spreadsheet spelling, which may
+              // name several departments — match if any of them is selected.
               final parts = key == 'tasks'
-                  ? value.split(',').map((p) => _normalizeChipValue(p)).toList()
+                  ? normalizeGridTasks(value)
+                        .split(',')
+                        .map((p) => _normalizeChipValue(p))
+                        .toList()
                   : <String>[_normalizeChipValue(value)];
               for (final p in parts) {
                 for (final s in selected) {
@@ -985,7 +991,6 @@ class _ProductionManagementScreenState
             await compute(_parseGridFileInIsolate, <String, dynamic>{
               'bytes': bytes,
               'extension': (file.extension ?? 'xlsx').toLowerCase(),
-              'statuses': _gridStatusOptions,
             }),
           );
           final rows = parseResult.rows;
@@ -1163,7 +1168,6 @@ class _ProductionManagementScreenState
           status: status,
           task: () => compute(_parseGridCsvTextInIsolate, {
             'csvText': _csvPasteController.text,
-            'statuses': _gridStatusOptions,
           }),
         ),
       );
@@ -1751,7 +1755,7 @@ class _ProductionManagementScreenState
         'status',
         'Status',
         rows,
-        options: _gridStatusOptions,
+        options: _statusEditOptions(rows),
       ),
       _editableField(
         context,
@@ -1801,6 +1805,21 @@ class _ProductionManagementScreenState
           },
         ),
     ];
+  }
+
+  /// Dropdown options for the Status cell. The import keeps the sheet's own
+  /// spelling, so the values present in the grid are offered alongside the
+  /// built-in list — otherwise a row reading "Plates received" would show no
+  /// selection when the editor opens.
+  List<String> _statusEditOptions(List<Map<String, dynamic>> rows) {
+    final options = [..._gridStatusOptions];
+    final seen = options.map(_normalizeChipValue).toSet();
+    for (final row in rows) {
+      final value = (row['status'] ?? '').toString().trim();
+      if (value.isEmpty) continue;
+      if (seen.add(_normalizeChipValue(value))) options.add(value);
+    }
+    return options;
   }
 
   DynamicTableField _editableField(
@@ -2300,11 +2319,11 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
   Set<String> _monthChips = {};
   Set<String> _reviewNotesChips = {};
 
-  // Unique value lists extracted from the grid rows (computed after first
-  // frame so the dialog opens instantly, like the Projects dialog). Status
-  // and work station use fixed option lists; tasks, coordinator and month are
-  // derived from the rows.
-  late final List<String> _statuses = [..._statusFilterOptions];
+  // Status and work station start from fixed option lists; status is widened
+  // with the values actually present in the data (the import stores the sheet
+  // spelling verbatim), while tasks, coordinator and month are derived from
+  // the rows.
+  List<String> _statuses = [..._statusFilterOptions];
   List<String> _coordinators = [];
   late final List<String> _workStations = [..._workStationFilterOptions];
   List<String> _months = [];
@@ -2376,9 +2395,32 @@ class _ProductionFilterDialogState extends State<_ProductionFilterDialog> {
           widget.rows.map((row) => (row['tasks'] ?? '').toString()),
           known: AppConstants.pipelineDepartments,
         );
+        _statuses = [..._statusFilterOptions, ..._extraStatuses];
         _isLoadingValues = false;
       });
     });
+  }
+
+  /// Status values present in the grid that are not part of the fixed option
+  /// list. The import stores the Status cell verbatim, so the sheet's own
+  /// spellings ("Hold as of now", "Plates received", …) must be selectable
+  /// instead of being unreachable behind the "Blank" chip.
+  List<String> get _extraStatuses =>
+      _distinctNotIn('status', _statusFilterOptions);
+
+  /// Distinct non-empty values of [key] that [known] does not already cover.
+  List<String> _distinctNotIn(String key, Iterable<String> known) {
+    final knownValues = known.map(_normalizeChipValue).toSet();
+    final seen = <String>{};
+    final extras = <String>[];
+    for (final row in widget.rows) {
+      final value = (row[key] ?? '').toString().trim();
+      if (value.isEmpty) continue;
+      if (knownValues.contains(_normalizeChipValue(value))) continue;
+      if (seen.add(_normalizeChipValue(value))) extras.add(value);
+    }
+    extras.sort();
+    return extras;
   }
 
   @override
@@ -3546,10 +3588,10 @@ const Map<String, int> _gridFieldColumnIndex = {
 /// Maps one raw import row onto the production-grid API shape. Every field
 /// is read directly from the matching concern template header; when a header
 /// is missing, the template column position (col_N) is used as a fallback.
-Map<String, dynamic> _toGridApiRowT(
-  Map<String, dynamic> row,
-  List<String> gridStatuses,
-) {
+///
+/// Nothing is validated, mapped or defaulted: whatever the spreadsheet cell
+/// says is what gets uploaded, so the grid is a faithful copy of the file.
+Map<String, dynamic> _toGridApiRowT(Map<String, dynamic> row) {
   dynamic valueFor(String field) {
     // 1) Direct header lookup (normalized template header name).
     for (final entry in _gridTemplateFieldMap.entries) {
@@ -3572,11 +3614,6 @@ Map<String, dynamic> _toGridApiRowT(
 
   String str(String field) => (valueFor(field) ?? '').toString().trim();
 
-  final statusRaw = str('status');
-  final status = gridStatuses.contains(statusRaw)
-      ? statusRaw
-      : 'Awaiting Approval';
-
   return {
     'client': str('client'),
     'show': str('show'),
@@ -3590,7 +3627,7 @@ Map<String, dynamic> _toGridApiRowT(
     'eta': _toGridEtaIsoDateT(valueFor('eta')),
     'frames': _toIntValueT(valueFor('frames')),
     'reviewNotes': str('reviewNotes'),
-    'status': status,
+    'status': str('status'),
     'deliveredOn': _toGridIsoDateT(valueFor('deliveredOn')),
     'workStation': str('workStation'),
     'shotMandays': _toDoubleValueT(valueFor('shotMandays')),
@@ -3649,8 +3686,7 @@ String _skippedLineSuffix(_GridParseResult result) {
 /// mapping every column. Every physical line is kept — lines are never merged
 /// by shot code. Yields to the event loop every [_importYieldEvery] rows.
 Future<_GridParseResult> _parseGridCsvTextRowsAsync(
-  String csvText,
-  List<String> gridStatuses, {
+  String csvText, {
   void Function(int parsedRows)? onProgress,
 }) async {
   final lines = const LineSplitter().convert(csvText.trim());
@@ -3691,7 +3727,7 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
         if (key.isNotEmpty) raw[key] = value;
       }
     }
-    final apiRow = _toGridApiRowT(raw, gridStatuses);
+    final apiRow = _toGridApiRowT(raw);
     // Retain the physical source row for traceability. Every source row is
     // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = 'paste:${i + 1}';
@@ -3713,8 +3749,7 @@ Future<_GridParseResult> _parseGridCsvTextRowsAsync(
 /// `sourceRowRef` of the form `Sheet1!12` (the line's row number inside the
 /// workbook) so repeated shot/task/notes lines stay distinct server-side.
 Future<_GridParseResult> _parseGridExcelRowsAsync(
-  Uint8List bytes,
-  List<String> gridStatuses, {
+  Uint8List bytes, {
   void Function(int parsedRows)? onProgress,
 }) async {
   await _importYield();
@@ -3752,7 +3787,7 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
       if (key.isEmpty) continue;
       raw[key] = cell?.value;
     }
-    final apiRow = _toGridApiRowT(raw, gridStatuses);
+    final apiRow = _toGridApiRowT(raw);
     // Retain the physical source row for traceability. Every source row is
     // uploaded and persisted independently, including repeated identities.
     apiRow['sourceRowRef'] = '$sheetName!${i + 1}';
@@ -3770,8 +3805,7 @@ Future<_GridParseResult> _parseGridExcelRowsAsync(
 /// Parses CSV bytes into grid API rows, yielding to the event loop every
 /// [_importYieldEvery] rows. Keeps every physical line.
 Future<_GridParseResult> _parseGridCsvRowsAsync(
-  Uint8List bytes,
-  List<String> gridStatuses, {
+  Uint8List bytes, {
   void Function(int parsedRows)? onProgress,
 }) async {
   final csv = utf8.decode(bytes, allowMalformed: true);
@@ -3805,7 +3839,7 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
       if (key.isEmpty) continue;
       raw[key] = value;
     }
-    final apiRow = _toGridApiRowT(raw, gridStatuses);
+    final apiRow = _toGridApiRowT(raw);
     // Every physical line is kept. The same shot + department + review notes
     // may legitimately repeat (one line per element/submission, each with its
     // own Frames / ETA / man-days / Status), so lines are never merged here.
@@ -3827,8 +3861,7 @@ Future<_GridParseResult> _parseGridCsvRowsAsync(
 /// yielding to the event loop while doing so.
 Future<_GridParseResult> _parseGridFileRowsAsync(
   Uint8List bytes,
-  String extension,
-  List<String> gridStatuses, {
+  String extension, {
   void Function(int parsedRows)? onProgress,
 }) async {
   if (extension == 'xlsx' ||
@@ -3836,14 +3869,10 @@ Future<_GridParseResult> _parseGridFileRowsAsync(
       extension == 'xlsm' ||
       extension == 'xlsb' ||
       extension == 'ods') {
-    return _parseGridExcelRowsAsync(
-      bytes,
-      gridStatuses,
-      onProgress: onProgress,
-    );
+    return _parseGridExcelRowsAsync(bytes, onProgress: onProgress);
   }
   if (extension == 'csv') {
-    return _parseGridCsvRowsAsync(bytes, gridStatuses, onProgress: onProgress);
+    return _parseGridCsvRowsAsync(bytes, onProgress: onProgress);
   }
   throw Exception('Unsupported format: .$extension');
 }
@@ -3916,25 +3945,6 @@ Future<Map<String, dynamic>> _saveParsedRowsAsync(
     }
   }
 
-  // Name any Tasks value the importer could not place in a department: such a
-  // row is saved unchanged and the value becomes its own Department filter
-  // option, so the row stays reachable.
-  final unmappedTasks = <String>{};
-  for (final row in rows) {
-    unmappedTasks.addAll(
-      unmappedGridTaskParts((row['tasks'] ?? '').toString()),
-    );
-  }
-  if (unmappedTasks.isNotEmpty) {
-    final sorted = unmappedTasks.toList()..sort();
-    notes.insert(
-      0,
-      'Tasks value(s) kept as-is (no matching department): '
-      '${sorted.join(', ')} — each one is now selectable in the Department '
-      'and Tasks filters.',
-    );
-  }
-
   return <String, dynamic>{
     'total': rows.length,
     'created': created,
@@ -3953,7 +3963,6 @@ Future<Map<String, dynamic>> _parseGridFileInIsolate(
   final result = await _parseGridFileRowsAsync(
     args['bytes'] as Uint8List,
     args['extension'] as String,
-    List<String>.from(args['statuses'] as List),
   );
   return _gridParseResultToMap(result);
 }
@@ -3962,10 +3971,7 @@ Future<Map<String, dynamic>> _parseGridFileInIsolate(
 Future<Map<String, dynamic>> _parseGridCsvTextInIsolate(
   Map<String, dynamic> args,
 ) async {
-  final result = await _parseGridCsvTextRowsAsync(
-    args['csvText'] as String,
-    List<String>.from(args['statuses'] as List),
-  );
+  final result = await _parseGridCsvTextRowsAsync(args['csvText'] as String);
   return _gridParseResultToMap(result);
 }
 

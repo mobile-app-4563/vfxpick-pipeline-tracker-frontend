@@ -36,6 +36,27 @@ void main() {
       expect(normalizeGridTasks('CGI'), 'COMP');
     });
 
+    // Camera / Object tracking and Rotoanim are their own runtime departments,
+    // never MM. The abbreviated spellings follow the same rule.
+    test('never folds a tracking department into MM', () {
+      expect(normalizeGridTasks('CAM TRACK'), 'CAMERA TRACK');
+      expect(normalizeGridTasks('CAMTRACK'), 'CAMERA TRACK');
+      expect(normalizeGridTasks('cam track'), 'CAMERA TRACK');
+      expect(normalizeGridTasks('OBJ TRACK'), 'OBJECT TRACK');
+      expect(normalizeGridTasks('obj track'), 'OBJECT TRACK');
+      expect(normalizeGridTasks('ROTO ANIMATION'), 'ROTO ANIMATION');
+      expect(normalizeGridTasks('PLANAR TRACK'), 'MM');
+    });
+
+    test('keeps a tracking department alongside a built-in one', () {
+      expect(
+        normalizeGridTasks('CAMERA TRACK / OBJECT TRACK'),
+        'CAMERA TRACK, OBJECT TRACK',
+      );
+      expect(normalizeGridTasks('Camera track / Comp'), 'COMP, CAMERA TRACK');
+      expect(normalizeGridTasks('Rotoanim + Paint'), 'PAINT, ROTOANIM');
+    });
+
     test('splits multi-department values in pipeline order', () {
       expect(normalizeGridTasks('PAINT / COMP'), 'PAINT, COMP');
       expect(normalizeGridTasks('PAINT & COMP'), 'PAINT, COMP');
@@ -82,23 +103,12 @@ void main() {
         'PAINT / COMP',
         'NO TASK',
         'ROTO + PAINT + TRACKING',
+        'CAMERA TRACK, OBJECT TRACK',
+        'PAINT, ROTOANIM',
       ]) {
         final once = normalizeGridTasks(raw);
         expect(normalizeGridTasks(once), once, reason: 'raw: $raw');
       }
-    });
-  });
-
-  group('unmappedGridTaskParts', () {
-    test('is empty for mapped values', () {
-      expect(unmappedGridTaskParts('ROTO'), isEmpty);
-      expect(unmappedGridTaskParts('PAINT, COMP'), isEmpty);
-      expect(unmappedGridTaskParts(''), isEmpty);
-    });
-
-    test('reports the leftovers', () {
-      expect(unmappedGridTaskParts('NO TASK'), ['NO TASK']);
-      expect(unmappedGridTaskParts('ROTO, NO TASK'), ['NO TASK']);
     });
   });
 
